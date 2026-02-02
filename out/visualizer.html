@@ -1,0 +1,1113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Design Visualizer</title>
+  <style>
+    :root{--bg:#0f1115;--panel:#151a22;--panel-2:#11161d;--border:rgba(255,255,255,0.08);--text:#e7edf5;--muted:#9aa3ad;--accent:#4f8bd6;--accent-2:#2c394b;--success:#7bd88f;--warn:#f1c36f;--danger:#ff7d7d;}
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text);}
+    #app{position:fixed;inset:0;display:grid;grid-template-columns:380px 1fr;gap:0;background:var(--bg);}
+    #sidebar{background:var(--panel);color:var(--text);overflow:auto;padding:18px;box-sizing:border-box;}
+    #viewer{position:relative;background:#0f1319;}
+    .section{border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;background:var(--panel-2);box-shadow:0 6px 18px rgba(0,0,0,0.2);}
+    .section-title{font-size:13px;font-weight:600;margin:0 0 10px 0;color:#cfd8e3;letter-spacing:0.3px;}
+    .row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+    .row input[type="text"],.row input[type="number"]{flex:1;min-width:0;background:#0f141b;color:var(--text);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:8px 10px;outline:none;}
+    .row input[type="text"]:focus,.row input[type="number"]:focus{border-color:#3f5a7a;box-shadow:0 0 0 2px rgba(79,139,214,0.15);}
+    .row button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600;transition:transform 0.08s ease,opacity 0.12s ease;}
+    .row button:active{transform:translateY(1px);}
+    .row button.secondary{background:var(--accent-2);color:#dfe7f2;}
+    .row small{color:var(--muted);}
+    a{color:#8fb7ff;text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    .chip{display:inline-block;padding:3px 9px;border-radius:999px;background:#1f2a38;color:#b9d6ff;font-size:12px;}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    th,td{border-bottom:1px solid rgba(255,255,255,0.08);padding:6px 6px;text-align:left;}
+    th{color:#bfc7d5;font-weight:600;}
+    .muted{color:var(--muted);}
+    .list{display:flex;flex-wrap:wrap;gap:6px;}
+    .list label{display:flex;align-items:center;gap:6px;background:#0f141b;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:4px 8px;font-size:12px;}
+    .view-grid{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:#1a1f2a;}
+    .view{position:relative;background:#0c0f14;}
+    .view canvas{display:block;width:100%;height:100%;}
+    .view-label{position:absolute;left:8px;top:8px;background:rgba(0,0,0,0.5);color:#d7dde6;font-size:12px;padding:4px 6px;border-radius:6px;z-index:2;}
+    #status{font-size:12px;color:#a6b1be;margin-top:6px;}
+    #candidate-table tr{cursor:pointer;}
+    #candidate-table tr:hover{background:#1e2633;}
+    .field-invalid{border-color:#c95d5d;}
+    .validation-ok{color:var(--success);}
+    .validation-warn{color:var(--warn);}
+    .validation-error{color:var(--danger);}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <div class="section">
+        <div class="section-title">数据加载</div>
+        <div class="row">
+          <button id="btn-reload">重新加载</button>
+          <span class="chip" id="load-state">未加载</span>
+        </div>
+        <div class="row">
+          <input id="path-run" type="text" placeholder="./run_YYYYMMDD_HHMMSS"/>
+        </div>
+        <div class="row">
+          <input id="path-results" type="text" value="./results/results.json"/>
+        </div>
+        <div class="row">
+          <input id="path-mesh" type="text" value="./mesh/geometry_mesh.json"/>
+        </div>
+        <div class="row">
+          <input id="path-report" type="text" value="./report/report.md"/>
+        </div>
+        <div class="row">
+          <input id="path-constraints" type="text" value="./report/constraints_ws_tw.svg"/>
+        </div>
+        <div class="row">
+          <input id="path-advanced" type="text" value="./geometry/advanced_shape_results.json"/>
+        </div>
+        <div class="row">
+          <input id="path-openvsp" type="text" value="./openvsp/openvsp_advanced.py"/>
+        </div>
+        <div class="row">
+          <label>results.json</label>
+          <input id="file-results" type="file" accept=".json"/>
+        </div>
+        <div class="row">
+          <label>geometry_mesh.json</label>
+          <input id="file-mesh" type="file" accept=".json"/>
+        </div>
+        <div class="row">
+          <label>advanced_shape_results.json</label>
+          <input id="file-advanced" type="file" accept=".json"/>
+        </div>
+        <div id="status"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">显示控制</div>
+        <div class="row">
+          <label><input id="toggle-grid" type="checkbox" checked/>网格</label>
+          <label><input id="toggle-wire" type="checkbox"/>线框</label>
+        </div>
+        <div class="row">
+          <span class="muted">缩放</span>
+          <input id="scale" type="range" min="0.2" max="3" step="0.05" value="1"/>
+        </div>
+        <div class="row">
+          <span class="muted">炸开</span>
+          <input id="explode" type="range" min="0" max="5" step="0.1" value="0"/>
+        </div>
+        <div class="list" id="parts-list"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">设计目标</div>
+        <table id="tbl-targets"></table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">参数化设计</div>
+        <div id="param-controls"></div>
+        <div class="row" style="margin-top:6px;">
+          <button id="btn-reset-params" class="secondary">恢复计算结果</button>
+        </div>
+        <table id="tbl-params"></table>
+        <div id="param-validation" style="margin-top:6px;"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">计算结果</div>
+        <table id="tbl-results"></table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">设计点候选</div>
+        <table id="tbl-candidates"></table>
+        <div style="margin-top:8px;">
+          <div class="section-title">选中候选</div>
+          <table id="tbl-candidate-detail"></table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">报告与图表</div>
+        <div class="row">
+          <a id="link-report" href="#" target="_blank">report.md</a>
+        </div>
+        <div class="row">
+          <a id="link-constraints" href="#" target="_blank">constraints_ws_tw.svg</a>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">几何参数</div>
+        <div id="geometry-controls"></div>
+        <div class="row" style="margin-top:6px;">
+          <button id="btn-apply-geometry">应用几何</button>
+          <button id="btn-reset-geometry" class="secondary">恢复几何</button>
+        </div>
+        <div class="row">
+          <button id="btn-download-geometry" class="secondary">下载几何参数</button>
+          <span class="muted" id="geometry-status"></span>
+        </div>
+        <table id="tbl-geometry"></table>
+        <div class="row" style="margin-top:6px;">
+          <a id="link-openvsp" href="#" target="_blank">openvsp_advanced.py</a>
+        </div>
+        <div class="row">
+          <button id="btn-openvsp" class="secondary">下载 OpenVSP 脚本</button>
+          <span class="muted" id="openvsp-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="viewer">
+      <div class="view-grid">
+        <div class="view"><div class="view-label">Top (X-Y)</div><canvas id="cv_top"></canvas></div>
+        <div class="view"><div class="view-label">Side (X-Z)</div><canvas id="cv_side"></canvas></div>
+        <div class="view"><div class="view-label">Front (Y-Z)</div><canvas id="cv_front"></canvas></div>
+        <div class="view"><div class="view-label">Iso (3D)</div><canvas id="cv_iso"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ui = {
+      loadState: document.getElementById("load-state"),
+      status: document.getElementById("status"),
+      pathResults: document.getElementById("path-results"),
+      pathMesh: document.getElementById("path-mesh"),
+      pathReport: document.getElementById("path-report"),
+      pathConstraints: document.getElementById("path-constraints"),
+      pathAdvanced: document.getElementById("path-advanced"),
+      pathRun: document.getElementById("path-run"),
+      pathOpenvsp: document.getElementById("path-openvsp"),
+      fileResults: document.getElementById("file-results"),
+      fileMesh: document.getElementById("file-mesh"),
+      fileAdvanced: document.getElementById("file-advanced"),
+      btnReload: document.getElementById("btn-reload"),
+      toggleGrid: document.getElementById("toggle-grid"),
+      toggleWire: document.getElementById("toggle-wire"),
+      scale: document.getElementById("scale"),
+      explode: document.getElementById("explode"),
+      partsList: document.getElementById("parts-list"),
+      tblTargets: document.getElementById("tbl-targets"),
+      tblResults: document.getElementById("tbl-results"),
+      tblCandidates: document.getElementById("tbl-candidates"),
+      tblCandidateDetail: document.getElementById("tbl-candidate-detail"),
+      tblGeometry: document.getElementById("tbl-geometry"),
+      geometryControls: document.getElementById("geometry-controls"),
+      paramControls: document.getElementById("param-controls"),
+      tblParams: document.getElementById("tbl-params"),
+      paramValidation: document.getElementById("param-validation"),
+      btnResetParams: document.getElementById("btn-reset-params"),
+      btnApplyGeometry: document.getElementById("btn-apply-geometry"),
+      btnResetGeometry: document.getElementById("btn-reset-geometry"),
+      btnDownloadGeometry: document.getElementById("btn-download-geometry"),
+      geometryStatus: document.getElementById("geometry-status"),
+      btnOpenvsp: document.getElementById("btn-openvsp"),
+      openvspStatus: document.getElementById("openvsp-status"),
+      linkReport: document.getElementById("link-report"),
+      linkConstraints: document.getElementById("link-constraints"),
+      linkOpenvsp: document.getElementById("link-openvsp"),
+      canvases: {
+        top: document.getElementById("cv_top"),
+        side: document.getElementById("cv_side"),
+        front: document.getElementById("cv_front"),
+        iso: document.getElementById("cv_iso")
+      }
+    };
+
+    const state = {
+      results: null,
+      mesh: null,
+      advanced: null,
+      advancedOriginal: null,
+      advancedEditable: null,
+      geometryBaseline: null,
+      geometryScale: { x: 1, y: 1, z: 1 },
+      scene: null,
+      group: null,
+      meshes: [],
+      grid: null,
+      axes: null,
+      cameras: null,
+      renderers: null,
+      controls: null,
+      bounds: null,
+      paramInputs: {},
+      parameters: {
+        defaults: {},
+        values: {},
+        messages: []
+      }
+    };
+
+    function setStatus(text, ok) {
+      ui.status.textContent = text || "";
+      ui.loadState.textContent = ok ? "已加载" : "未加载";
+      ui.loadState.style.background = ok ? "#1f7a4a" : "#273043";
+    }
+
+    function fmt(v) {
+      if (typeof v === "number" && Number.isFinite(v)) {
+        const abs = Math.abs(v);
+        if (abs >= 1000 || abs === 0) return v.toFixed(2);
+        if (abs >= 1) return v.toFixed(4);
+        return v.toExponential(3);
+      }
+      if (typeof v === "string") return v;
+      if (typeof v === "boolean") return v ? "true" : "false";
+      return "";
+    }
+
+    function getByPath(obj, path) {
+      if (!obj) return undefined;
+      const parts = path.split(".");
+      let cur = obj;
+      for (const p of parts) {
+        if (cur && typeof cur === "object" && p in cur) cur = cur[p];
+        else return undefined;
+      }
+      return cur;
+    }
+
+    function setByPath(obj, path, value) {
+      if (!obj) return false;
+      const parts = path.split(".");
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i += 1) {
+        const p = parts[i];
+        if (!cur[p] || typeof cur[p] !== "object") cur[p] = {};
+        cur = cur[p];
+      }
+      cur[parts[parts.length - 1]] = value;
+      return true;
+    }
+
+    function cloneJson(obj) {
+      if (!obj) return null;
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function getGeometryRoot(advanced) {
+      if (!advanced) return null;
+      return advanced?.inputs?.geometry_shape || advanced?.geometry_processed?.raw || advanced?.geometry_shape || null;
+    }
+
+    function buildEditableAdvanced(advanced) {
+      if (!advanced) return null;
+      const base = cloneJson(advanced);
+      if (base.inputs && base.inputs.geometry_shape) return base;
+      const geo = getGeometryRoot(base);
+      if (!geo) return base;
+      if (!base.inputs) base.inputs = {};
+      if (!base.inputs.geometry_shape) base.inputs.geometry_shape = cloneJson(geo);
+      return base;
+    }
+
+    function renderTable(el, rows, headers) {
+      if (!rows || rows.length === 0) {
+        el.innerHTML = "<tr><td class='muted'>无数据</td></tr>";
+        return;
+      }
+      const head = headers ? "<tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>" : "";
+      const body = rows.map(r => "<tr>" + r.map(c => `<td>${c}</td>`).join("") + "</tr>").join("");
+      el.innerHTML = head + body;
+    }
+
+    function flattenNumeric(obj, prefix) {
+      const rows = [];
+      if (!obj || typeof obj !== "object") return rows;
+      const keys = Object.keys(obj);
+      for (const k of keys) {
+        const v = obj[k];
+        if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") {
+          rows.push([prefix ? `${prefix}.${k}` : k, fmt(v)]);
+        }
+      }
+      return rows;
+    }
+
+    function flattenNumericDeep(obj, prefix, rows, depth, maxItems) {
+      if (!rows) return [];
+      if (!obj || typeof obj !== "object") return rows;
+      if (rows.length >= maxItems) return rows;
+      if (depth <= 0) return rows;
+      if (Array.isArray(obj)) {
+        obj.forEach((item, idx) => {
+          if (rows.length >= maxItems) return;
+          flattenNumericDeep(item, `${prefix}[${idx}]`, rows, depth - 1, maxItems);
+        });
+        return rows;
+      }
+      Object.keys(obj).forEach(k => {
+        if (rows.length >= maxItems) return;
+        const v = obj[k];
+        const path = prefix ? `${prefix}.${k}` : k;
+        if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") {
+          rows.push([path, fmt(v)]);
+        } else if (typeof v === "object") {
+          flattenNumericDeep(v, path, rows, depth - 1, maxItems);
+        }
+      });
+      return rows;
+    }
+
+    async function loadScript(src) {
+      return new Promise(resolve => {
+        if (!src) return resolve(false);
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = () => resolve(true);
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureThree() {
+      if (window.THREE) return true;
+      await loadScript("./three.min.js");
+      if (window.THREE && !window.THREE.OrbitControls) await loadScript("./OrbitControls.js");
+      if (window.THREE) return true;
+      await loadScript("https://unpkg.com/three@0.160.0/build/three.min.js");
+      await loadScript("https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js");
+      return !!window.THREE;
+    }
+
+    function clearScene() {
+      if (!state.group) return;
+      state.meshes.forEach(m => {
+        if (m.geometry) m.geometry.dispose();
+        if (m.material) m.material.dispose();
+      });
+      state.meshes = [];
+      state.group.clear();
+    }
+
+    function buildScene(parts) {
+      if (!window.THREE) return;
+      if (!state.scene) {
+        state.scene = new THREE.Scene();
+        state.scene.background = new THREE.Color(0x0f1115);
+        const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+        const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+        dir.position.set(12, -16, 20);
+        state.scene.add(ambient);
+        state.scene.add(dir);
+        state.group = new THREE.Group();
+        state.scene.add(state.group);
+        state.grid = new THREE.GridHelper(200, 40, 0x2f3b52, 0x1c2433);
+        state.axes = new THREE.AxesHelper(30);
+        state.scene.add(state.grid);
+        state.scene.add(state.axes);
+      }
+
+      clearScene();
+      const group = state.group;
+      parts.forEach((p, idx) => {
+        const geo = new THREE.BufferGeometry();
+        const vertices = Array.isArray(p.vertices) ? p.vertices : [];
+        const indices = Array.isArray(p.indices) ? p.indices : [];
+        geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        if (indices.length > 0) {
+          let maxIndex = 0;
+          for (let i = 0; i < indices.length; i += 1) {
+            const v = indices[i];
+            if (v > maxIndex) maxIndex = v;
+          }
+          const IndexArray = maxIndex > 65535 ? Uint32Array : Uint16Array;
+          geo.setIndex(new THREE.BufferAttribute(new IndexArray(indices), 1));
+        }
+        geo.computeVertexNormals();
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(p.color || "#cccccc"),
+          metalness: 0.0,
+          roughness: 0.85,
+          side: THREE.DoubleSide,
+          wireframe: ui.toggleWire.checked
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.userData.partIndex = idx;
+        mesh.name = p.name;
+        group.add(mesh);
+        state.meshes.push(mesh);
+      });
+
+      const box = new THREE.Box3();
+      state.meshes.forEach(m => box.expandByObject(m));
+      state.bounds = box.isEmpty() ? null : box;
+      if (state.bounds) {
+        const center = new THREE.Vector3();
+        state.bounds.getCenter(center);
+        group.position.sub(center);
+      }
+      applyTransforms();
+      fitCameras();
+    }
+
+    function applyTransforms() {
+      if (!state.group) return;
+      const scale = parseFloat(ui.scale.value);
+      const explode = parseFloat(ui.explode.value);
+      const gs = state.geometryScale || { x: 1, y: 1, z: 1 };
+      state.group.scale.set(scale * gs.x, scale * gs.y, scale * gs.z);
+      const n = state.meshes.length;
+      const mid = (n - 1) * 0.5;
+      state.meshes.forEach((m, i) => {
+        const offset = (i - mid) * explode;
+        m.position.set(offset, 0, 0);
+      });
+      if (state.grid) state.grid.visible = ui.toggleGrid.checked;
+      if (state.axes) state.axes.visible = ui.toggleGrid.checked;
+      state.meshes.forEach(m => {
+        if (m.material) m.material.wireframe = ui.toggleWire.checked;
+      });
+    }
+
+    function fitCameras() {
+      if (!state.bounds || !window.THREE) return;
+      const size = new THREE.Vector3();
+      state.bounds.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z, 1);
+      const dist = maxDim * 2.2;
+
+      const makeOrtho = () => new THREE.OrthographicCamera(-maxDim, maxDim, maxDim, -maxDim, 0.01, 1e6);
+      if (!state.cameras) {
+        state.cameras = {
+          top: makeOrtho(),
+          side: makeOrtho(),
+          front: makeOrtho(),
+          iso: new THREE.PerspectiveCamera(40, 1, 0.01, 1e6)
+        };
+      }
+      const { top, side, front, iso } = state.cameras;
+      top.position.set(0, 0, dist);
+      top.up.set(0, 1, 0);
+      top.lookAt(0, 0, 0);
+      side.position.set(0, dist, 0);
+      side.up.set(0, 0, 1);
+      side.lookAt(0, 0, 0);
+      front.position.set(dist, 0, 0);
+      front.up.set(0, 0, 1);
+      front.lookAt(0, 0, 0);
+
+      iso.position.set(dist, -dist, dist);
+      iso.lookAt(0, 0, 0);
+      iso.updateProjectionMatrix();
+
+      updateRendererSize();
+    }
+
+    function updateRendererSize() {
+      if (!state.renderers) return;
+      const rect = ui.canvases.iso.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      for (const k of Object.keys(state.renderers)) {
+        state.renderers[k].setSize(w, h, false);
+      }
+      if (state.cameras) {
+        const { top, side, front, iso } = state.cameras;
+        const aspect = w / Math.max(1, h);
+        [top, side, front].forEach(c => {
+          c.left = -c.right * aspect;
+          c.right = -c.left;
+          c.top = c.right;
+          c.bottom = -c.top;
+          c.updateProjectionMatrix();
+        });
+        iso.aspect = aspect;
+        iso.updateProjectionMatrix();
+      }
+    }
+
+    function renderLoop() {
+      if (!state.renderers || !state.cameras || !state.scene) return;
+      state.renderers.top.render(state.scene, state.cameras.top);
+      state.renderers.side.render(state.scene, state.cameras.side);
+      state.renderers.front.render(state.scene, state.cameras.front);
+      state.renderers.iso.render(state.scene, state.cameras.iso);
+      requestAnimationFrame(renderLoop);
+    }
+
+    function ensureRenderers() {
+      if (!window.THREE) return;
+      if (!state.renderers) {
+        state.renderers = {
+          top: new THREE.WebGLRenderer({ canvas: ui.canvases.top, antialias: true }),
+          side: new THREE.WebGLRenderer({ canvas: ui.canvases.side, antialias: true }),
+          front: new THREE.WebGLRenderer({ canvas: ui.canvases.front, antialias: true }),
+          iso: new THREE.WebGLRenderer({ canvas: ui.canvases.iso, antialias: true })
+        };
+        Object.values(state.renderers).forEach(r => {
+          r.setPixelRatio(window.devicePixelRatio || 1);
+        });
+        if (window.THREE.OrbitControls) {
+          state.controls = new THREE.OrbitControls(state.cameras.iso, ui.canvases.iso);
+          state.controls.enableDamping = true;
+          state.controls.dampingFactor = 0.05;
+        }
+        renderLoop();
+      }
+    }
+
+    function renderPartsList(parts) {
+      if (!parts || parts.length === 0) {
+        ui.partsList.innerHTML = "<span class='muted'>无部件</span>";
+        return;
+      }
+      ui.partsList.innerHTML = "";
+      parts.forEach((p, idx) => {
+        const label = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = true;
+        cb.onchange = () => {
+          const mesh = state.meshes[idx];
+          if (mesh) mesh.visible = cb.checked;
+        };
+        const tag = document.createElement("span");
+        tag.textContent = p.name || `part_${idx}`;
+        label.appendChild(cb);
+        label.appendChild(tag);
+        ui.partsList.appendChild(label);
+      });
+    }
+
+    function renderTargets(results) {
+      const targets = [];
+      const cInputs = results && results.constraints ? results.constraints.inputs : null;
+      if (cInputs) targets.push(...flattenNumeric(cInputs, "constraints"));
+      const mission = results ? results.mission : null;
+      if (mission) targets.push(...flattenNumeric(mission, "mission"));
+      renderTable(ui.tblTargets, targets, ["字段", "值"]);
+    }
+
+    function getGeometryMetrics(geo) {
+      if (!geo) return null;
+      const fuselageLength = Number(getByPath(geo, "fuselage.axis.length_m"));
+      let fuselageRadius = Number(getByPath(geo, "fuselage.profile.max_radius_m"));
+      if (!Number.isFinite(fuselageRadius)) {
+        const ry = Number(getByPath(geo, "fuselage.profile.max_radius_y_m"));
+        const rz = Number(getByPath(geo, "fuselage.profile.max_radius_z_m"));
+        fuselageRadius = Math.max(Number.isFinite(ry) ? ry : 0, Number.isFinite(rz) ? rz : 0);
+      }
+      const wingArea = Number(getByPath(geo, "wing.planform.s_ref_m2"));
+      const wingAR = Number(getByPath(geo, "wing.planform.aspect_ratio"));
+      let wingSpan = null;
+      if (Number.isFinite(wingArea) && Number.isFinite(wingAR) && wingArea > 0 && wingAR > 0) {
+        wingSpan = Math.sqrt(wingArea * wingAR);
+      }
+      let wingChord = null;
+      if (Number.isFinite(wingArea) && Number.isFinite(wingSpan) && wingSpan > 0) {
+        wingChord = wingArea / wingSpan;
+      }
+      return { fuselageLength, fuselageRadius, wingArea, wingAR, wingSpan, wingChord };
+    }
+
+    function buildGeometrySchema(geo) {
+      if (!geo) return [];
+      const schema = [];
+      if (Number.isFinite(Number(getByPath(geo, "fuselage.axis.length_m")))) {
+        schema.push({ path: "inputs.geometry_shape.fuselage.axis.length_m", label: "机身长度 L (m)", min: 2, max: 80, step: 0.1 });
+      }
+      if (Number.isFinite(Number(getByPath(geo, "fuselage.profile.max_radius_m")))) {
+        schema.push({ path: "inputs.geometry_shape.fuselage.profile.max_radius_m", label: "机身最大半径 R (m)", min: 0.1, max: 8, step: 0.05 });
+      } else if (Number.isFinite(Number(getByPath(geo, "fuselage.profile.max_radius_y_m")))) {
+        schema.push({ path: "inputs.geometry_shape.fuselage.profile.max_radius_y_m", label: "机身最大半径 Y (m)", min: 0.1, max: 8, step: 0.05 });
+      } else if (Number.isFinite(Number(getByPath(geo, "fuselage.profile.max_radius_z_m")))) {
+        schema.push({ path: "inputs.geometry_shape.fuselage.profile.max_radius_z_m", label: "机身最大半径 Z (m)", min: 0.1, max: 8, step: 0.05 });
+      }
+      if (Number.isFinite(Number(getByPath(geo, "wing.planform.s_ref_m2")))) {
+        schema.push({ path: "inputs.geometry_shape.wing.planform.s_ref_m2", label: "机翼面积 S (m²)", min: 1, max: 600, step: 0.5 });
+      }
+      if (Number.isFinite(Number(getByPath(geo, "wing.planform.aspect_ratio")))) {
+        schema.push({ path: "inputs.geometry_shape.wing.planform.aspect_ratio", label: "机翼展弦比 AR", min: 4, max: 25, step: 0.1 });
+      }
+      if (Number.isFinite(Number(getByPath(geo, "wing.planform.taper_ratio")))) {
+        schema.push({ path: "inputs.geometry_shape.wing.planform.taper_ratio", label: "机翼梢根比", min: 0.2, max: 1.2, step: 0.05 });
+      }
+      if (Number.isFinite(Number(getByPath(geo, "wing.planform.sweep_quarter_chord_deg")))) {
+        schema.push({ path: "inputs.geometry_shape.wing.planform.sweep_quarter_chord_deg", label: "机翼后掠 (deg)", min: -10, max: 60, step: 0.5 });
+      }
+      if (Number.isFinite(Number(getByPath(geo, "wing.planform.dihedral_deg")))) {
+        schema.push({ path: "inputs.geometry_shape.wing.planform.dihedral_deg", label: "机翼上反角 (deg)", min: -10, max: 20, step: 0.5 });
+      }
+      return schema;
+    }
+
+    function setupGeometryControls(advancedEditable) {
+      const geo = advancedEditable?.inputs?.geometry_shape || null;
+      ui.geometryControls.innerHTML = "";
+      if (!geo) {
+        ui.geometryControls.innerHTML = "<span class='muted'>无可编辑几何</span>";
+        renderGeometrySummary();
+        return;
+      }
+      const schema = buildGeometrySchema(geo);
+      schema.forEach(p => {
+        const val = getByPath(advancedEditable, p.path);
+        if (!Number.isFinite(Number(val))) return;
+        const row = document.createElement("div");
+        row.className = "row";
+        const label = document.createElement("span");
+        label.className = "muted";
+        label.textContent = p.label;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = String(p.min);
+        input.max = String(p.max);
+        input.step = String(p.step);
+        input.value = String(val);
+        input.oninput = () => {
+          updateGeometryValue(p.path, parseFloat(input.value));
+        };
+        row.appendChild(label);
+        row.appendChild(input);
+        ui.geometryControls.appendChild(row);
+      });
+      renderGeometrySummary();
+    }
+
+    function updateGeometryValue(path, value) {
+      if (!Number.isFinite(value) || !state.advancedEditable) return;
+      setByPath(state.advancedEditable, path, value);
+      ui.geometryStatus.textContent = "已更新";
+      renderGeometrySummary();
+      updateGeometryScale();
+    }
+
+    function updateGeometryScale() {
+      const geo = state.advancedEditable?.inputs?.geometry_shape || null;
+      const base = state.geometryBaseline;
+      const cur = getGeometryMetrics(geo);
+      if (!base || !cur) return;
+      let sx = 1;
+      let sy = 1;
+      let sz = 1;
+      if (Number.isFinite(base.fuselageLength) && base.fuselageLength > 0 && Number.isFinite(cur.fuselageLength)) {
+        sx = cur.fuselageLength / base.fuselageLength;
+      }
+      if (Number.isFinite(base.wingSpan) && base.wingSpan > 0 && Number.isFinite(cur.wingSpan)) {
+        sy = cur.wingSpan / base.wingSpan;
+      }
+      if (Number.isFinite(base.fuselageRadius) && base.fuselageRadius > 0 && Number.isFinite(cur.fuselageRadius)) {
+        sz = cur.fuselageRadius / base.fuselageRadius;
+      }
+      state.geometryScale = { x: sx, y: sy, z: sz };
+      applyTransforms();
+      fitCameras();
+    }
+
+    function renderGeometrySummary() {
+      const geo = state.advancedEditable?.inputs?.geometry_shape || state.advanced?.inputs?.geometry_shape || null;
+      if (!geo) {
+        renderTable(ui.tblGeometry, [], ["字段", "值"]);
+        return;
+      }
+      const m = getGeometryMetrics(geo);
+      const rows = [
+        ["fuselage_length_m", "机身长度", fmt(m?.fuselageLength)],
+        ["fuselage_radius_m", "机身半径", fmt(m?.fuselageRadius)],
+        ["wing_area_m2", "机翼面积", fmt(m?.wingArea)],
+        ["wing_aspect_ratio", "机翼展弦比", fmt(m?.wingAR)],
+        ["wing_span_m", "机翼展长", fmt(m?.wingSpan)],
+        ["wing_chord_m", "机翼平均弦长", fmt(m?.wingChord)]
+      ].filter(r => r[2] !== "");
+      renderTable(ui.tblGeometry, rows, ["字段", "说明", "值"]);
+    }
+
+    function downloadJson(data, filename) {
+      if (!data) return;
+      const text = JSON.stringify(data, null, 2);
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function renderResults(results) {
+      const rows = [];
+      const sections = [
+        ["sizing", results?.sizing],
+        ["weights", results?.weights],
+        ["aero", results?.aero],
+        ["performance", results?.performance],
+        ["stability", results?.stability],
+        ["structures", results?.structures],
+        ["propulsion", results?.propulsion]
+      ];
+      sections.forEach(([name, obj]) => {
+        if (obj) rows.push(...flattenNumeric(obj, name));
+      });
+      renderTable(ui.tblResults, rows, ["字段", "值"]);
+    }
+
+    function renderCandidates(results) {
+      const list = results?.design_loop?.top_candidates || results?.design_loop?.candidates || [];
+      if (!Array.isArray(list) || list.length === 0) {
+        renderTable(ui.tblCandidates, [], ["序号", "W/S", "AR", "T/W", "Score", "Feasible"]);
+        renderTable(ui.tblCandidateDetail, [], ["字段", "值"]);
+        return;
+      }
+      const rows = list.map((c, i) => [
+        String(i + 1),
+        fmt(c.wing_loading_pa),
+        fmt(c.aspect_ratio),
+        fmt(c.thrust_to_weight),
+        fmt(c.score),
+        c.feasible ? "true" : "false"
+      ]);
+      renderTable(ui.tblCandidates, rows, ["序号", "W/S", "AR", "T/W", "Score", "Feasible"]);
+      const trs = ui.tblCandidates.querySelectorAll("tr");
+      trs.forEach((tr, i) => {
+        if (i === 0) return;
+        tr.onclick = () => {
+          const c = list[i - 1];
+          applyCandidate(c);
+          const detail = [
+            ["wing_loading_pa", fmt(c.wing_loading_pa)],
+            ["aspect_ratio", fmt(c.aspect_ratio)],
+            ["thrust_to_weight", fmt(c.thrust_to_weight)],
+            ["score", fmt(c.score)],
+            ["feasible", c.feasible ? "true" : "false"],
+            ["driver", c.driver || ""],
+            ["worst_margin", fmt(c.worst_margin)]
+          ];
+          renderTable(ui.tblCandidateDetail, detail, ["字段", "值"]);
+        };
+      });
+      renderTable(ui.tblCandidateDetail, [], ["字段", "值"]);
+    }
+
+    function extractDefaultParameters(results) {
+      const sizing = results?.design_loop?.best_sizing || results?.sizing || {};
+      const stability = results?.stability || {};
+      const structures = results?.structures || {};
+      return {
+        wing_loading_pa: sizing.wing_loading_pa ?? null,
+        aspect_ratio: sizing.aspect_ratio ?? null,
+        thrust_to_weight: sizing.thrust_to_weight ?? null,
+        static_margin: stability.static_margin ?? null,
+        n_limit: structures.n_limit ?? null
+      };
+    }
+
+    function getParamSchema(results) {
+      const smRisk = results?.inputs_config?.report?.risk_thresholds?.static_margin || null;
+      return [
+        { key: "wing_loading_pa", label: "翼载 W/S (Pa)", min: 200, max: 8000, step: 50 },
+        { key: "aspect_ratio", label: "展弦比 AR", min: 4, max: 20, step: 0.1 },
+        { key: "thrust_to_weight", label: "推重比 T/W", min: 0.05, max: 1.2, step: 0.01 },
+        { key: "static_margin", label: "静稳定裕度", min: 0.0, max: 0.4, step: 0.01, risk: smRisk },
+        { key: "n_limit", label: "结构载荷因子", min: 2.0, max: 9.0, step: 0.1 }
+      ];
+    }
+
+    function setupParamControls(results) {
+      const defaults = extractDefaultParameters(results);
+      state.parameters.defaults = { ...defaults };
+      state.parameters.values = { ...defaults };
+      state.paramInputs = {};
+      ui.paramControls.innerHTML = "";
+      const schema = getParamSchema(results);
+      schema.forEach(p => {
+        if (defaults[p.key] === null || defaults[p.key] === undefined) return;
+        const row = document.createElement("div");
+        row.className = "row";
+        const label = document.createElement("span");
+        label.className = "muted";
+        label.textContent = p.label;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = String(p.min);
+        input.max = String(p.max);
+        input.step = String(p.step);
+        input.value = String(defaults[p.key]);
+        input.oninput = () => {
+          updateParameterValue(p.key, parseFloat(input.value));
+        };
+        row.appendChild(label);
+        row.appendChild(input);
+        ui.paramControls.appendChild(row);
+        state.paramInputs[p.key] = input;
+      });
+      renderParameterTable(results);
+      validateParameters(results);
+    }
+
+    function updateParameterValue(key, value) {
+      if (!Number.isFinite(value)) return;
+      state.parameters.values[key] = value;
+      syncResultsParameter(key, value);
+      renderResults(state.results);
+      renderParameterTable(state.results);
+      validateParameters(state.results);
+    }
+
+    function renderParameterTable(results) {
+      const schema = getParamSchema(results);
+      const rows = schema
+        .filter(p => state.parameters.values[p.key] !== null && state.parameters.values[p.key] !== undefined)
+        .map(p => [p.key, p.label, fmt(state.parameters.values[p.key])]);
+      renderTable(ui.tblParams, rows, ["字段", "说明", "值"]);
+    }
+
+    function validateParameters(results) {
+      const schema = getParamSchema(results);
+      const messages = [];
+      schema.forEach(p => {
+        const v = state.parameters.values[p.key];
+        const input = state.paramInputs[p.key];
+        if (v === null || v === undefined || !Number.isFinite(v)) return;
+        let invalid = false;
+        if (v < p.min || v > p.max) {
+          messages.push(`${p.label} 超出范围 [${p.min}, ${p.max}]`);
+          invalid = true;
+        }
+        if (p.key === "static_margin" && p.risk) {
+          const r = p.risk;
+          if (typeof r.red_low === "number" && v < r.red_low) messages.push(`${p.label} 低于红线 ${r.red_low}`);
+          else if (typeof r.yellow_low === "number" && v < r.yellow_low) messages.push(`${p.label} 低于黄线 ${r.yellow_low}`);
+          if (typeof r.yellow_high === "number" && v > r.yellow_high) messages.push(`${p.label} 高于黄线 ${r.yellow_high}`);
+        }
+        if (input) input.className = invalid ? "field-invalid" : "";
+      });
+      state.parameters.messages = messages;
+      if (messages.length === 0) {
+        ui.paramValidation.innerHTML = "<div class='validation-ok'>参数校验：通过</div>";
+      } else {
+        ui.paramValidation.innerHTML = "<div class='validation-warn'>参数校验：存在提示</div><div class='muted'>" + messages.join("<br/>") + "</div>";
+      }
+    }
+
+    function applyCandidate(candidate) {
+      if (!candidate) return;
+      const map = {
+        wing_loading_pa: candidate.wing_loading_pa,
+        aspect_ratio: candidate.aspect_ratio,
+        thrust_to_weight: candidate.thrust_to_weight
+      };
+      Object.keys(map).forEach(k => {
+        const v = map[k];
+        if (Number.isFinite(v)) {
+          state.parameters.values[k] = v;
+          syncResultsParameter(k, v);
+          const input = state.paramInputs[k];
+          if (input) input.value = String(v);
+        }
+      });
+      renderResults(state.results);
+      renderParameterTable(state.results);
+      validateParameters(state.results);
+    }
+
+    function syncResultsParameter(key, value) {
+      if (!state.results) return;
+      if (key === "wing_loading_pa" || key === "aspect_ratio" || key === "thrust_to_weight") {
+        if (!state.results.sizing || typeof state.results.sizing !== "object") state.results.sizing = {};
+        state.results.sizing[key] = value;
+        if (state.results.design_loop?.best_sizing) state.results.design_loop.best_sizing[key] = value;
+        return;
+      }
+      if (key === "static_margin") {
+        if (!state.results.stability || typeof state.results.stability !== "object") state.results.stability = {};
+        state.results.stability.static_margin = value;
+        return;
+      }
+      if (key === "n_limit") {
+        if (!state.results.structures || typeof state.results.structures !== "object") state.results.structures = {};
+        state.results.structures.n_limit = value;
+      }
+    }
+
+    function normalizeRunBase(raw) {
+      if (!raw) return "";
+      let s = String(raw).trim();
+      if (!s) return "";
+      while (s.endsWith("/") || s.endsWith("\\")) s = s.slice(0, -1);
+      return s;
+    }
+
+    function applyRunBase(base) {
+      const prefix = `${base}/`;
+      ui.pathResults.value = `${prefix}results/results.json`;
+      ui.pathMesh.value = `${prefix}mesh/geometry_mesh.json`;
+      ui.pathReport.value = `${prefix}report/report.md`;
+      ui.pathConstraints.value = `${prefix}report/constraints_ws_tw.svg`;
+      ui.pathAdvanced.value = `${prefix}geometry/advanced_shape_results.json`;
+      ui.pathOpenvsp.value = `${prefix}openvsp/openvsp_advanced.py`;
+    }
+
+    function resolveRunBase() {
+      let base = normalizeRunBase(ui.pathRun?.value || "");
+      if (!base) {
+        const params = new URLSearchParams(window.location.search);
+        const runParam = params.get("run");
+        if (runParam) {
+          const normalized = runParam.includes("/") ? runParam : `./${runParam}`;
+          base = normalizeRunBase(normalized);
+          if (base && ui.pathRun) ui.pathRun.value = base;
+        }
+      }
+      if (base) applyRunBase(base);
+    }
+
+    async function loadJsonFromPath(path) {
+      try {
+        const res = await fetch(path, { cache: "no-store" });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      }
+    }
+
+    async function loadJsonFromFile(file) {
+      if (!file) return null;
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            resolve(JSON.parse(reader.result));
+          } catch {
+            resolve(null);
+          }
+        };
+        reader.readAsText(file, "utf-8");
+      });
+    }
+
+    async function loadAll() {
+      setStatus("加载中…", false);
+      resolveRunBase();
+      const resPath = ui.pathResults.value.trim();
+      const meshPath = ui.pathMesh.value.trim();
+      const advancedPath = ui.pathAdvanced.value.trim();
+      const openvspPath = ui.pathOpenvsp.value.trim();
+      let results = await loadJsonFromPath(resPath);
+      let mesh = await loadJsonFromPath(meshPath);
+      let advanced = await loadJsonFromPath(advancedPath);
+      if (!results && ui.fileResults.files[0]) results = await loadJsonFromFile(ui.fileResults.files[0]);
+      if (!mesh && ui.fileMesh.files[0]) mesh = await loadJsonFromFile(ui.fileMesh.files[0]);
+      if (!advanced && ui.fileAdvanced.files[0]) advanced = await loadJsonFromFile(ui.fileAdvanced.files[0]);
+
+      if (!results) {
+        setStatus("results.json 加载失败，可手动选择文件或确认路径", false);
+      } else {
+        state.results = results;
+      }
+      if (!mesh) {
+        setStatus("geometry_mesh.json 加载失败，可手动选择文件或确认路径", false);
+      } else {
+        state.mesh = mesh;
+      }
+      state.advanced = advanced || null;
+      state.advancedOriginal = advanced ? cloneJson(advanced) : null;
+      state.advancedEditable = advanced ? buildEditableAdvanced(advanced) : null;
+      state.geometryBaseline = getGeometryMetrics(state.advancedEditable?.inputs?.geometry_shape || null);
+      state.geometryScale = { x: 1, y: 1, z: 1 };
+
+      ui.linkReport.href = ui.pathReport.value.trim();
+      ui.linkConstraints.href = ui.pathConstraints.value.trim();
+      ui.linkOpenvsp.href = openvspPath;
+      ui.openvspStatus.textContent = "";
+      ui.geometryStatus.textContent = "";
+
+      renderTargets(state.results);
+      renderResults(state.results);
+      renderCandidates(state.results);
+      setupParamControls(state.results);
+      setupGeometryControls(state.advancedEditable);
+      updateGeometryScale();
+
+      if (state.mesh && Array.isArray(state.mesh)) {
+        const ok = await ensureThree();
+        if (!ok) {
+          setStatus("Three.js 加载失败", false);
+          return;
+        }
+        buildScene(state.mesh);
+        ensureRenderers();
+        renderPartsList(state.mesh);
+        setStatus("加载完成", true);
+      }
+    }
+
+    ui.btnReload.onclick = loadAll;
+    ui.btnApplyGeometry.onclick = () => {
+      if (!state.advancedEditable) return;
+      state.advanced = cloneJson(state.advancedEditable);
+      state.geometryBaseline = getGeometryMetrics(state.advancedEditable?.inputs?.geometry_shape || null);
+      updateGeometryScale();
+      ui.geometryStatus.textContent = "已应用";
+    };
+    ui.btnResetGeometry.onclick = () => {
+      if (!state.advancedOriginal) return;
+      state.advancedEditable = buildEditableAdvanced(cloneJson(state.advancedOriginal));
+      state.advanced = cloneJson(state.advancedOriginal);
+      state.geometryBaseline = getGeometryMetrics(state.advancedEditable?.inputs?.geometry_shape || null);
+      setupGeometryControls(state.advancedEditable);
+      updateGeometryScale();
+      ui.geometryStatus.textContent = "已恢复";
+    };
+    ui.btnDownloadGeometry.onclick = () => {
+      const data = state.advancedEditable || state.advanced;
+      if (!data) return;
+      downloadJson(data, "advanced_shape_results.json");
+      ui.geometryStatus.textContent = "已导出";
+    };
+    ui.btnOpenvsp.onclick = async () => {
+      const openvspPath = ui.pathOpenvsp.value.trim();
+      ui.openvspStatus.textContent = "下载中…";
+      try {
+        const res = await fetch(openvspPath, { cache: "no-store" });
+        if (!res.ok) throw new Error("load_fail");
+        const text = await res.text();
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "openvsp_advanced.py";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        ui.openvspStatus.textContent = "已下载";
+      } catch {
+        ui.openvspStatus.textContent = "下载失败";
+      }
+    };
+    ui.btnResetParams.onclick = () => {
+      const defaults = state.parameters.defaults || {};
+      Object.keys(defaults).forEach(k => {
+        const v = defaults[k];
+        if (v === null || v === undefined) return;
+        state.parameters.values[k] = v;
+        syncResultsParameter(k, v);
+        const input = state.paramInputs[k];
+        if (input) input.value = String(v);
+      });
+      renderResults(state.results);
+      renderParameterTable(state.results);
+      validateParameters(state.results);
+    };
+    ui.toggleGrid.onchange = applyTransforms;
+    ui.toggleWire.onchange = applyTransforms;
+    ui.scale.oninput = applyTransforms;
+    ui.explode.oninput = applyTransforms;
+    window.addEventListener("resize", updateRendererSize);
+
+    loadAll();
+  </script>
+</body>
+</html>

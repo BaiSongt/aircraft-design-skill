@@ -1,0 +1,93 @@
+{
+  "aircraft_role": "fixed_wing_utility",
+  "mission": {
+    "range_m": 845000.0,
+    "cruise_altitude_m": 1000.0,
+    "cruise_speed_m_s": 44.44,
+    "v_stall_m_s": 22.0,
+    "climb_gradient": 0.03,
+    "takeoff_climb_gradient": 0.04,
+    "takeoff_distance_m": 150.0,
+    "landing_distance_m": 170.0,
+    "obstacle_height_m": 15.24,
+    "landing_approach_angle_deg": 3.0,
+    "runway_slope": 0.0,
+    "headwind_m_s": 2.0,
+    "high_lift_takeoff": "double_slotted",
+    "high_lift_landing": "double_slotted",
+    "loiter_time_s": 1800.0,
+    "alternate_range_m": 80000.0
+  },
+  "payload": {
+    "payload_kg": 1000.0
+  },
+  "crew": {
+    "crew_kg": 160.0
+  },
+  "aero": {
+    "cd0": 0.045,
+    "e": 0.75,
+    "cl_max": 2.6
+  },
+  "sizing": {
+    "wing_loading_pa": 750.0,
+    "aspect_ratio": 4.8,
+    "thrust_to_weight": 0.23
+  },
+  "weights": {
+    "empty_a": 0.703,
+    "empty_b": 0.99,
+    "reserve_fraction": 0.07,
+    "w0_guess_kg": 5250.0
+  },
+  "propulsion": {
+    "type": "prop",
+    "sfc_1_s": 0.00000026,
+    "prop_efficiency": 0.75
+  },
+  "geometry": {
+    "fuselage_length_m": 12.688,
+    "fuselage_diameter_m": 2.0,
+    "wetted_area_factor": 3.8,
+    "wing_t_c": 0.14,
+    "tail_area_ratio": 0.25
+  },
+  "openvsp": {
+    "enabled": true,
+    "run": false
+  },
+  "tail": {
+    "vh": 0.7,
+    "vv": 0.04,
+    "lh_m": 6.0,
+    "lv_m": 5.8
+  },
+  "stability": {
+    "x_ac_w_cbar": 0.25,
+    "x_cg_cbar": 0.30,
+    "x_cg_fwd_cbar": 0.22,
+    "x_cg_aft_cbar": 0.35,
+    "cm0_w": -0.02,
+    "downwash_deda": 0.35,
+    "a_ratio": 0.9
+  },
+  "structures": {
+    "n_limit": 3.8,
+    "wing_t_c": 0.14,
+    "enable_weight_feedback": true,
+    "baseline_struct_frac": 0.35,
+    "feedback_gain": 0.10
+  },
+  "design_loop": {
+    "wing_loading_pa_grid": [650.0, 750.0, 850.0],
+    "aspect_ratio_grid": [4.2, 4.8, 5.4],
+    "thrust_to_weight_grid": [0.20, 0.23, 0.26],
+    "objective": "min_w0_kg",
+    "top_n": 6,
+    "sensitivity_steps": {
+      "wing_loading_pa": 60.0,
+      "aspect_ratio": 0.3,
+      "thrust_to_weight": 0.02
+    }
+  }
+}
