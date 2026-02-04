@@ -271,3 +271,143 @@ def mission_fuel_breakdown(
         "segments": [{"name": s.name, "fuel_fraction": s.fuel_fraction, "details": s.details} for s in segments],
         "closure": {"fuel_fraction_total_from_product": closure, "difference": total_fraction - closure},
     }
+
+
+def generate_mission_envelope(
+    *,
+    w0_kg: float,
+    s_m2: float,
+    polar: AeroPolar,
+    propulsion: PropulsionModel,
+    cruise_altitude_m: float,
+    cruise_speed_m_s: float,
+    range_m: float,
+    loiter_time_s: float = 0.0,
+    loiter_speed_m_s: float | None = None,
+    alternate_range_m: float = 0.0,
+    reserve_fraction: float = 0.0,
+    taxi_fraction: float = 0.01,
+    descent_fraction: float = 0.01,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    base_mission = {
+        "cruise_altitude_m": cruise_altitude_m,
+        "cruise_speed_m_s": cruise_speed_m_s,
+        "range_m": range_m,
+        "loiter_time_s": loiter_time_s,
+        "loiter_speed_m_s": loiter_speed_m_s if loiter_speed_m_s is not None else cruise_speed_m_s,
+        "alternate_range_m": alternate_range_m,
+        "reserve_fraction": reserve_fraction,
+        "taxi_fraction": taxi_fraction,
+        "descent_fraction": descent_fraction,
+    }
+    
+    result = mission_fuel_breakdown(
+        w0_kg=w0_kg,
+        s_m2=s_m2,
+        polar=polar,
+        propulsion=propulsion,
+        mission=base_mission,
+        isa_delta_c=isa_delta_c,
+    )
+    
+    total_fuel_fraction = result["fuel_fraction_total"]
+    total_fuel_kg = w0_kg * total_fuel_fraction / (1.0 - reserve_fraction)
+    
+    return {
+        "mission": base_mission,
+        "fuel_breakdown": result,
+        "total_fuel_kg": total_fuel_kg,
+        "total_fuel_fraction": total_fuel_fraction,
+        "reserve_fuel_kg": total_fuel_kg * reserve_fraction,
+        "segments": result["segments"],
+    }
+
+
+def generate_range_envelope(
+    *,
+    w0_kg: float,
+    s_m2: float,
+    polar: AeroPolar,
+    propulsion: PropulsionModel,
+    cruise_altitude_m: float,
+    cruise_speed_m_s: float,
+    range_range: list[float],
+    reserve_fraction: float = 0.0,
+    taxi_fraction: float = 0.01,
+    descent_fraction: float = 0.01,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    envelope = {
+        "range_m": range_range,
+        "total_fuel_kg": [],
+        "reserve_fuel_kg": [],
+        "fuel_fraction_total": [],
+    }
+    
+    for range_m in range_range:
+        result = generate_mission_envelope(
+            w0_kg=w0_kg,
+            s_m2=s_m2,
+            polar=polar,
+            propulsion=propulsion,
+            cruise_altitude_m=cruise_altitude_m,
+            cruise_speed_m_s=cruise_speed_m_s,
+            range_m=range_m,
+            reserve_fraction=reserve_fraction,
+            taxi_fraction=taxi_fraction,
+            descent_fraction=descent_fraction,
+            isa_delta_c=isa_delta_c,
+        )
+        
+        envelope["total_fuel_kg"].append(result["total_fuel_kg"])
+        envelope["reserve_fuel_kg"].append(result["reserve_fuel_kg"])
+        envelope["fuel_fraction_total"].append(result["fuel_fraction_total"])
+    
+    return envelope
+
+
+def generate_payload_range_envelope(
+    *,
+    w_empty_kg: float,
+    payload_range: list[float],
+    s_m2: float,
+    polar: AeroPolar,
+    propulsion: PropulsionModel,
+    cruise_altitude_m: float,
+    cruise_speed_m_s: float,
+    range_m: float,
+    reserve_fraction: float = 0.0,
+    taxi_fraction: float = 0.01,
+    descent_fraction: float = 0.01,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    envelope = {
+        "payload_kg": payload_range,
+        "w0_kg": [],
+        "total_fuel_kg": [],
+        "mtow_kg": [],
+    }
+    
+    for payload_kg in payload_range:
+        w0_kg = w_empty_kg + payload_kg
+        
+        result = generate_mission_envelope(
+            w0_kg=w0_kg,
+            s_m2=s_m2,
+            polar=polar,
+            propulsion=propulsion,
+            cruise_altitude_m=cruise_altitude_m,
+            cruise_speed_m_s=cruise_speed_m_s,
+            range_m=range_m,
+            reserve_fraction=reserve_fraction,
+            taxi_fraction=taxi_fraction,
+            descent_fraction=descent_fraction,
+            isa_delta_c=isa_delta_c,
+        )
+        
+        envelope["w0_kg"].append(w0_kg)
+        envelope["total_fuel_kg"].append(result["total_fuel_kg"])
+        envelope["mtow_kg"].append(w0_kg + result["total_fuel_kg"])
+    
+    return envelope

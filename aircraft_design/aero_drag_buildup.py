@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import log10
+from math import log10, pi, sqrt, cos, sin, atan
 
 from .atmosphere import isa_tropopause
+from .aero_lift_slope import calculate_lift_induced_drag_factor
 
 
 @dataclass(frozen=True)
@@ -178,3 +179,161 @@ def estimate_cd0_drag_buildup(
     }
 
     return DragBuildUpResult(cd0=cd0, breakdown=breakdown)
+
+
+def calculate_wave_drag(
+    *,
+    mach: float,
+    sweep_quarter_chord_deg: float,
+    thickness_ratio: float,
+    aspect_ratio: float,
+) -> float:
+    if mach <= 1.0:
+        return 0.0
+    
+    sweep_rad = sweep_quarter_chord_deg * pi / 180.0
+    
+    mach_normal = mach * cos(sweep_rad)
+    
+    if mach_normal <= 1.0:
+        return 0.0
+    
+    cd_wave = 0.002 * (thickness_ratio**2) * (aspect_ratio / 10.0) * \
+               ((mach_normal - 1.0) / (mach_normal))**3
+    
+    return cd_wave
+
+
+def calculate_compressibility_drag(
+    *,
+    mach: float,
+    mach_crit: float = 0.8,
+    mach_dd: float = 1.2,
+    cd0_subsonic: float = 0.02,
+    cd0_supersonic: float = 0.04,
+) -> float:
+    if mach <= mach_crit:
+        return 0.0
+    elif mach >= mach_dd:
+        return cd0_supersonic - cd0_subsonic
+    else:
+        t = (mach - mach_crit) / (mach_dd - mach_crit)
+        cd_comp = (cd0_supersonic - cd0_subsonic) * t
+        return cd_comp
+
+
+def calculate_induced_drag(
+    *,
+    cl: float,
+    aspect_ratio: float,
+    taper_ratio: float,
+    sweep_quarter_chord_deg: float,
+) -> float:
+    k = calculate_lift_induced_drag_factor(
+        aspect_ratio=aspect_ratio,
+        taper_ratio=taper_ratio,
+        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
+    )
+    
+    cd_i = k * cl**2
+    
+    return cd_i
+
+
+def calculate_total_drag(
+    *,
+    cl: float,
+    cd0: float,
+    aspect_ratio: float,
+    taper_ratio: float,
+    sweep_quarter_chord_deg: float,
+    mach: float,
+    mach_crit: float = 0.8,
+    mach_dd: float = 1.2,
+    thickness_ratio: float = 0.12,
+) -> dict:
+    cd_i = calculate_induced_drag(
+        cl=cl,
+        aspect_ratio=aspect_ratio,
+        taper_ratio=taper_ratio,
+        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
+    )
+    
+    cd_wave = calculate_wave_drag(
+        mach=mach,
+        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
+        thickness_ratio=thickness_ratio,
+        aspect_ratio=aspect_ratio,
+    )
+    
+    cd_comp = calculate_compressibility_drag(
+        mach=mach,
+        mach_crit=mach_crit,
+        mach_dd=mach_dd,
+        cd0_subsonic=cd0,
+        cd0_supersonic=cd0 + cd_wave,
+    )
+    
+    cd_total = cd0 + cd_i + cd_wave + cd_comp
+    
+    return {
+        "cd0": cd0,
+        "cd_i": cd_i,
+        "cd_wave": cd_wave,
+        "cd_comp": cd_comp,
+        "cd_total": cd_total,
+        "cl": cl,
+        "mach": mach,
+    }
+
+
+def generate_drag_mach_curve(
+    *,
+    cl: float,
+    cd0_subsonic: float,
+    aspect_ratio: float,
+    taper_ratio: float,
+    sweep_quarter_chord_deg: float,
+    mach_range: list[float],
+    mach_crit: float = 0.8,
+    mach_dd: float = 1.2,
+    thickness_ratio: float = 0.12,
+) -> dict:
+    results = {
+        "mach": mach_range,
+        "cd0": [],
+        "cd_i": [],
+        "cd_wave": [],
+        "cd_comp": [],
+        "cd_total": [],
+        "regime": [],
+    }
+    
+    for mach in mach_range:
+        drag_result = calculate_total_drag(
+            cl=cl,
+            cd0=cd0_subsonic,
+            aspect_ratio=aspect_ratio,
+            taper_ratio=taper_ratio,
+            sweep_quarter_chord_deg=sweep_quarter_chord_deg,
+            mach=mach,
+            mach_crit=mach_crit,
+            mach_dd=mach_dd,
+            thickness_ratio=thickness_ratio,
+        )
+        
+        results["cd0"].append(drag_result["cd0"])
+        results["cd_i"].append(drag_result["cd_i"])
+        results["cd_wave"].append(drag_result["cd_wave"])
+        results["cd_comp"].append(drag_result["cd_comp"])
+        results["cd_total"].append(drag_result["cd_total"])
+        
+        if mach < mach_crit:
+            regime = "subsonic"
+        elif mach < mach_dd:
+            regime = "transonic"
+        else:
+            regime = "supersonic"
+        results["regime"].append(regime)
+    
+    return results

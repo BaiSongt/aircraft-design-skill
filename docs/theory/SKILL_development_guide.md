@@ -7,11 +7,11 @@
 | 理论文档 | 现有SKILL | 对应程度 | 说明 |
 |---------|-----------|---------|------|
 | 01_design_parameters.md | fixed_wing_shape_parametric_spec | ✅ 完全对应 | 几何参数定义完全一致 |
-| 02_aerodynamic_characteristics.md | fixed_wing_aero_spec | ⚠️ 部分对应 | 需要增加详细的阻力分解和升力线斜率计算 |
-| 03_weight_characteristics.md | fixed_wing_weights_spec | ⚠️ 部分对应 | 需要增加详细的结构重量计算公式 |
-| 04_engine_characteristics.md | fixed_wing_propulsion_spec | ⚠️ 部分对应 | 需要增加推力随高度/速度变化的详细模型 |
-| 05_performance_characteristics.md | fixed_wing_performance_spec | ⚠️ 部分对应 | 需要增加详细的任务剖面和场域性能计算 |
-| 06_stability_control_characteristics.md | fixed_wing_stability_control_spec | ⚠️ 部分对应 | 需要增加详细的静稳定性和动稳定性计算 |
+| 02_aerodynamic_characteristics.md | fixed_wing_aero_spec | ✅ 已完成 | 已实现完整的阻力分解和升力线斜率计算 |
+| 03_weight_characteristics.md | fixed_wing_weights_spec | ✅ 已完成 | 已实现详细的结构重量和系统重量计算 |
+| 04_engine_characteristics.md | fixed_wing_propulsion_spec | ✅ 已完成 | 已实现推力随高度/速度变化的详细模型 |
+| 05_performance_characteristics.md | fixed_wing_performance_spec | ✅ 已完成 | 已实现详细的任务剖面和场域性能计算 |
+| 06_stability_control_characteristics.md | fixed_wing_stability_control_spec | ✅ 已完成 | 已实现详细的静稳定性和动稳定性计算 |
 
 ### 1.2 详细对应分析
 
@@ -41,10 +41,10 @@
 
 **现有SKILL：fixed_wing_aero_spec**
 - ✅ 已实现基本的极曲线模型：`CD = CD0 + k * CL^2`
-- ⚠️ 需要增加详细的升力线斜率计算（亚声速、超声速、跨声速）
-- ⚠️ 需要增加详细的阻力分解（摩擦阻力、形状阻力、干扰阻力、波阻）
-- ⚠️ 需要增加涡升力修正计算
-- ⚠️ 需要增加低速构型的升阻增量计算
+- ✅ 已实现详细的升力线斜率计算（亚声速、超声速、跨声速）
+- ✅ 已实现详细的阻力分解（摩擦阻力、形状阻力、干扰阻力、波阻）
+- ✅ 已实现涡升力修正计算
+- ✅ 已实现低速构型的升阻增量计算
 
 #### 1.2.3 重量特性层
 
@@ -57,9 +57,9 @@
 
 **现有SKILL：fixed_wing_weights_spec**
 - ✅ 已实现基本的重量闭合迭代
-- ⚠️ 需要增加详细的结构重量计算公式
-- ⚠️ 需要增加详细的系统重量计算
-- ⚠️ 需要增加复合材料重量修正
+- ✅ 已实现详细的结构重量计算公式
+- ✅ 已实现详细的系统重量计算
+- ✅ 已实现复合材料重量修正
 
 #### 1.2.4 发动机特性层
 
@@ -70,9 +70,9 @@
 
 **现有SKILL：fixed_wing_propulsion_spec**
 - ✅ 已实现基本的推进类型区分（螺桨/喷气）
-- ⚠️ 需要增加详细的推力随高度/速度变化模型
-- ⚠️ 需要增加详细的耗油率模型
-- ⚠️ 需要增加油门杆位置控制
+- ✅ 已实现详细的推力随高度/速度变化模型
+- ✅ 已实现详细的耗油率模型
+- ✅ 已实现油门杆位置控制
 
 #### 1.2.5 性能特性层
 
@@ -83,9 +83,9 @@
 
 **现有SKILL：fixed_wing_performance_spec**
 - ✅ 已实现基本的巡航配平和爬升率计算
-- ⚠️ 需要增加详细的起降性能计算
-- ⚠️ 需要增加详细的任务剖面计算
-- ⚠️ 需要增加设计点性能计算（实用升限、转弯半径）
+- ✅ 已实现详细的起降性能计算
+- ✅ 已实现详细的任务剖面计算
+- ✅ 已实现设计点性能计算（实用升限、转弯半径）
 
 #### 1.2.6 操稳特性层
 
@@ -97,9 +97,9 @@
 
 **现有SKILL：fixed_wing_stability_control_spec**
 - ✅ 已实现基本的尾容积系数法
-- ⚠️ 需要增加详细的静稳定性计算
-- ⚠️ 需要增加详细的动稳定性计算
-- ⚠️ 需要增加详细的操纵性分析
+- ✅ 已实现详细的静稳定性计算
+- ✅ 已实现详细的动稳定性计算
+- ✅ 已实现详细的操纵性分析
 
 ## 2. SKILL开发优先级建议
 

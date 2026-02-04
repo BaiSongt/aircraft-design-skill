@@ -91,12 +91,152 @@ def fuel_flow_n_s(model: PropulsionModel, *, thrust_n: float, shaft_power_w: flo
         if model.tsfc_1_s is None:
             raise ValueError("Jet model requires tsfc_1_s.")
         return model.tsfc_1_s * max(0.0, thrust_n)
-
     if model.type == "prop":
         if model.sfc_1_s is None:
             raise ValueError("Prop model requires sfc_1_s.")
         if shaft_power_w is None:
             raise ValueError("Prop model requires shaft_power_w for fuel flow.")
         return model.sfc_1_s * max(0.0, shaft_power_w)
-
     raise ValueError("propulsion.type must be 'jet' or 'prop'.")
+
+
+def calculate_turbofan_thrust(
+    *,
+    thrust_sl_n: float,
+    mach: float,
+    altitude_m: float,
+    throttle_position: float = 1.0,
+    bypass_ratio: float = 6.0,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    from .atmosphere import isa_tropopause
+    from .units import CONST
+    
+    if thrust_sl_n <= 0.0:
+        raise ValueError("thrust_sl_n must be positive.")
+    if throttle_position < 0.0 or throttle_position > 1.0:
+        raise ValueError("throttle_position must be in [0, 1].")
+    
+    atm = isa_tropopause(altitude_m, delta_t_k=float(isa_delta_c))
+    sigma = atm.rho_kg_m3 / CONST.rho0_kg_m3
+    
+    alpha = 0.7 + 0.1 * (1.0 - bypass_ratio / 10.0)
+    
+    thrust_available_n = thrust_sl_n * (sigma**alpha) * throttle_position
+    
+    mach_factor = 1.0 + 0.3 * mach
+    thrust_available_n *= mach_factor
+    
+    return {
+        "thrust_available_n": thrust_available_n,
+        "thrust_sl_n": thrust_sl_n,
+        "mach": mach,
+        "altitude_m": altitude_m,
+        "throttle_position": throttle_position,
+        "sigma": sigma,
+        "alpha": alpha,
+        "bypass_ratio": bypass_ratio,
+    }
+
+
+def calculate_turbofan_sfc(
+    *,
+    sfc_sl: float,
+    mach: float,
+    altitude_m: float,
+    throttle_position: float = 1.0,
+    bypass_ratio: float = 6.0,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    from .atmosphere import isa_tropopause
+    from .units import CONST
+    
+    if sfc_sl <= 0.0:
+        raise ValueError("sfc_sl must be positive.")
+    if throttle_position < 0.0 or throttle_position > 1.0:
+        raise ValueError("throttle_position must be in [0, 1].")
+    
+    atm = isa_tropopause(altitude_m, delta_t_k=float(isa_delta_c))
+    sigma = atm.rho_kg_m3 / CONST.rho0_kg_m3
+    
+    beta = 0.8 + 0.1 * (1.0 - bypass_ratio / 10.0)
+    
+    sfc_available = sfc_sl * (sigma**beta) * (1.0 + 0.5 * (1.0 - throttle_position))
+    
+    mach_factor = 1.0 + 0.2 * mach
+    sfc_available *= mach_factor
+    
+    return {
+        "sfc_available": sfc_available,
+        "sfc_sl": sfc_sl,
+        "mach": mach,
+        "altitude_m": altitude_m,
+        "throttle_position": throttle_position,
+        "sigma": sigma,
+        "beta": beta,
+        "bypass_ratio": bypass_ratio,
+    }
+
+
+def generate_thrust_envelope(
+    *,
+    thrust_sl_n: float,
+    mach_range: list[float],
+    altitude_range: list[float],
+    throttle_position: float = 1.0,
+    bypass_ratio: float = 6.0,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    envelope = {
+        "mach": mach_range,
+        "altitude_m": altitude_range,
+        "thrust_n": [],
+    }
+    
+    for mach in mach_range:
+        thrust_row = []
+        for altitude in altitude_range:
+            result = calculate_turbofan_thrust(
+                thrust_sl_n=thrust_sl_n,
+                mach=mach,
+                altitude_m=altitude,
+                throttle_position=throttle_position,
+                bypass_ratio=bypass_ratio,
+                isa_delta_c=isa_delta_c,
+            )
+            thrust_row.append(result["thrust_available_n"])
+        envelope["thrust_n"].append(thrust_row)
+    
+    return envelope
+
+
+def generate_sfc_envelope(
+    *,
+    sfc_sl: float,
+    mach_range: list[float],
+    altitude_range: list[float],
+    throttle_position: float = 1.0,
+    bypass_ratio: float = 6.0,
+    isa_delta_c: float = 0.0,
+) -> dict:
+    envelope = {
+        "mach": mach_range,
+        "altitude_m": altitude_range,
+        "sfc": [],
+    }
+    
+    for mach in mach_range:
+        sfc_row = []
+        for altitude in altitude_range:
+            result = calculate_turbofan_sfc(
+                sfc_sl=sfc_sl,
+                mach=mach,
+                altitude_m=altitude,
+                throttle_position=throttle_position,
+                bypass_ratio=bypass_ratio,
+                isa_delta_c=isa_delta_c,
+            )
+            sfc_row.append(result["sfc_available"])
+        envelope["sfc"].append(sfc_row)
+    
+    return envelope
