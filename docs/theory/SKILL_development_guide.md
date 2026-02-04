@@ -354,6 +354,15 @@ aircraft_design/
 - [aircraft_design/performance.py](../../aircraft_design/performance.py)
 - [aircraft_design/stability_control.py](../../aircraft_design/stability_control.py)
 - [aircraft_design/propulsion.py](../../aircraft_design/propulsion.py)
+- [aircraft_design/airfoil_library.py](../../aircraft_design/airfoil_library.py)
+- [aircraft_design/geometry_modeling.py](../../aircraft_design/geometry_modeling.py)
+- [aircraft_design/degenerate_geometry.py](../../aircraft_design/degenerate_geometry.py)
+- [aircraft_design/parasite_drag_enhanced.py](../../aircraft_design/parasite_drag_enhanced.py)
+- [aircraft_design/surface_analysis.py](../../aircraft_design/surface_analysis.py)
+- [aircraft_design/vspaero_interface.py](../../aircraft_design/vspaero_interface.py)
+- [aircraft_design/loads_analysis.py](../../aircraft_design/loads_analysis.py)
+- [aircraft_design/rotorcraft_analysis.py](../../aircraft_design/rotorcraft_analysis.py)
+- [tests/integration_tests.py](../../tests/integration_tests.py)
 
 ## 6. 版本信息
 
