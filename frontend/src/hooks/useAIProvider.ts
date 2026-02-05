@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+
+import { useState, useEffect } from 'react'
 
 export type AIProvider =
   | 'openai'
@@ -28,21 +29,75 @@ export interface AIProviderConfig {
   apiKey: string
   baseUrl?: string
   model?: string
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+}
+
+export interface ProviderInfo {
+    name: string
+    enabled: bool
+    model: string
+    baseUrl: string
 }
 
 export function useAIProvider() {
-  const [provider, setProvider] = useState<AIProvider>(() => {
-    const saved = localStorage.getItem('aiProvider')
-    return (saved as AIProvider) || 'openai'
-  })
-
-  const [config, setConfig] = useState<AIProviderConfig | null>(() => {
-    const saved = localStorage.getItem('aiProviderConfig')
-    return saved ? JSON.parse(saved) : null
-  })
-
+  const [provider, setProvider] = useState<AIProvider>('openai')
+  const [config, setConfig] = useState<AIProviderConfig | null>(null)
   const [availableModels, setAvailableModels] = useState<AIModel[]>([])
+  const [providersList, setProvidersList] = useState<ProviderInfo[]>([])
 
+  const API_BASE = '/api/ai'
+
+  const fetchProviders = async () => {
+    try {
+        const res = await fetch(`${API_BASE}/providers`)
+        if (res.ok) {
+            const data = await res.json()
+            setProvidersList(data)
+            // If there are configured providers, select the first one or current one if valid
+            if (data.length > 0) {
+                 const current = data.find((p: ProviderInfo) => p.name === provider)
+                 if (!current) {
+                     setProvider(data[0].name as AIProvider)
+                 }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch providers", e)
+    }
+  }
+
+  const saveConfig = async (newConfig: AIProviderConfig) => {
+      try {
+          const res = await fetch(`${API_BASE}/configure`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(newConfig)
+          })
+          if (res.ok) {
+              setConfig(newConfig)
+              setProvider(newConfig.provider)
+              await fetchProviders() // Refresh list
+              return true
+          } else {
+              const err = await res.json()
+              alert(`Error saving config: ${err.detail}`)
+              return false
+          }
+      } catch (e) {
+          console.error("Failed to save config", e)
+          return false
+      }
+  }
+
+  useEffect(() => {
+    fetchProviders()
+  }, [])
+
+  // Mock models for now, but could be fetched from backend capabilities
   useEffect(() => {
     const models: AIModel[] = [
       {
@@ -55,26 +110,8 @@ export function useAIProvider() {
         supportsMath: true,
       },
       {
-        id: 'gpt-4-turbo',
-        name: 'GPT-4 Turbo',
-        provider: 'openai',
-        maxTokens: 4096,
-        supportsVision: false,
-        supportsCode: true,
-        supportsMath: true,
-      },
-      {
         id: 'claude-3-opus',
         name: 'Claude 3 Opus',
-        provider: 'anthropic',
-        maxTokens: 200000,
-        supportsVision: true,
-        supportsCode: true,
-        supportsMath: true,
-      },
-      {
-        id: 'claude-3-sonnet',
-        name: 'Claude 3 Sonnet',
         provider: 'anthropic',
         maxTokens: 200000,
         supportsVision: true,
@@ -91,88 +128,25 @@ export function useAIProvider() {
         supportsMath: true,
       },
       {
-        id: 'tongyi-qianwen',
-        name: '通义千问',
-        provider: 'tongyi',
-        maxTokens: 8192,
-        supportsVision: true,
-        supportsCode: true,
-        supportsMath: true,
-      },
-      {
-        id: 'zhipu-glm-4',
-        name: '智谱 GLM-4',
-        provider: 'zhipu',
-        maxTokens: 8192,
-        supportsVision: false,
-        supportsCode: true,
-        supportsMath: true,
-      },
-      {
-        id: 'deepseek-chat',
-        name: 'DeepSeek Chat',
-        provider: 'deepseek',
-        maxTokens: 32768,
-        supportsVision: false,
-        supportsCode: true,
-        supportsMath: true,
-      },
-      {
-        id: 'moonshot-v1',
-        name: '月之暗面 V1',
-        provider: 'moonshot',
-        maxTokens: 32768,
-        supportsVision: true,
-        supportsCode: true,
-        supportsMath: true,
-      },
-      {
-        id: 'ollama-llama3',
-        name: 'Ollama Llama3',
+        id: 'qwen3:4b',
+        name: 'Qwen 3 (4B)',
         provider: 'ollama',
         maxTokens: 4096,
         supportsVision: false,
         supportsCode: true,
-        supportsMath: false,
-      },
-      {
-        id: 'localai',
-        name: 'LocalAI',
-        provider: 'localai',
-        maxTokens: 4096,
-        supportsVision: false,
-        supportsCode: true,
-        supportsMath: false,
-      },
-      {
-        id: 'vllm',
-        name: 'vLLM',
-        provider: 'vllm',
-        maxTokens: 4096,
-        supportsVision: false,
-        supportsCode: true,
-        supportsMath: false,
-      },
+        supportsMath: true,
+      }
     ]
-    setAvailableModels(models)
-  }, [])
-
-  const setAIProvider = useCallback((newProvider: AIProvider, newConfig: AIProviderConfig) => {
-    setProvider(newProvider)
-    setConfig(newConfig)
-    localStorage.setItem('aiProvider', newProvider)
-    localStorage.setItem('aiProviderConfig', JSON.stringify(newConfig))
-  }, [])
-
-  const getModelsByProvider = useCallback((provider: AIProvider): AIModel[] => {
-    return availableModels.filter(model => model.provider === provider)
-  }, [availableModels])
+    setAvailableModels(models.filter(m => m.provider === provider))
+  }, [provider])
 
   return {
     provider,
+    setProvider,
     config,
+    setConfig, // Note: This updates local state, use saveConfig to persist
     availableModels,
-    setAIProvider,
-    getModelsByProvider,
+    saveConfig,
+    providersList
   }
 }
