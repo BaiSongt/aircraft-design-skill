@@ -2,16 +2,7 @@ import { useState, useEffect } from 'react'
 import { Save, Trash2, Plus, Eye, EyeOff, Settings as SettingsIcon, Moon, Sun } from 'lucide-react'
 import { useAIProvider } from '@/hooks/useAIProvider'
 import { ModeToggle } from '@/components/ModeToggle'
-
-export interface AIProviderConfig {
-  provider: string
-  apiKey: string
-  baseUrl?: string
-  model?: string
-  temperature?: number
-  maxTokens?: number
-  topP?: number
-}
+import { AIProviderConfig } from '@/lib/ai_providers'
 
 export function Settings() {
   const { provider, config, setAIProvider } = useAIProvider()

@@ -11,11 +11,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY . backend/
 
-RUN mkdir -p /app/static /app/logs
+ENV PYTHONPATH=/app
+WORKDIR /app/backend
+
+RUN mkdir -p static logs
 
 EXPOSE 8000
 

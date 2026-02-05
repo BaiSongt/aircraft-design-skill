@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, Grid, AxesHelper } from '@react-three/drei'
-import { Box, Sphere } from '@react-three/drei'
-import { RotateCw, ZoomIn, ZoomOut, Maximize2, Download, Grid3X3, BoxSelect } from 'lucide-react'
+import { OrbitControls, PerspectiveCamera, Grid } from '@react-three/drei'
+import { RotateCw, ZoomIn, ZoomOut, Maximize2, Download, Grid3X3, BoxSelect, Box } from 'lucide-react'
 
 export interface Model3DViewerProps {
   modelUrl?: string
@@ -249,7 +248,7 @@ export function Model3DViewer({
         />
 
         {grid && <Grid args={[20, 20]} cellSize={1} cellColor="#e5e7eb" sectionSize={5} sectionColor="#d1d5db" fadeDistance={25} fadeStrength={1} />}
-        {axes && <AxesHelper args={[10]} />}
+        {axes && <axesHelper args={[10]} />}
 
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1} />

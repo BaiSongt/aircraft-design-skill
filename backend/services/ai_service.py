@@ -4,10 +4,10 @@ from typing import Dict, List, Optional
 import json
 import os
 
-from langchain.chat_models.base import BaseChatModel
-from langchain.chat_models.openai import ChatOpenAI
-from langchain.chat_models.anthropic import ChatAnthropic
-from langchain.chat_models.google_genai import ChatGoogleGenerativeAI
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from backend.config.ai_providers_config import AI_PROVIDERS_CONFIG
 
@@ -90,9 +90,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'https://dashscope.aliyuncs.com/api/v1',
-                },
+                openai_api_base=base_url or 'https://dashscope.aliyuncs.com/api/v1',
             )
 
         elif provider_name == 'zhipu':
@@ -102,9 +100,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'https://open.bigmodel.cn/api/paas/v4',
-                },
+                openai_api_base=base_url or 'https://open.bigmodel.cn/api/paas/v4',
             )
 
         elif provider_name == 'deepseek':
@@ -114,9 +110,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'https://api.deepseek.com',
-                },
+                openai_api_base=base_url or 'https://api.deepseek.com',
             )
 
         elif provider_name == 'moonshot':
@@ -126,9 +120,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'https://api.moonshot.cn/v1',
-                },
+                openai_api_base=base_url or 'https://api.moonshot.cn/v1',
             )
 
         elif provider_name == 'ollama':
@@ -138,9 +130,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'http://localhost:11434/v1',
-                },
+                openai_api_base=base_url or 'http://localhost:11434/v1',
             )
 
         elif provider_name == 'localai':
@@ -150,9 +140,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'http://localhost:8080/v1',
-                },
+                openai_api_base=base_url or 'http://localhost:8080/v1',
             )
 
         elif provider_name == 'vllm':
@@ -162,9 +150,7 @@ class AIProviderManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                configuration={
-                    'base_url': base_url or 'http://localhost:5000/v1',
-                },
+                openai_api_base=base_url or 'http://localhost:5000/v1',
             )
 
         else:

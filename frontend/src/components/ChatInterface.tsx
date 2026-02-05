@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, MessageSquare } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { Prism as SyntaxHighlighterTheme } from 'react-syntax-highlighter/dist/esm/styles/prism-tomorrow'
 
 import { useSkillCalls } from '@/hooks/useSkillCalls'
 import { useWebSocket } from '@/hooks/useWebSocket'
@@ -108,24 +106,6 @@ export function ChatInterface({ messages, onSendMessage, isConnected }: ChatInte
           <div className="max-w-[80%] rounded-lg bg-muted text-muted-foreground p-3">
             <ReactMarkdown
               className="prose prose-sm dark:prose-invert max-w-none"
-              components={{
-                code: ({ node, inline, ...props }: any) => {
-                  const match = /language-(\w+)/.exec(node.className || '') || 'language-text'
-                  const language = match ? match[1] : 'text'
-
-                  return (
-                    <SyntaxHighlighter
-                      language={language}
-                      style={SyntaxHighlighterTheme}
-                      PreTag="div"
-                      className="rounded-md"
-                      {...props}
-                    >
-                      {String(node.children).replace(/\n$/, '')}
-                    </SyntaxHighlighter>
-                  )
-                },
-              }}
             />
           </div>
         </div>
@@ -149,69 +129,43 @@ export function ChatInterface({ messages, onSendMessage, isConnected }: ChatInte
             <div className="text-center max-w-md">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-semibold mb-2">欢迎使用飞机设计系统</h3>
-              <p className="text-muted-foreground mb-4">
-                请输入您的设计需求，AI将帮助您调用SKILL模块进行飞机设计。
+              <p className="text-sm text-muted-foreground mb-4">
+                请输入您的问题，我将使用 AI 技术为您提供专业的飞机设计建议。
               </p>
-              <div className="bg-muted rounded-lg p-4 text-sm">
-                <p className="font-medium mb-2">您可以尝试以下命令：</p>
-                <ul className="space-y-2 text-left">
-                  <li>• "设计一架机翼，面积30m²，展弦比8.0"</li>
-                  <li>• "创建机身，长度15m，直径2m"</li>
-                  <li>• "生成包络图，W/S vs T/W"</li>
-                  <li>• "查看3D模型"</li>
-                </ul>
+              <div className="text-xs text-muted-foreground">
+                <p className="mb-1">• 支持多种 AI 模型（OpenAI、Anthropic、Google 等）</p>
+                <p className="mb-1">• 实时对话和技能调用</p>
+                <p>• 专业的飞机设计分析</p>
               </div>
             </div>
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id}>
-              {renderMessage(message)}
-            </div>
+            <div key={message.id}>{renderMessage(message)}</div>
           ))
         )}
       </div>
-
-      <div className="border-t bg-background p-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="flex-1">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="输入您的设计需求..."
-                disabled={!isConnected || isLoading}
-                className="w-full min-h-[60px] max-h-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                rows={1}
-              />
-            </div>
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || !isConnected || isLoading}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-950 disabled:opacity-50 disabled:pointer-events-none bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 h-[60px]"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-
-          {isTyping && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="border-t p-4">
+        <div className="flex gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="输入您的问题..."
+            className="flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-h-[60px]"
+            disabled={!isConnected || isTyping}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || !isConnected || isTyping}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+          >
+            {isTyping ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>AI正在思考...</span>
-            </div>
-          )}
-
-          {!isConnected && (
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <MessageSquare className="h-4 w-4" />
-              <span>连接已断开，正在重连...</span>
-            </div>
-          )}
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </div>
     </div>
