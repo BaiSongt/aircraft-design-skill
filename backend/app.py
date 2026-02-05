@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api import ai_providers, skill_calls, visualization, envelope
 from backend.services import ai_service, skill_service
-from backend.websocket import manager
+from backend.websocket import manager, handle_message
 from backend.config import app_config
 
 
@@ -59,7 +59,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            await manager.handle_message(websocket, data)
+            await handle_message(websocket, data)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 

@@ -15,8 +15,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -36,7 +36,7 @@ services:
       - DEBUG=${DEBUG:-False}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://localhost:8000"]}
       - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-True}
     volumes:
       - ./backend/static:/app/static
@@ -50,8 +50,8 @@ services:
 
   celery:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.celery
+      context: .
+      dockerfile: backend/Dockerfile.celery
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0

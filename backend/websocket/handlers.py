@@ -5,6 +5,7 @@ from fastapi import WebSocket
 
 from backend.websocket import manager as ws_manager
 from backend.services.skill_service import global_skill_manager
+from backend.agents.design_agent import DesignAgent
 
 
 async def handle_message(websocket: WebSocket, data: Dict[str, Any]):
@@ -42,13 +43,51 @@ async def handle_chat_message(websocket: WebSocket, data: Dict[str, Any]):
             })
             return
 
-        messages = [{'role': 'user', 'content': content}]
-        response = await provider_instance.chat(messages)
+        # Initialize Design Agent with the selected provider
+        agent = DesignAgent(llm=provider_instance)
+        
+        # Execute agent with streaming
+        full_response = ""
+        async for event in agent.astream(content):
+            kind = event["event"]
+            
+            # Handle streaming content from the model
+            if kind == "on_chat_model_stream":
+                chunk = event["data"]["chunk"]
+                if hasattr(chunk, "content") and chunk.content:
+                    content_chunk = chunk.content
+                    full_response += content_chunk
+                    await ws_manager.send_personal_message(websocket, {
+                        'type': 'message_chunk',
+                        'content': content_chunk,
+                        'provider': provider,
+                    })
+            
+            # Handle tool execution events
+            elif kind == "on_tool_start" and event["name"] != "_Exception":
+                await ws_manager.send_personal_message(websocket, {
+                    'type': 'tool_start',
+                    'tool': event["name"],
+                    'input': event["data"].get("input"),
+                })
+            
+            elif kind == "on_tool_end" and event["name"] != "_Exception":
+                 # Simplify output for display
+                 output = str(event["data"].get("output"))
+                 if len(output) > 200:
+                     output = output[:200] + "..."
+                     
+                 await ws_manager.send_personal_message(websocket, {
+                    'type': 'tool_end',
+                    'tool': event["name"],
+                    'output': output,
+                })
 
+        # Send final complete message
         await ws_manager.send_personal_message(websocket, {
             'type': 'message',
             'role': 'assistant',
-            'content': response,
+            'content': full_response,
             'provider': provider,
         })
     except Exception as e:

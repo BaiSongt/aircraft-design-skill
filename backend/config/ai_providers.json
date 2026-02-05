@@ -63,10 +63,10 @@
     "topP": 1.0
   },
   "ollama": {
-    "enabled": false,
+    "enabled": true,
     "apiKey": "ollama",
-    "baseUrl": "http://localhost:11434/v1",
-    "model": "llama3",
+    "baseUrl": "http://127.0.0.1:11434/v1",
+    "model": "qwen3:4b",
     "temperature": 0.7,
     "maxTokens": 4096,
     "topP": 1.0

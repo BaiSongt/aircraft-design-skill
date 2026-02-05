@@ -9,8 +9,6 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from backend.config.ai_providers_config import AI_PROVIDERS_CONFIG
-
 
 class AIProviderManager:
     def __init__(self):
@@ -20,14 +18,30 @@ class AIProviderManager:
 
     def _load_configs(self):
         """从配置文件加载AI提供商配置"""
-        for provider_name, config in AI_PROVIDERS_CONFIG.items():
-            if config.get('enabled', False):
-                self.configs[provider_name] = config
+        config_file = os.path.join(os.path.dirname(__file__), '..', 'config', 'ai_providers.json')
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                self.configs = json.load(f)
+        else:
+            self.configs = {}
 
     def add_provider(self, provider_name: str, config: Dict):
         """添加AI提供商配置"""
         self.configs[provider_name] = config
         self._save_configs()
+
+    def delete_provider(self, provider_name: str) -> bool:
+        """删除AI提供商配置（设置为禁用）"""
+        if provider_name in self.configs:
+            self.configs[provider_name]['enabled'] = False
+            self.configs[provider_name]['apiKey'] = ''
+            self._save_configs()
+            return True
+        return False
+
+    def get_provider_config(self, provider_name: str) -> Optional[Dict]:
+        """获取AI提供商配置"""
+        return self.configs.get(provider_name)
 
     def _save_configs(self):
         """保存配置到文件"""
@@ -42,6 +56,9 @@ class AIProviderManager:
             raise ValueError(f"Provider {provider_name} not configured")
 
         config = self.configs[provider_name]
+        
+        if not config.get('enabled', False):
+            raise ValueError(f"Provider {provider_name} is not enabled")
 
         if provider_name not in self.providers:
             self.providers[provider_name] = self._create_chat_model(provider_name, config)
@@ -182,76 +199,25 @@ class AIProviderManager:
         return True
 
     def get_provider_capabilities(self, provider_name: str) -> Dict:
-        """获取提供商能力"""
+        """获取AI提供商能力"""
+        # Default capabilities
         capabilities = {
-            'openai': {
-                'supportsVision': True,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'anthropic': {
-                'supportsVision': True,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'google': {
-                'supportsVision': True,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'tongyi': {
-                'supportsVision': True,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'zhipu': {
-                'supportsVision': False,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'deepseek': {
-                'supportsVision': False,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'moonshot': {
-                'supportsVision': True,
-                'supportsCode': True,
-                'supportsMath': True,
-                'supportsStreaming': True,
-            },
-            'ollama': {
-                'supportsVision': False,
-                'supportsCode': True,
-                'supportsMath': False,
-                'supportsStreaming': True,
-            },
-            'localai': {
-                'supportsVision': False,
-                'supportsCode': True,
-                'supportsMath': False,
-                'supportsStreaming': True,
-            },
-            'vllm': {
-                'supportsVision': False,
-                'supportsCode': True,
-                'supportsMath': False,
-                'supportsStreaming': True,
-            },
-        }
-
-        return capabilities.get(provider_name, {
             'supportsVision': False,
             'supportsCode': False,
             'supportsMath': False,
-            'supportsStreaming': False,
-        })
+            'supportsStreaming': True,
+        }
+        
+        if provider_name in ['openai', 'anthropic', 'google', 'zhipu']:
+             capabilities['supportsVision'] = True
+             capabilities['supportsCode'] = True
+             capabilities['supportsMath'] = True
+        elif provider_name in ['ollama', 'localai', 'deepseek', 'tongyi', 'moonshot']:
+             # Depends on model, but generally yes for code/math
+             capabilities['supportsCode'] = True
+             capabilities['supportsMath'] = True
+             
+        return capabilities
 
 
 global_ai_manager = AIProviderManager()

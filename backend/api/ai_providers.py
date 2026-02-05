@@ -5,7 +5,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.services.ai_service import global_ai_manager
-from backend.config.ai_providers_config import AI_PROVIDERS_CONFIG
 
 
 router = APIRouter(prefix="/api/ai", tags=["AI Providers"])
@@ -106,7 +105,8 @@ async def chat_with_ai(request: ChatRequest):
             raise HTTPException(status_code=400, detail=f"Provider {provider_name} not configured")
 
         messages = [{'role': request.role, 'content': request.content}]
-        response = await provider.chat(messages)
+        msg = await provider.ainvoke(messages)
+        response = msg.content
 
         return ChatResponse(
             success=True,
@@ -122,10 +122,8 @@ async def chat_with_ai(request: ChatRequest):
 async def delete_provider(provider_name: str):
     """删除AI提供商配置"""
     try:
-        if provider_name in AI_PROVIDERS_CONFIG:
-            AI_PROVIDERS_CONFIG[provider_name]['enabled'] = False
-            AI_PROVIDERS_CONFIG[provider_name]['apiKey'] = ''
-
+        success = global_ai_manager.delete_provider(provider_name)
+        if success:
             return {
                 "success": True,
                 "message": f"Provider {provider_name} deleted successfully",
@@ -140,10 +138,10 @@ async def delete_provider(provider_name: str):
 async def test_provider(provider_name: str):
     """测试AI提供商连接"""
     try:
-        if provider_name not in AI_PROVIDERS_CONFIG:
+        config = global_ai_manager.get_provider_config(provider_name)
+        if not config:
             raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
 
-        config = AI_PROVIDERS_CONFIG[provider_name]
         if not config.get('enabled', False) or not config.get('apiKey'):
             return {
                 "success": False,
@@ -154,7 +152,8 @@ async def test_provider(provider_name: str):
         test_message = "Hello, this is a test message."
 
         try:
-            response = await provider.chat([{'role': 'user', 'content': test_message}])
+            msg = await provider.ainvoke([{'role': 'user', 'content': test_message}])
+            response = msg.content
             return {
                 "success": True,
                 "message": f"Provider {provider_name} connection successful",
