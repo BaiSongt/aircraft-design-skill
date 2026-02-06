@@ -36,9 +36,11 @@ services:
       - DEBUG=${DEBUG:-False}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
-      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://localhost:8000"]}
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:8000","http://127.0.0.1:3000","http://127.0.0.1:8000"]
       - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-True}
     volumes:
+      - ./backend:/app/backend
+      - ./aircraft_design:/app/aircraft_design
       - ./backend/static:/app/static
       - ./backend/logs:/app/logs
     depends_on:
@@ -69,6 +71,8 @@ services:
       - DEBUG=${DEBUG:-False}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
+      - ./backend:/app/backend
+      - ./aircraft_design:/app/aircraft_design
       - ./backend/static:/app/static
       - ./backend/logs:/app/logs
     depends_on:
@@ -76,6 +80,7 @@ services:
     restart: unless-stopped
     networks:
       - aircraft-design-network
+    command: celery -A backend.celery_app worker --loglevel=info --concurrency=4
 
   redis:
     image: redis:7-alpine

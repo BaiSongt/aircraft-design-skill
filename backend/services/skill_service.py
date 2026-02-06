@@ -6,7 +6,6 @@ from typing import Dict, Optional, Any
 from datetime import datetime
 
 from backend.services.ai_service import global_ai_manager
-from backend.websocket import manager as ws_manager
 
 
 class SkillCallManager:
@@ -33,6 +32,7 @@ class SkillCallManager:
             prompt = self._build_skill_prompt(skill, method, parameters)
 
             if with_progress:
+                from backend.websocket import manager as ws_manager
                 self.active_tasks[task_id] = {
                     'skill': skill,
                     'method': method,
@@ -74,6 +74,7 @@ class SkillCallManager:
                 'end_time': datetime.now().isoformat(),
             }
 
+            from backend.websocket import manager as ws_manager
             await ws_manager.broadcast_error(task_id, error_msg)
 
             return {
@@ -107,6 +108,7 @@ class SkillCallManager:
                     current_step += 1
                     progress = (current_step / total_steps) * 100
 
+                    from backend.websocket import manager as ws_manager
                     await ws_manager.broadcast_progress(task_id, {
                         'progress': progress,
                         'status': 'Processing',

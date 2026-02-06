@@ -4,7 +4,6 @@ from typing import Dict, Any
 from fastapi import WebSocket
 
 from backend.websocket import manager as ws_manager
-from backend.services.skill_service import global_skill_manager
 from backend.agents.design_agent import DesignAgent
 
 
@@ -100,6 +99,8 @@ async def handle_chat_message(websocket: WebSocket, data: Dict[str, Any]):
 async def handle_skill_call(websocket: WebSocket, data: Dict[str, Any]):
     """处理SKILL调用请求"""
     try:
+        from backend.services.skill_service import global_skill_manager
+        
         skill = data.get('skill', '')
         method = data.get('method', '')
         parameters = data.get('parameters', {})
