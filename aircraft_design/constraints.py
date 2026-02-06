@@ -496,7 +496,7 @@ def check_constraints_at_design_point(
         cl_req = required_clmax_for_landing_distance_numeric(
             wing_loading_pa=wing_loading_pa,
             rho_kg_m3=sea_level_rho_kg_m3,
-            landing_distance_m=float(landing_distance_m_limit_m),
+            target_landing_distance_m=float(landing_distance_m_limit_m),
             obstacle_height_m=obstacle_height_m,
             approach_angle_deg=landing_approach_angle_deg,
             decel_g=landing_decel_g,

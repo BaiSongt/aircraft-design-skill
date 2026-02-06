@@ -21,6 +21,7 @@ def calculate_wing_structural_weight(
     mach_cruise: float = 0.8,
     n_limit: float = 9.0,
     variable_sweep: bool = False,
+    composite_fraction: float = 0.0,
 ) -> StructuralWeightResult:
     if s_wing_m2 <= 0.0 or aspect_ratio <= 0.0:
         raise ValueError("s_wing_m2 and aspect_ratio must be positive.")
@@ -43,6 +44,11 @@ def calculate_wing_structural_weight(
                   (100.0 * t_c / cos(sweep_rad))**(-0.3) * \
                   (n_limit * w_fw_lb / (s_wing_m2 * 10.7639 * 100.0))**0.3
     
+    # Composite correction
+    # Theory: 25% reduction for 55% usage
+    reduction_factor = 0.25 * (composite_fraction / 0.55)
+    w_wing_lb *= (1.0 - reduction_factor)
+
     w_wing_kg = w_wing_lb / 2.20462
     
     return StructuralWeightResult(
@@ -60,6 +66,7 @@ def calculate_wing_structural_weight(
             "w_fw_lb": w_fw_lb,
             "q_lb_ft2": q_lb_ft2,
             "w_wing_lb": w_wing_lb,
+            "composite_fraction": composite_fraction,
         },
     )
 
@@ -72,6 +79,7 @@ def calculate_fuselage_structural_weight(
     mach_cruise: float = 0.8,
     n_limit: float = 9.0,
     inlet_installed: bool = True,
+    composite_fraction: float = 0.0,
 ) -> StructuralWeightResult:
     if fuselage_length_m <= 0.0 or fuselage_height_m <= 0.0:
         raise ValueError("fuselage_length_m and fuselage_height_m must be positive.")
@@ -97,6 +105,11 @@ def calculate_fuselage_structural_weight(
                        (q_lb_ft2 / 100.0)**0.28 * \
                        k_inl
     
+    # Composite correction
+    # Theory: 10% reduction for 55% usage
+    reduction_factor = 0.10 * (composite_fraction / 0.55)
+    w_fuselage_lb *= (1.0 - reduction_factor)
+
     w_fuselage_kg = w_fuselage_lb / 2.20462
     
     return StructuralWeightResult(
@@ -112,11 +125,12 @@ def calculate_fuselage_structural_weight(
             "w_fw_lb": w_fw_lb,
             "q_lb_ft2": q_lb_ft2,
             "w_fuselage_lb": w_fuselage_lb,
+            "composite_fraction": composite_fraction,
         },
     )
 
 
-def calculate_horizontal_tail_weight(
+def calculate_horizontal_tail_structural_weight(
     *,
     s_ht_m2: float,
     aspect_ratio_ht: float,
@@ -126,6 +140,7 @@ def calculate_horizontal_tail_weight(
     max_takeoff_weight_kg: float,
     mach_cruise: float = 0.8,
     n_limit: float = 9.0,
+    composite_fraction: float = 0.0,
 ) -> StructuralWeightResult:
     if s_ht_m2 <= 0.0 or aspect_ratio_ht <= 0.0:
         raise ValueError("s_ht_m2 and aspect_ratio_ht must be positive.")
@@ -148,6 +163,11 @@ def calculate_horizontal_tail_weight(
                (t_c_ht / c_wing_ft)**(-0.317) * \
                (l_ht_ft / c_wing_ft)**(-0.119)
     
+    # Composite correction
+    # Theory: 25% reduction for 55% usage
+    reduction_factor = 0.25 * (composite_fraction / 0.55)
+    w_ht_lb *= (1.0 - reduction_factor)
+
     w_ht_kg = w_ht_lb / 2.20462
     
     return StructuralWeightResult(
@@ -162,11 +182,12 @@ def calculate_horizontal_tail_weight(
             "n_limit": n_limit,
             "w_fw_lb": w_fw_lb,
             "w_ht_lb": w_ht_lb,
+            "composite_fraction": composite_fraction,
         },
     )
 
 
-def calculate_vertical_tail_weight(
+def calculate_vertical_tail_structural_weight(
     *,
     s_vt_m2: float,
     aspect_ratio_vt: float,
@@ -178,6 +199,7 @@ def calculate_vertical_tail_weight(
     mach_cruise: float = 0.8,
     n_limit: float = 9.0,
     t_tail_mount: bool = False,
+    composite_fraction: float = 0.0,
 ) -> StructuralWeightResult:
     if s_vt_m2 <= 0.0 or aspect_ratio_vt <= 0.0:
         raise ValueError("s_vt_m2 and aspect_ratio_vt must be positive.")
@@ -209,6 +231,11 @@ def calculate_vertical_tail_weight(
               (s_r_over_s_vt)**0.139 * \
               (l_t_ft / c_wing_ft)**(-0.273)
     
+    # Composite correction
+    # Theory: 25% reduction for 55% usage
+    reduction_factor = 0.25 * (composite_fraction / 0.55)
+    w_vt_lb *= (1.0 - reduction_factor)
+
     w_vt_kg = w_vt_lb / 2.20462
     
     return StructuralWeightResult(
@@ -227,6 +254,7 @@ def calculate_vertical_tail_weight(
             "s_r_over_s_vt": s_r_over_s_vt,
             "w_fw_lb": w_fw_lb,
             "w_vt_lb": w_vt_lb,
+            "composite_fraction": composite_fraction,
         },
     )
 
@@ -234,6 +262,7 @@ def calculate_vertical_tail_weight(
 def calculate_landing_gear_weight(
     *,
     max_takeoff_weight_kg: float,
+    composite_fraction: float = 0.0,
 ) -> StructuralWeightResult:
     if max_takeoff_weight_kg <= 0.0:
         raise ValueError("max_takeoff_weight_kg must be positive.")
@@ -241,6 +270,11 @@ def calculate_landing_gear_weight(
     w_fw_lb = max_takeoff_weight_kg * 2.20462
     
     w_landing_gear_lb = 0.043 * (w_fw_lb)**0.882
+    
+    # Composite correction
+    # Theory: 8% reduction for 55% usage
+    reduction_factor = 0.08 * (composite_fraction / 0.55)
+    w_landing_gear_lb *= (1.0 - reduction_factor)
     
     w_landing_gear_kg = w_landing_gear_lb / 2.20462
     
@@ -250,6 +284,7 @@ def calculate_landing_gear_weight(
             "max_takeoff_weight_kg": max_takeoff_weight_kg,
             "w_fw_lb": w_fw_lb,
             "w_landing_gear_lb": w_landing_gear_lb,
+            "composite_fraction": composite_fraction,
         },
     )
 
@@ -277,6 +312,7 @@ def generate_weight_breakdown(
     variable_sweep: bool = False,
     inlet_installed: bool = True,
     t_tail_mount: bool = False,
+    composite_fraction: float = 0.0,
 ) -> dict:
     wing_result = calculate_wing_structural_weight(
         s_wing_m2=s_wing_m2,
@@ -288,6 +324,7 @@ def generate_weight_breakdown(
         mach_cruise=mach_cruise,
         n_limit=n_limit,
         variable_sweep=variable_sweep,
+        composite_fraction=composite_fraction,
     )
     
     fuselage_result = calculate_fuselage_structural_weight(
@@ -297,9 +334,10 @@ def generate_weight_breakdown(
         mach_cruise=mach_cruise,
         n_limit=n_limit,
         inlet_installed=inlet_installed,
+        composite_fraction=composite_fraction,
     )
     
-    ht_result = calculate_horizontal_tail_weight(
+    ht_result = calculate_horizontal_tail_structural_weight(
         s_ht_m2=s_ht_m2,
         aspect_ratio_ht=aspect_ratio_ht,
         tail_arm_m=tail_arm_m,
@@ -308,9 +346,10 @@ def generate_weight_breakdown(
         max_takeoff_weight_kg=max_takeoff_weight_kg,
         mach_cruise=mach_cruise,
         n_limit=n_limit,
+        composite_fraction=composite_fraction,
     )
     
-    vt_result = calculate_vertical_tail_weight(
+    vt_result = calculate_vertical_tail_structural_weight(
         s_vt_m2=s_vt_m2,
         aspect_ratio_vt=aspect_ratio_vt,
         taper_ratio_vt=taper_ratio_vt,
@@ -321,10 +360,12 @@ def generate_weight_breakdown(
         mach_cruise=mach_cruise,
         n_limit=n_limit,
         t_tail_mount=t_tail_mount,
+        composite_fraction=composite_fraction,
     )
     
     gear_result = calculate_landing_gear_weight(
         max_takeoff_weight_kg=max_takeoff_weight_kg,
+        composite_fraction=composite_fraction,
     )
     
     total_structural_kg = (
@@ -343,11 +384,11 @@ def generate_weight_breakdown(
         "landing_gear": gear_result,
         "total_structural_kg": total_structural_kg,
         "weight_fraction": {
-            "wing": wing_result.w_struct_kg / total_structural_kg,
-            "fuselage": fuselage_result.w_struct_kg / total_structural_kg,
-            "horizontal_tail": ht_result.w_struct_kg / total_structural_kg,
-            "vertical_tail": vt_result.w_struct_kg / total_structural_kg,
-            "landing_gear": gear_result.w_struct_kg / total_structural_kg,
+            "wing": wing_result.w_struct_kg / total_structural_kg if total_structural_kg > 0 else 0,
+            "fuselage": fuselage_result.w_struct_kg / total_structural_kg if total_structural_kg > 0 else 0,
+            "horizontal_tail": ht_result.w_struct_kg / total_structural_kg if total_structural_kg > 0 else 0,
+            "vertical_tail": vt_result.w_struct_kg / total_structural_kg if total_structural_kg > 0 else 0,
+            "landing_gear": gear_result.w_struct_kg / total_structural_kg if total_structural_kg > 0 else 0,
         },
     }
 
@@ -369,6 +410,7 @@ def generate_weight_sensitivity(
     mach_cruise: float = 0.8,
     n_limit: float = 9.0,
     mtow_range_kg: list[float] | None = None,
+    composite_fraction: float = 0.0,
 ) -> dict:
     if mtow_range_kg is None:
         mtow_range_kg = [
@@ -408,6 +450,7 @@ def generate_weight_sensitivity(
             max_takeoff_weight_kg=mtow,
             mach_cruise=mach_cruise,
             n_limit=n_limit,
+            composite_fraction=composite_fraction,
         )
         
         results["wing_weight_kg"].append(breakdown["wing"].w_struct_kg)

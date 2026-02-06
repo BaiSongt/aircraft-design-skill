@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import sqrt
 
 from .atmosphere import qbar_pa
 from .constraints import AeroPolar
@@ -173,26 +174,44 @@ def calculate_sustained_turn_load(
     s_m2: float,
     polar: AeroPolar,
     rho_kg_m3: float,
+    v_m_s: float,
 ) -> dict:
-    if thrust_n <= 0.0 or weight_kg <= 0.0 or s_m2 <= 0.0:
-        raise ValueError("Invalid thrust, weight, or area inputs.")
+    if thrust_n <= 0.0 or weight_kg <= 0.0 or s_m2 <= 0.0 or v_m_s <= 0.0:
+        raise ValueError("Invalid thrust, weight, area, or speed inputs.")
     
     w_n = weight_kg * CONST.g0_m_s2
+    q = 0.5 * rho_kg_m3 * v_m_s**2
     
-    q = 0.5 * rho_kg_m3 * (thrust_n / w_n)**2 * s_m2
+    # Thrust = Drag = q * S * (CD0 + K * CL^2)
+    # CL = n * W / (q * S)
+    # T = q * S * CD0 + q * S * K * (n * W / (q * S))^2
+    # T = q * S * CD0 + (K * n^2 * W^2) / (q * S)
+    # T - q * S * CD0 = (K * n^2 * W^2) / (q * S)
+    # (T - q * S * CD0) * (q * S) / (K * W^2) = n^2
     
-    cl = w_n / (q * s_m2)
-    cd = polar.cd(cl)
+    drag_parasitic = q * s_m2 * polar.cd0
+    excess_thrust_for_lift = thrust_n - drag_parasitic
     
-    n_sustained = cl / cd if cd > 0.0 else 1.0
+    if excess_thrust_for_lift <= 0.0:
+        # Cannot even sustain level flight at this speed (or just parasitic drag is too high)
+        n_sustained = 0.0
+    else:
+        k = polar.k
+        n_sq = (excess_thrust_for_lift * q * s_m2) / (k * w_n**2)
+        n_sustained = sqrt(n_sq)
+    
+    # Calculate resulting CL and CD
+    cl_sustained = n_sustained * w_n / (q * s_m2) if n_sustained > 0 else 0.0
+    cd_sustained = polar.cd(cl_sustained)
     
     return {
         "n_sustained": n_sustained,
-        "cl": cl,
-        "cd": cd,
-        "lift_to_drag": cl / cd if cd > 0.0 else 0.0,
+        "cl": cl_sustained,
+        "cd": cd_sustained,
+        "lift_to_drag": cl_sustained / cd_sustained if cd_sustained > 0.0 else 0.0,
         "thrust_n": thrust_n,
         "weight_kg": weight_kg,
+        "v_m_s": v_m_s,
     }
 
 
