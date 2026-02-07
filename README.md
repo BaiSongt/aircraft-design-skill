@@ -50,6 +50,12 @@
 - VSPAERO接口（输入/输出解析）
 - 载荷分析（气动、惯性、结构）
 - 旋翼机分析（气动力、性能）
+- 实时可视化（设计迭代、约束分析、几何预览）
+
+## 文档资源
+
+- [Visualization Manual](docs/visualization_manual.md): 实时可视化模块使用说明
+- [Skill Development Guide](docs/theory/SKILL_development_guide.md): 技能开发指南
 
 ## 技术栈
 
@@ -65,6 +71,7 @@
 
 ### 后端
 - **框架**：FastAPI (Python 3.12)
+- **可视化**：PySide6 (Qt) + Matplotlib
 - **AI集成**：LangChain
 - **任务队列**：Celery + Redis
 - **WebSocket**：Socket.IO

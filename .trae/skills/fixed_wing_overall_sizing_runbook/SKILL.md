@@ -49,7 +49,9 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 
 使用 `Write` 工具创建 `sizing_input.json` 文件。
 
-### 2. 执行 Sizing Loop
+### 2. 执行 Sizing Loop（带可视化）
+
+默认情况下，Sizing Loop 会自动启动实时可视化模块。该模块将在独立窗口中显示收敛曲线、约束图和飞机几何预览。
 
 使用 `RunCommand` 工具执行以下命令：
 
@@ -58,7 +60,17 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 python3 aircraft_design/run_sizing.py sizing_input.json --project-name MyDesign
 ```
 
+**可视化交互说明**：
+*   **启动**：脚本运行时会自动弹出一个 Matplotlib 窗口。
+*   **监控**：用户可以实时观察 MTOW 收敛情况和约束分析图。
+*   **控制**：
+    *   `Pause/Resume`: 暂停/继续迭代更新。
+    *   `Save Image`: 保存当前视图快照。
+    *   `Reset View`: 重置视图缩放。
+*   **结束**：设计循环完成后，终端会提示 "Press [Enter] ... to close"。用户查看完毕后，需在终端按回车键关闭窗口并结束脚本。
+
 ### 3. 检查结果
+
 
 1.  **检查退出码**：
     *   `0`: 成功且收敛。
