@@ -1,4 +1,0 @@
-# SSL certificates (don't commit these)
-*.pem
-*.crt
-*.key

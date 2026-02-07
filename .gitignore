@@ -55,7 +55,7 @@ __pycache__/
 # 输出
 out/run_*
 output/*
-
+/output_*
 #  openvsp
 OpenVSP-3.47.0-MacOS/
 .trae/documents/

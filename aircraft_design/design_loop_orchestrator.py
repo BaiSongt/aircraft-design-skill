@@ -104,6 +104,11 @@ class SizedAircraft:
     
     converged: bool
     iterations: int
+    
+    # Attached details
+    design_point: dict = field(default_factory=dict)
+    drag_params: dict = field(default_factory=dict)
+    aero_params: dict = field(default_factory=dict)
 
 def sizing_loop(
     requirements: DesignRequirements,
@@ -368,6 +373,7 @@ def sizing_loop(
                     "payload": requirements.payload_kg,
                 },
                 geometry={
+                    "s_ref_m2": s_wing, # Standardize key
                     "s_wing": s_wing,
                     "span_m": b_wing,
                     "aspect_ratio": guess.aspect_ratio,
@@ -385,6 +391,19 @@ def sizing_loop(
                 landing_distance_m=requirements.landing_distance_m, # Constraint met
                 converged=True,
                 iterations=i+1,
+                design_point={
+                    "thrust_to_weight": current_tw,
+                    "wing_loading_pa": current_ws,
+                },
+                drag_params={
+                    "cd0": guess.cd0,
+                    "k": polar.k,
+                    "oswald_e": guess.oswald_e,
+                },
+                aero_params={
+                    "cl_max_clean": 1.5, # Default assumption or passed in
+                    "cla_per_rad": 5.0,  # Default
+                }
             )
         
         # Update MTOW with relaxation
