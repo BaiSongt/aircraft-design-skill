@@ -68,6 +68,106 @@ class FuselageStation:
     x_m: float
     radius_m: float
 
+def estimate_wing_fuel_volume(
+    area_m2: float,
+    span_m: float,
+    t_c_root: float,
+    t_c_tip: float,
+    taper: float,
+    tank_fraction: float = 0.7 # Fraction of wing span/area available for fuel
+) -> float:
+    """
+    Estimates available fuel volume in the wing.
+    Volume ~ Area * Avg_Thickness * Tank_Fraction * Efficiency
+    Avg Thickness approx (t_c_root * c_root + t_c_tip * c_tip) / 2 ? No.
+    Volume of wing Vw ~ S * t_c_avg * c_avg ?
+    
+    Better approx: Vw = Integral(t(y) * c(y) * dy)
+    c(y) linear from c_root to c_tip.
+    t(y) = t_c(y) * c(y).
+    t_c(y) often linear or constant. Assume linear.
+    
+    Vw = span/2 * (A_root + A_tip + sqrt(A_root*A_tip)) / 3 (Pyramid frustum approx for area distribution?)
+    Area of airfoil section ~ 0.7 * t * c (approx)
+    """
+    if span_m <= 0: return 0.0
+    
+    # Geometry
+    # S = b * (cr + ct) / 2
+    # ct = taper * cr
+    # S = b * cr * (1 + taper) / 2
+    # cr = 2 * S / (b * (1 + taper))
+    # ct = taper * cr
+    
+    c_root = 2 * area_m2 / (span_m * (1 + taper))
+    c_tip = taper * c_root
+    
+    # Section areas
+    # Area ~ 0.7 * t * c
+    a_root = 0.7 * (t_c_root * c_root) * c_root
+    a_tip = 0.7 * (t_c_tip * c_tip) * c_tip
+    
+    # Total volume (Pyramidal frustum for linear taper)
+    # V = h/3 * (A1 + A2 + sqrt(A1*A2))
+    # Here h = b (total span, sum of two halves)
+    # Actually integral is better.
+    # But let's use the formula: V = b * (A_root + A_tip + sqrt(A_root*A_tip)) / 3
+    # This assumes A(y) is quadratic? A(y) ~ c(y)^2. c(y) is linear. So A(y) is quadratic. Correct.
+    
+    vol_total = span_m * (a_root + a_tip + sqrt(a_root * a_tip)) / 3.0
+    
+    return vol_total * tank_fraction * 0.85 # 0.85 for structure/systems loss
+
+def check_geometry_constraints(
+    inputs: dict,
+    required_fuel_vol_m3: float = 0.0
+) -> list[str]:
+    """
+    Checks geometric constraints.
+    """
+    warnings = []
+    
+    gd = inputs.get("geometry_detailed", {})
+    gp = inputs.get("geometry", {}) # Fallback to simple geometry
+    
+    # 1. Fuel Volume Check
+    if required_fuel_vol_m3 > 0:
+        # Try detailed first
+        if "wing" in gd:
+            # Need parameters. If not fully detailed, fallback to parametric
+            pass
+        
+        # Use parametric estimation
+        s_ref = float(gp.get("wing_area_m2", 0)) if "wing_area_m2" in gp else 0.0
+        if s_ref == 0:
+            s_ref = float(inputs.get("wing_area_m2", 0)) # Try top level
+            
+        span = float(gp.get("span_m", 0))
+        if span == 0 and "aspect_ratio" in gp and s_ref > 0:
+            span = sqrt(float(gp["aspect_ratio"]) * s_ref)
+            
+        t_c = float(gp.get("taper_ratio", 0.12)) # Wait, t_c not taper
+        # Assuming t_c is in inputs or default
+        t_c = 0.12 # Default
+        if "thickness_ratio" in inputs.get("initial_guess", {}):
+            t_c = float(inputs["initial_guess"]["thickness_ratio"])
+            
+        taper = float(gp.get("taper_ratio", 0.4))
+        
+        avail_vol = estimate_wing_fuel_volume(s_ref, span, t_c, t_c, taper)
+        
+        if avail_vol < required_fuel_vol_m3:
+            warnings.append(f"Fuel Volume Insufficient: Required {required_fuel_vol_m3:.2f} m3, Est. Available {avail_vol:.2f} m3")
+
+    # 2. Aspect Ratio Check (Structural/Aero limits)
+    ar = float(gp.get("aspect_ratio", 0))
+    if ar > 14 and "glider" not in str(inputs.get("name", "")).lower():
+        warnings.append(f"High Aspect Ratio ({ar:.1f}) may require advanced materials.")
+    if ar < 2 and ar > 0:
+        warnings.append(f"Low Aspect Ratio ({ar:.1f}) may have high induced drag.")
+
+    return warnings
+
 
 def geometry_detailed_from_inputs(inputs: dict) -> dict | None:
     gd = inputs.get("geometry_detailed", None)

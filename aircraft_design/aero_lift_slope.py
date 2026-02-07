@@ -51,8 +51,7 @@ def calculate_lift_slope_subsonic(
     tan_sweep = tan(sweep_max_thickness_rad)
     
     denominator = 2.0 + sqrt(
-        4.0 + aspect_ratio**2 * beta**2 * (1.0 + tan_sweep**2) / 
-        (1.0 + (aspect_ratio * beta / (1.0 + tan_sweep**2))**2)
+        4.0 + aspect_ratio**2 * (beta**2 + tan_sweep**2)
     )
     
     cl_alpha_2d = 2.0 * pi
