@@ -1,6 +1,9 @@
 import argparse
 import json
 import sys
+import socket
+import pickle
+import struct
 from dataclasses import asdict
 from pathlib import Path
 from datetime import datetime
@@ -18,6 +21,23 @@ from aircraft_design.visualization_static import StaticPlotter
 from aircraft_design.chart_data_generator import ChartDataGenerator
 from aircraft_design.geometry_detailed import geometry_detailed_from_inputs, ParametricGeometry
 from aircraft_design.openvsp_bridge import write_openvsp_script
+
+def send_report_path_to_gui(path: Path):
+    try:
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.settimeout(1.0) # Short timeout
+        client.connect(('localhost', 9999))
+        
+        msg = {'type': 'report_generated', 'path': str(path)}
+        data = pickle.dumps(msg)
+        length = struct.pack('>I', len(data))
+        
+        client.sendall(length + data)
+        client.close()
+        print(f"Sent report path to GUI: {path}")
+    except Exception as e:
+        # It's normal if GUI is closed or not running
+        pass
 
 def setup_output_directory(base_dir: str = "output", project_name: str = "design") -> Path:
     """
@@ -41,6 +61,16 @@ def main():
     if not args.input_file.exists():
         print(f"Error: Input file {args.input_file} not found.")
         sys.exit(1)
+
+    print("=" * 60)
+    print("  Fixed Wing Sizing - Interactive Mode Available")
+    print("=" * 60)
+    print("  To enable real-time visualization and results gallery:")
+    print("    1. Open a new terminal.")
+    print("    2. Run: python -m aircraft_design.gui.server")
+    print("    3. Keep that window open.")
+    print("  Then run this script.")
+    print("=" * 60)
         
     try:
         # Create output directory
@@ -233,6 +263,9 @@ def main():
         
         chart_path = plotter.generate_html_report([c1, c2], filename="interactive_charts.html")
         print(f"Interactive charts saved to {chart_path}")
+        
+        # Notify GUI
+        send_report_path_to_gui(run_dir)
         
         print("\nSuccess! Design iteration completed.")
         

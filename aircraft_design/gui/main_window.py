@@ -1,12 +1,14 @@
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                               QTabWidget, QPushButton, QLabel, QFileDialog, QStatusBar)
+                               QGridLayout, QPushButton, QLabel, QFileDialog, QStatusBar, QTabWidget)
 from PySide6.QtCore import QTimer, Slot, Qt
 import datetime
 import csv
 import queue
 from .widgets.convergence_plot import ConvergencePlot
 from .widgets.constraint_plot import ConstraintPlot
+from .widgets.payload_range_plot import PayloadRangePlot
 from .widgets.geometry_view_3d import GeometryView3D
+from .widgets.report_gallery import ReportGallery
 
 class MainWindow(QMainWindow):
     def __init__(self, data_queue, command_queue):
@@ -15,32 +17,56 @@ class MainWindow(QMainWindow):
         self.command_queue = command_queue
         
         self.setWindowTitle("Aircraft Design Sizing - Realtime Visualization (PySide6)")
-        self.resize(1200, 800)
+        self.resize(1600, 900)
         
+        # Menu Bar
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("File")
+        open_action = file_menu.addAction("Open Result Folder")
+        open_action.triggered.connect(self.open_result_folder)
+
         # Central Widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
         
-        # Tabs
-        self.tabs = QTabWidget()
-        layout.addWidget(self.tabs)
+        # Tab Widget
+        self.tab_widget = QTabWidget()
+        main_layout.addWidget(self.tab_widget)
         
-        # 1. Convergence Tab
+        # --- Tab 1: Dashboard ---
+        self.dashboard_widget = QWidget()
+        dashboard_layout = QVBoxLayout(self.dashboard_widget)
+        
+        # Grid Layout for Plots
+        grid_layout = QGridLayout()
+        dashboard_layout.addLayout(grid_layout)
+        
+        # 1. Convergence Plot (Top Left)
         self.conv_plot = ConvergencePlot()
-        self.tabs.addTab(self.conv_plot, "Convergence History")
+        grid_layout.addWidget(self.conv_plot, 0, 0)
         
-        # 2. Constraints Tab
+        # 2. Constraints Plot (Top Right)
         self.const_plot = ConstraintPlot()
-        self.tabs.addTab(self.const_plot, "Constraint Analysis")
+        grid_layout.addWidget(self.const_plot, 0, 1)
+
+        # 3. Payload-Range Plot (Bottom Left)
+        self.pr_plot = PayloadRangePlot()
+        grid_layout.addWidget(self.pr_plot, 1, 0)
         
-        # 3. 3D View Tab
+        # 4. 3D View (Bottom Right)
         self.geo_view = GeometryView3D()
-        self.tabs.addTab(self.geo_view, "3D Geometry")
+        grid_layout.addWidget(self.geo_view, 1, 1)
         
-        # Controls Area
+        # Adjust column/row stretch
+        grid_layout.setColumnStretch(0, 1)
+        grid_layout.setColumnStretch(1, 1)
+        grid_layout.setRowStretch(0, 1)
+        grid_layout.setRowStretch(1, 1)
+        
+        # Controls Area (Dashboard specific)
         controls_layout = QHBoxLayout()
-        layout.addLayout(controls_layout)
+        dashboard_layout.addLayout(controls_layout)
         
         self.btn_pause = QPushButton("Pause")
         self.btn_pause.setCheckable(True)
@@ -60,6 +86,12 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.btn_reset)
         
         controls_layout.addStretch()
+        
+        self.tab_widget.addTab(self.dashboard_widget, "Real-time Dashboard")
+        
+        # --- Tab 2: Report Gallery ---
+        self.report_gallery = ReportGallery()
+        self.tab_widget.addTab(self.report_gallery, "Report Gallery")
         
         self.status_label = QLabel("Ready")
         self.statusBar().addWidget(self.status_label)
@@ -109,10 +141,30 @@ class MainWindow(QMainWindow):
             self.design_point = msg['design_point']
             self.const_plot.update_data(self.constraints, self.design_point)
             
+        elif msg_type == 'payload_range':
+            ranges = msg['ranges']
+            payloads = msg['payloads']
+            self.pr_plot.update_data(ranges, payloads)
+            
+        elif msg_type == 'report_generated':
+            path = msg['path']
+            self.report_gallery.load_images(path)
+            self.tab_widget.setCurrentIndex(1)
+            self.status_label.setText(f"Report loaded from {path}")
+
         elif msg_type == 'reset':
             self.history = []
             self.conv_plot.update_data([])
+            self.pr_plot.update_data([], [])
             self.status_label.setText("Reset")
+
+    @Slot()
+    def open_result_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if folder:
+            self.report_gallery.load_images(folder)
+            self.tab_widget.setCurrentIndex(1)
+            self.status_label.setText(f"Report loaded from {folder}")
 
     @Slot()
     def toggle_pause(self):
@@ -129,16 +181,10 @@ class MainWindow(QMainWindow):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"viz_snapshot_{timestamp}.png"
         
-        # Save the current tab widget
-        current_widget = self.tabs.currentWidget()
-        if hasattr(current_widget, 'canvas'):
-            current_widget.canvas.figure.savefig(filename)
-            self.status_label.setText(f"Saved {filename}")
-        else:
-            # Fallback grab
-            screen = current_widget.grab()
-            screen.save(filename)
-            self.status_label.setText(f"Saved screenshot {filename}")
+        # Save the full window
+        screen = self.grab()
+        screen.save(filename)
+        self.status_label.setText(f"Saved screenshot {filename}")
 
     @Slot()
     def export_data(self):

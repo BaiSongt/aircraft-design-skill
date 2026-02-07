@@ -411,6 +411,20 @@ def sizing_loop(
                 c_mean = (2/3) * c_root * ((1 + guess.taper_ratio + guess.taper_ratio**2) / (1 + guess.taper_ratio))
                 
                 # Converged
+                if viz:
+                    # Update Payload-Range Diagram (Schematic)
+                    ranges = [0, requirements.range_m, requirements.range_m * 1.3]
+                    payloads = [requirements.payload_kg, requirements.payload_kg, 0]
+                    # Convert range to km for display if desired, but report uses what?
+                    # Report uses whatever is passed. If range_m is in meters, and plot says (km), I should convert.
+                    # Let's check test_visualization_integration.py again.
+                    # It plots 'Range (km)' but passes ranges (which are likely meters).
+                    # Actually req.range_m is in meters.
+                    # So ranges = [0, 3000000, ...] -> 0, 3000 km.
+                    # The plot labels say "Range (km)". So I should convert to km.
+                    ranges_km = [r / 1000.0 for r in ranges]
+                    viz.update_payload_range(ranges_km, payloads)
+
                 return SizedAircraft(
                     mtow_kg=mtow,
                     empty_weight_kg=we_calc,
@@ -477,21 +491,11 @@ def sizing_loop(
         )
     finally:
         # Ensure cleanup
-        # Note: In a real scenario, we might want to keep the window open for inspection
-        # unless user closes it. But for automated loops, we might want to close it?
-        # User said "直到用户主动关闭" (until user explicitly closes).
+        # With the new socket-based detached architecture, we don't need to block here.
+        # The visualizer window runs in a separate process and will stay open 
+        # until the user closes it manually, even if this script exits.
         if viz:
-            try:
-                # If we are in an interactive session (not automated test), we should wait.
-                # A simple heuristic is to check if we are attached to a TTY, but here we can just prompt.
-                # However, for automated tests, this blocks forever.
-                # We can check sys.stdin.isatty() but in IDE it might be False.
-                # Let's add a visual cue.
-                if enable_visualization:
-                     print("\n=== Optimization Complete ===")
-                     print("Visualization window is active.")
-                     print("Press [Enter] in this terminal to close the visualization and exit...")
-                     input()
-            except Exception:
-                pass
-            viz.stop()
+            print("\n=== Optimization Complete ===")
+            print("Visualization window is active and will remain open.")
+            print("You can close it manually.")
+            viz.stop() # Closes the client socket, not the server process

@@ -50,6 +50,13 @@ def run_demo():
                 }
                 design_point = {'ws': 5500, 'tw': 0.35}
                 viz.update_constraints(constraints, design_point)
+
+            # Send Payload-Range update at the end or periodically
+            if i == max_iterations - 1:
+                # Range in km
+                ranges_km = [0, 5000, 6500]
+                payloads = [20000, 20000, 0]
+                viz.update_payload_range(ranges_km, payloads)
             
             print(f"Iteration {i}: MTOW={mtow:.1f}, Error={error:.2e}")
             time.sleep(0.2) # Simulate calculation time
