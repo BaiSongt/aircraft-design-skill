@@ -26,3 +26,17 @@ description: "执行固定翼 Class I 重量闭合并输出重量分解。当需
 3. 用迭代闭合方程求解 `W0`
 4. 输出 `W0/We/Wf` 与迭代收敛信息
 
+## 重心与平衡分析 (New)
+
+完成重量闭合后，调用 `aircraft_design/weight_balance.py` 进行重心包线分析：
+
+1.  定义各部件重量与力臂（Component）。
+2.  定义装载方案（LoadingScenario）。
+3.  生成重心包线并校核是否在许用范围内。
+
+```python
+from aircraft_design.weight_balance import WeightBalanceAnalyzer
+# ... 实例化 analyzer ...
+envelope = analyzer.analyze()
+```
+

@@ -21,4 +21,15 @@ description: "执行固定翼约束校核并输出设计点余度。当需要快
 - `climb_gradient` 余度不足：提高推重比或降低重量/阻力
 - `takeoff_distance` 裕度不足：提高推重比或提高起飞构型 `CLmax`
 - `landing_distance` 裕度不足：提高着陆构型 `CLmax` 或放宽着陆距离
-- `takeoff_climb_gradient` 裕度不足：提高推重比或降低起飞构型阻力增量
+## 几何约束校核
+
+除了性能约束外，还应校核几何约束。调用 `aircraft_design/geometry_constraints.py` 进行检查：
+
+1.  **燃油容积**：机翼内部可用体积 >= 任务所需燃油体积。
+2.  **展弦比**：AR <= 结构或停机位限制。
+
+```python
+from aircraft_design.geometry_constraints import GeometryConstraintChecker
+# ... 实例化 checker ...
+results = checker.check_all()
+```

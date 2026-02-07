@@ -1,16 +1,16 @@
 ---
 name: "fixed_wing_overall_sizing_runbook"
-description: "执行固定翼总体设计闭环计算并输出 results.json/report.md。当需要从输入需求一键得到可计算方案与报告时调用。"
+description: "执行固定翼总体设计闭环计算并输出 results.json/report.md 以及交互式图表。当需要从输入需求一键得到可计算方案、详细报告与可视化结果时调用。"
 ---
 
 # Fixed Wing Overall Sizing Runbook
 
-此技能用于执行固定翼飞机 Class I 总体设计闭环流程。它将调用 `aircraft_design/run_sizing.py` 脚本，基于输入需求进行迭代计算，直到 MTOW 收敛。
+此技能用于执行固定翼飞机 Class I 总体设计闭环流程。它将调用 `aircraft_design/run_sizing.py` 脚本，基于输入需求进行迭代计算，直到 MTOW 收敛，并生成符合标准模板的报告及交互式图表。
 
 ## 适用场景
 *   用户提供了一组设计需求（如航程、载荷、速度），希望快速得到飞机总体参数。
 *   用户希望验证当前设计代码是否能针对特定需求收敛。
-*   需要生成总体设计报告 (`report.md`)。
+*   需要生成总体设计报告 (`report.md`) 和可视化分析 (`interactive_charts.html`)。
 
 ## 执行步骤
 
@@ -69,4 +69,4 @@ python3 aircraft_design/run_sizing.py sizing_input.json --output results.json --
     使用 `Read` 工具读取生成的 `report.md` 文件内容。
 
 3.  **反馈用户**：
-    将 `report.md` 的核心内容（MTOW、T/W、W/S、关键重量分解）总结给用户，并指出是否满足了所有约束。
+    将 `design_report.md` 的核心内容（MTOW、T/W、W/S、关键重量分解、操稳特性摘要）总结给用户，并提示用户可以在输出目录查看交互式图表 `interactive_charts.html`。

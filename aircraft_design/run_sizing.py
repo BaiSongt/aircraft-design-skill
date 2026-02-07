@@ -11,7 +11,8 @@ from aircraft_design.design_loop_orchestrator import (
     sizing_loop,
     SizedAircraft
 )
-from aircraft_design.reporting import DesignReportGenerator
+from aircraft_design.report_generator_v2 import ReportGeneratorV2
+from aircraft_design.visualization_interactive import InteractivePlotter, plot_payload_range, plot_weight_breakdown
 
 def setup_output_directory(base_dir: str = "output", project_name: str = "design") -> Path:
     """
@@ -109,14 +110,24 @@ def main():
             json.dump(output_data, f, indent=2)
         print(f"Data saved to {json_path}")
         
-        # Generate Professional Report
-        reporter = DesignReportGenerator(project_name=args.project_name)
-        report_content = reporter.generate_markdown(result, req, guess)
+        # Generate Professional Report (V2)
+        reporter = ReportGeneratorV2(project_name=args.project_name)
+        report_content = reporter.generate_report(result, req)
         
         report_path = run_dir / "design_report.md"
         with open(report_path, "w") as f:
             f.write(report_content)
         print(f"Report saved to {report_path}")
+
+        # Generate Interactive Charts
+        print("Generating Interactive Charts...")
+        plotter = InteractivePlotter(output_dir=str(run_dir))
+        
+        c1 = plot_payload_range(req.payload_kg, req.range_m / 1000.0)
+        c2 = plot_weight_breakdown(result.weight_breakdown)
+        
+        chart_path = plotter.generate_html_report([c1, c2], filename="interactive_charts.html")
+        print(f"Interactive charts saved to {chart_path}")
         
         print("\nSuccess! Design iteration completed.")
         
