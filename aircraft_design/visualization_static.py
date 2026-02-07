@@ -2,7 +2,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
+from .atmosphere import isa_tropopause
 
 class StaticPlotter:
     def __init__(self, output_dir: str = "output/plots"):
@@ -66,11 +67,23 @@ class StaticPlotter:
     def plot_thrust_curves(self, velocity_ms: List[float], thrust_req_n: List[float], thrust_avail_n: List[float], altitude_m: float) -> str:
         """Generates Thrust Required vs Available."""
         fig, ax = plt.subplots()
-        v_kmh = np.array(velocity_ms) * 3.6
-        ax.plot(v_kmh, np.array(thrust_req_n)/1000, label='Thrust Required', color='red', linewidth=2)
-        ax.plot(v_kmh, np.array(thrust_avail_n)/1000, label='Thrust Available', color='blue', linewidth=2)
         
-        ax.set_xlabel('Velocity (km/h)')
+        # Determine Unit based on Max Speed
+        max_v = max(velocity_ms) if velocity_ms else 0
+        atm = isa_tropopause(altitude_m)
+        max_mach = max_v / atm.a_m_s
+        
+        if max_mach < 0.6:
+            x_vals = np.array(velocity_ms) * 3.6
+            x_label = 'Velocity (km/h)'
+        else:
+            x_vals = np.array(velocity_ms) / atm.a_m_s
+            x_label = 'Mach Number'
+
+        ax.plot(x_vals, np.array(thrust_req_n)/1000, label='Thrust Required', color='red', linewidth=2)
+        ax.plot(x_vals, np.array(thrust_avail_n)/1000, label='Thrust Available', color='blue', linewidth=2)
+        
+        ax.set_xlabel(x_label)
         ax.set_ylabel('Thrust (kN)')
         ax.set_title(f'Thrust Curves at Altitude = {altitude_m} m')
         ax.grid(True, linestyle='--', alpha=0.7)
@@ -86,22 +99,51 @@ class StaticPlotter:
         """Generates Flight Envelope (H-V diagram)."""
         fig, ax = plt.subplots()
         
-        # Stall limit (left side)
-        h_stall = v_stall_curve['altitude_m']
-        v_stall = np.array(v_stall_curve['velocity_ms']) * 3.6
-        ax.plot(v_stall, h_stall, color='orange', linewidth=2, label='Stall Limit')
+        # Helper arrays
+        h_stall = np.array(v_stall_curve['altitude_m'])
+        v_stall_ms = np.array(v_stall_curve['velocity_ms'])
         
-        # Max speed limit (right side)
-        h_max = v_max_curve['altitude_m']
-        v_max = np.array(v_max_curve['velocity_ms']) * 3.6
-        ax.plot(v_max, h_max, color='blue', linewidth=2, label='Max Speed Limit')
+        h_max = np.array(v_max_curve['altitude_m'])
+        v_max_ms = np.array(v_max_curve['velocity_ms'])
+
+        # Check max mach in v_max curve (right boundary)
+        max_mach_global = 0.0
+        for v, h in zip(v_max_ms, h_max):
+            if v is None: continue
+            a = isa_tropopause(h).a_m_s
+            m = v / a
+            if m > max_mach_global:
+                max_mach_global = m
+        
+        use_mach = max_mach_global >= 0.6
+        
+        if use_mach:
+            # Convert to Mach
+            v_stall_plot = []
+            for v, h in zip(v_stall_ms, h_stall):
+                v_stall_plot.append(v / isa_tropopause(h).a_m_s)
+            
+            v_max_plot = []
+            for v, h in zip(v_max_ms, h_max):
+                v_max_plot.append(v / isa_tropopause(h).a_m_s)
+                
+            x_label = 'Mach Number'
+            title = 'Flight Envelope (Altitude vs Mach)'
+        else:
+            v_stall_plot = v_stall_ms * 3.6
+            v_max_plot = v_max_ms * 3.6
+            x_label = 'Velocity (km/h)'
+            title = 'Flight Envelope (Altitude vs Velocity)'
+        
+        ax.plot(v_stall_plot, h_stall, color='orange', linewidth=2, label='Stall Limit')
+        ax.plot(v_max_plot, h_max, color='blue', linewidth=2, label='Max Speed Limit')
         
         # Ceiling
         ax.axhline(y=ceiling_m, color='gray', linestyle='--', label=f'Ceiling = {ceiling_m} m')
         
-        ax.set_xlabel('Velocity (km/h)')
+        ax.set_xlabel(x_label)
         ax.set_ylabel('Altitude (m)')
-        ax.set_title('Flight Envelope')
+        ax.set_title(title)
         ax.grid(True, linestyle='--', alpha=0.7)
         ax.legend()
         
@@ -114,12 +156,23 @@ class StaticPlotter:
     def plot_vn_diagram(self, v_ms: List[float], n_pos: List[float], n_neg: List[float]) -> str:
         """Generates V-n Diagram."""
         fig, ax = plt.subplots()
-        v_kmh = np.array(v_ms) * 3.6
         
-        ax.plot(v_kmh, n_pos, color='black', linewidth=2, label='Positive Limit')
-        ax.plot(v_kmh, n_neg, color='black', linewidth=2, linestyle='--', label='Negative Limit')
+        # Assume SL for Mach check
+        atm = isa_tropopause(0.0)
+        max_v = max(v_ms) if v_ms else 0
+        max_mach = max_v / atm.a_m_s
         
-        ax.set_xlabel('Velocity (km/h)')
+        if max_mach < 0.6:
+            x_vals = np.array(v_ms) * 3.6
+            x_label = 'Velocity (km/h)'
+        else:
+            x_vals = np.array(v_ms) / atm.a_m_s
+            x_label = 'Mach Number'
+        
+        ax.plot(x_vals, n_pos, color='black', linewidth=2, label='Positive Limit')
+        ax.plot(x_vals, n_neg, color='black', linewidth=2, linestyle='--', label='Negative Limit')
+        
+        ax.set_xlabel(x_label)
         ax.set_ylabel('Load Factor (g)')
         ax.set_title('V-n Diagram (Maneuver Envelope)')
         ax.grid(True, linestyle='--', alpha=0.7)
