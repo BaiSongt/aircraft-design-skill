@@ -116,7 +116,7 @@ def main():
     output_content += "| :--- | :--- |\n"
     for s in skills:
         # Escape pipes in description
-        desc = s['description'].replace('|', '\|')
+        desc = s['description'].replace('|', '\\|')
         output_content += f"| `{s['name']}` | {desc} |\n"
         
     output_content += "\n## 2. Functional Map (Mermaid)\n\n"

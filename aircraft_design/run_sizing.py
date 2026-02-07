@@ -69,6 +69,7 @@ def main():
     print("=" * 60)
     
     # Auto-start visualization if not disabled
+    viz = None
     if not args.no_viz:
         print("  Initializing Visualization Environment...")
         viz = RealTimeVisualizer()
@@ -120,7 +121,12 @@ def main():
         
         print("Starting Sizing Loop...")
         
-        result = sizing_loop(req, guess, enable_visualization=not args.no_viz)
+        result = sizing_loop(
+            req, 
+            guess, 
+            enable_visualization=not args.no_viz,
+            visualizer=viz
+        )
         
         # Save JSON Data
         output_data = {

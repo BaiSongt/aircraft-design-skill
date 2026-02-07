@@ -120,14 +120,15 @@ def sizing_loop(
     tolerance: float = 1e-3,
     max_iter: int = 50,
     enable_visualization: bool = True,
+    visualizer: RealTimeVisualizer | None = None,
 ) -> SizedAircraft:
     """
     Orchestrates the Class I sizing loop.
     """
     
     # Initialize Visualizer
-    viz = None
-    if enable_visualization:
+    viz = visualizer
+    if enable_visualization and viz is None:
         print("\n=== Real-Time Visualization Module Started ===")
         print("A visualization window should appear shortly.")
         print("Controls:")
