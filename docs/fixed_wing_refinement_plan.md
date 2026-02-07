@@ -69,7 +69,6 @@
 - [x] 任务 9：控制面预布局几何生成（Phase 5.3 New）
   - 已支持在 input 中定义控制面（eta_in/out, deflection 等）
   - 已实现 3D 网格生成时的控制面切割与偏转预览
-  - 已在 run_fixed_wing_design.py 中接入控制面数据传递
 
 ## 高级气动外形细化（Phase 8-10）
 
