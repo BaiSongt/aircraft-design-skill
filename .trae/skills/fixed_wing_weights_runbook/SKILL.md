@@ -12,7 +12,7 @@ description: "执行固定翼 Class I 重量闭合并输出重量分解。当需
 
 ## 入口与数据字段
 
-- 推荐通过总体一键脚本执行：`scripts/run_fixed_wing_design.py`
+- 推荐通过总体一键脚本执行：`aircraft_design/run_sizing.py`
 - 若单独使用重量模块，核心输入字段：
   - `weights.empty_a`, `weights.empty_b`
   - `weights.reserve_fraction`

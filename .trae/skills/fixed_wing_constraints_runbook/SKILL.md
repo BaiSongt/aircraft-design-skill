@@ -7,7 +7,7 @@ description: "执行固定翼约束校核并输出设计点余度。当需要快
 
 ## 推荐入口
 
-- 一键总体脚本：`scripts/run_fixed_wing_design.py`
+- 一键总体脚本：`aircraft_design/run_sizing.py`
 
 ## 输出位置
 

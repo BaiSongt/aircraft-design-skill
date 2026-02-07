@@ -55,7 +55,7 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 aircraft_design/run_sizing.py sizing_input.json --output results.json --report report.md
+python3 aircraft_design/run_sizing.py sizing_input.json --project-name MyDesign
 ```
 
 ### 3. 检查结果
@@ -65,8 +65,11 @@ python3 aircraft_design/run_sizing.py sizing_input.json --output results.json --
     *   `2`: 运行完成但**未收敛**（需警告用户）。
     *   `1`: 发生错误（需调试）。
 
-2.  **读取报告**：
-    使用 `Read` 工具读取生成的 `report.md` 文件内容。
+2.  **定位输出目录**：
+    输出位于 `output/` 目录下以 `MyDesign_` 开头的时间戳文件夹中。使用 `LS` 工具找到最新的文件夹。
 
-3.  **反馈用户**：
+3.  **读取报告**：
+    使用 `Read` 工具读取生成的 `design_report.md` 文件内容。
+
+4.  **反馈用户**：
     将 `design_report.md` 的核心内容（MTOW、T/W、W/S、关键重量分解、操稳特性摘要）总结给用户，并提示用户可以在输出目录查看交互式图表 `interactive_charts.html`。
