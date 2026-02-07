@@ -22,6 +22,8 @@ from aircraft_design.chart_data_generator import ChartDataGenerator
 from aircraft_design.geometry_detailed import geometry_detailed_from_inputs, ParametricGeometry
 from aircraft_design.openvsp_bridge import write_openvsp_script
 from aircraft_design.visualization_advanced import AdvancedVisualizer
+from aircraft_design.advanced_design import execute_advanced_design
+from aircraft_design.generate_advanced_report import generate_advanced_design_report
 
 def send_report_path_to_gui(path: Path):
     try:
@@ -293,6 +295,100 @@ def main():
                 # The user can run the generated script.
                 pass
 
+            # 7. Advanced Design Stage 2–7 execution
+            try:
+                design_input = {
+                    "cruise_altitude_m": req.cruise_altitude_m,
+                    "cruise_speed_m_s": req.cruise_mach * (340.0),  # Approx at SL, refined in module
+                    "mtow_kg": result.mtow_kg,
+                    "cl_cruise": 0.6,
+                }
+                mission_input = {
+                    "range_m": req.range_m,
+                    "reserve_fraction": 0.06,
+                    "segments": [
+                        {"type": "taxi", "time_s": 600},
+                        {"type": "takeoff", "distance_m": req.takeoff_distance_m},
+                        {"type": "climb", "altitude_m": req.cruise_altitude_m},
+                        {"type": "cruise", "speed_m_s": req.cruise_mach * 300.0, "distance_m": req.range_m * 0.8},
+                        {"type": "descent", "altitude_m": 0.0},
+                        {"type": "landing", "distance_m": req.landing_distance_m},
+                    ],
+                }
+                propulsion_input = {
+                    "type": "jet",
+                    "thrust_sl_n": result.thrust_sl_n,
+                    "tsfc_1_s": guess.sfc_cruise_1_s,
+                    "bypass_ratio": 0.5,
+                }
+                geometry_input = {
+                    "s_ref_m2": result.wing_area_m2,
+                    "b_m": result.geometry.get("span_m", (result.wing_area_m2 * guess.aspect_ratio) ** 0.5),
+                    "cbar_m": result.geometry.get("mean_chord_m", result.wing_area_m2 / max(result.geometry.get("span_m", 1.0), 1e-6)),
+                    "wing_t_c": guess.thickness_ratio,
+                    "fuselage_length_m": result.geometry.get("fuselage_length_m", (result.geometry.get("span_m", 10.0) * 0.8)),
+                    "fuselage_diameter_m": result.geometry.get("fuselage_diameter_m", 1.2),
+                    "sweep_quarter_chord_deg": guess.sweep_deg,
+                    "aspect_ratio": guess.aspect_ratio,
+                    "taper_ratio": guess.taper_ratio,
+                }
+                stability_input = {
+                    "x_ac_w_cbar": 0.25,
+                    "x_cg_cbar": 0.3,
+                    "vh_coeff": 0.4,
+                    "vv_coeff": 0.07,
+                    "l_ht_m": geometry_input["fuselage_length_m"] * 0.45,
+                    "l_vt_m": geometry_input["fuselage_length_m"] * 0.45,
+                    "z_ht_m": 0.5,
+                }
+                structures_input = {
+                    "n_limit": req.max_load_factor,
+                    "ultimate_factor": 1.5,
+                    "sigma_allow_pa": 250e6,
+                    "density_kg_m3": 2700.0,
+                    "relief_factor": 0.8,
+                }
+                optimization_input = {
+                    "design_variables": {
+                        "aspect_ratio": [guess.aspect_ratio * 0.7, guess.aspect_ratio * 1.3],
+                        "sweep_quarter_chord_deg": [max(0.0, guess.sweep_deg - 10.0), guess.sweep_deg + 10.0],
+                        "wing_t_c": [max(0.03, guess.thickness_ratio - 0.02), min(0.15, guess.thickness_ratio + 0.02)],
+                    },
+                    "constraints": {
+                        "feasible_ws": lambda d: 1000.0 < result.mtow_kg * 9.81 / result.wing_area_m2 < 10000.0,
+                    },
+                    "objective": "aspect_ratio",
+                    "objective_direction": "maximize",
+                    "n_iterations": 50,
+                }
+                adv_result = execute_advanced_design(
+                    design_input=design_input,
+                    mission_input=mission_input,
+                    propulsion_input=propulsion_input,
+                    geometry_input=geometry_input,
+                    stability_input=stability_input,
+                    structures_input=structures_input,
+                    optimization_input=optimization_input,
+                    isa_delta_c=req.isa_delta_c if hasattr(req, "isa_delta_c") else 0.0,
+                )
+                adv_json = run_dir / f"advanced_design_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(adv_json, "w") as f:
+                    # Serialize dataclasses recursively
+                    json.dump({
+                        "stage2_aero": vars(adv_result.stage2_aero),
+                        "stage3_propulsion": vars(adv_result.stage3_propulsion),
+                        "stage4_mission": vars(adv_result.stage4_mission),
+                        "stage5_stability": vars(adv_result.stage5_stability),
+                        "stage6_structures": vars(adv_result.stage6_structures),
+                        "stage7_optimization": (vars(adv_result.stage7_optimization) if adv_result.stage7_optimization else None),
+                    }, f, indent=2)
+                print(f"Advanced design results saved to {adv_json}")
+                adv_report = run_dir / "advanced_design_report.md"
+                generate_advanced_design_report(str(adv_json), str(adv_report))
+            except Exception as e:
+                print(f"Advanced design execution failed: {e}")
+                import traceback
+                traceback.print_exc()
                 
         else:
             print("\nSkipping Extended Workflow (Analysis not converged or invalid).")

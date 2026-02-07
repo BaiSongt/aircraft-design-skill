@@ -8,6 +8,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from .airfoil_library import AirfoilGeometry
+    from .geometry_detailed import DetailedWing, DetailedFuselage, DetailedTail, ParametricGeometry as DetailedParametricGeometry
 
 
 @dataclass(frozen=True)
@@ -397,6 +398,111 @@ def create_landing_gear(
         position=position,
         height=height,
         track_width=track_width,
+    )
+
+
+def parametric_to_aircraft_geometry(pg: "DetailedParametricGeometry") -> AircraftGeometry:
+    # Wing geometry
+    span = pg.wing.span if hasattr(pg.wing, "span") and pg.wing.span > 0 else sqrt(pg.wing.area * pg.wing.aspect_ratio)
+    taper = pg.wing.taper_ratio if hasattr(pg.wing, "taper_ratio") else 0.45
+    c_root = 2.0 * pg.wing.area / (span * (1.0 + taper))
+    c_tip = c_root * taper
+    sweep_qc = pg.wing.sweep_qc if hasattr(pg.wing, "sweep_qc") else 0.0
+    dihedral = pg.wing.dihedral if hasattr(pg.wing, "dihedral") else 0.0
+    incidence = pg.wing.incidence if hasattr(pg.wing, "incidence") else 0.0
+    twist_root = pg.wing.twist if hasattr(pg.wing, "twist") else 0.0
+    twist_tip = 0.0
+    airfoil_root = pg.wing.airfoil_root if hasattr(pg.wing, "airfoil_root") else "NACA0012"
+    airfoil_tip = pg.wing.airfoil_tip if hasattr(pg.wing, "airfoil_tip") else "NACA0012"
+    pos_w = np.array([
+        getattr(pg.wing, "x_le_root", pg.fuselage.length * 0.4),
+        getattr(pg.wing, "y_root", 0.0),
+        getattr(pg.wing, "z_root", 0.0),
+    ])
+    wing = WingGeometry(
+        area=pg.wing.area,
+        span=span,
+        chord_root=c_root,
+        chord_tip=c_tip,
+        sweep_quarter_chord=sweep_qc,
+        taper_ratio=taper,
+        twist_root=twist_root,
+        twist_tip=twist_tip,
+        dihedral=dihedral,
+        incidence=incidence,
+        airfoil_root=airfoil_root,
+        airfoil_tip=airfoil_tip,
+        position=pos_w,
+    )
+
+    # Fuselage geometry
+    fus_len = pg.fuselage.length
+    fus_dia = pg.fuselage.diameter
+    fus = FuselageGeometry(
+        length=fus_len,
+        diameter=fus_dia,
+        fineness_ratio=fus_len / fus_dia if fus_dia > 0 else 0.0,
+        nose_length=fus_len * 0.3,
+        tail_length=fus_len * 0.3,
+        position=np.array([0.0, 0.0, 0.0]),
+    )
+
+    # Tail areas
+    if hasattr(pg.tail, "ht_area") and pg.tail.ht_area > 0:
+        s_ht = pg.tail.ht_area
+    else:
+        s_ht = pg.wing.area * pg.tail.area_ratio_to_wing * 0.75
+    if hasattr(pg.tail, "vt_area") and pg.tail.vt_area > 0:
+        s_vt = pg.tail.vt_area
+    else:
+        s_vt = pg.wing.area * pg.tail.area_ratio_to_wing * 0.25
+    ar_ht = getattr(pg.tail, "ht_aspect_ratio", 4.0)
+    ar_vt = getattr(pg.tail, "vt_aspect_ratio", 1.5)
+    taper_ht = getattr(pg.tail, "ht_taper", 0.5)
+    taper_vt = getattr(pg.tail, "vt_taper", 0.6)
+    sweep_ht = getattr(pg.tail, "ht_sweep", 10.0)
+    sweep_vt = getattr(pg.tail, "vt_sweep", 20.0)
+
+    # Horizontal tail geometry
+    b_ht = sqrt(max(1e-9, s_ht * ar_ht))
+    c_root_ht = 2.0 * s_ht / (b_ht * (1.0 + taper_ht))
+    c_tip_ht = c_root_ht * taper_ht
+    pos_ht = np.array([fus_len * 0.85, 0.0, 0.5])
+    h_tail = HorizontalTailGeometry(
+        area=s_ht,
+        span=b_ht,
+        chord_root=c_root_ht,
+        chord_tip=c_tip_ht,
+        sweep_quarter_chord=sweep_ht,
+        taper_ratio=taper_ht,
+        incidence=0.0,
+        airfoil="NACA0010",
+        position=pos_ht,
+    )
+
+    # Vertical tail geometry
+    b_vt = sqrt(max(1e-9, s_vt * ar_vt))
+    c_root_vt = 2.0 * s_vt / (b_vt * (1.0 + taper_vt))
+    c_tip_vt = c_root_vt * taper_vt
+    pos_vt = np.array([fus_len * 0.85, 0.0, fus_dia * 0.5])
+    v_tail = VerticalTailGeometry(
+        area=s_vt,
+        span=b_vt,
+        chord_root=c_root_vt,
+        chord_tip=c_tip_vt,
+        sweep_quarter_chord=sweep_vt,
+        taper_ratio=taper_vt,
+        airfoil="NACA0010",
+        position=pos_vt,
+    )
+
+    return AircraftGeometry(
+        wing=wing,
+        fuselage=fus,
+        h_tail=h_tail,
+        v_tail=v_tail,
+        engines=[],
+        landing_gear=[],
     )
 
 
