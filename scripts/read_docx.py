@@ -3,7 +3,7 @@ import sys
 try:
     from docx import Document
     
-    doc_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/项目中期报告_601关键能力_V2.docx'
+    doc_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/飞机设计文件.docx'
     doc = Document(doc_path)
     
     # 提取所有段落文本
@@ -21,7 +21,7 @@ try:
         full_text.append("[表格结束]\n")
     
     # 输出到文件
-    output_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/项目中期报告_601关键能力_V2.txt'
+    output_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/飞机设计文件.txt'
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(full_text))
     

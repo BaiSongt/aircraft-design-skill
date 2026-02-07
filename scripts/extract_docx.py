@@ -51,12 +51,12 @@ def extract_text_from_docx(docx_path):
     return text_content
 
 if __name__ == '__main__':
-    docx_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/项目中期报告_601关键能力_V2.docx'
+    docx_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/飞机设计文件.docx'
     
     text_content = extract_text_from_docx(docx_path)
     
     # 输出到文件
-    output_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/项目中期报告_601关键能力_V2.txt'
+    output_path = '/Users/baisongtao/mycode/aircraft-design-skill/docs/飞机设计文件.txt'
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(text_content))
     
