@@ -14,6 +14,7 @@ from aircraft_design.design_loop_orchestrator import (
     sizing_loop,
     SizedAircraft
 )
+from aircraft_design.visualization_realtime import RealTimeVisualizer
 from aircraft_design.report_generator_v2 import ReportGeneratorV2
 from aircraft_design.report_generator_extended import ReportGeneratorExtended
 from aircraft_design.visualization_interactive import InteractivePlotter, plot_payload_range, plot_weight_breakdown
@@ -55,6 +56,7 @@ def main():
     parser.add_argument("input_file", type=Path, help="Path to input JSON file")
     parser.add_argument("--project-name", "-n", type=str, default="aircraft_sizing", help="Name of the project")
     parser.add_argument("--output-dir", "-o", type=Path, default=Path("output"), help="Base directory for outputs")
+    parser.add_argument("--no-viz", action="store_true", help="Disable real-time visualization")
     
     args = parser.parse_args()
     
@@ -65,11 +67,17 @@ def main():
     print("=" * 60)
     print("  Fixed Wing Sizing - Interactive Mode Available")
     print("=" * 60)
-    print("  To enable real-time visualization and results gallery:")
-    print("    1. Open a new terminal.")
-    print("    2. Run: python -m aircraft_design.gui.server")
-    print("    3. Keep that window open.")
-    print("  Then run this script.")
+    
+    # Auto-start visualization if not disabled
+    if not args.no_viz:
+        print("  Initializing Visualization Environment...")
+        viz = RealTimeVisualizer()
+        viz.start()
+        print("  > 3D Visualization Server is running.")
+        print("  > Real-time updates will be shown in the popup window.")
+    else:
+        print("  > Visualization disabled by user.")
+        
     print("=" * 60)
         
     try:
@@ -112,7 +120,7 @@ def main():
         
         print("Starting Sizing Loop...")
         
-        result = sizing_loop(req, guess)
+        result = sizing_loop(req, guess, enable_visualization=not args.no_viz)
         
         # Save JSON Data
         output_data = {
@@ -247,7 +255,11 @@ def main():
         
         # 5. Extended Report
         reporter_ext = ReportGeneratorExtended(project_name=args.project_name)
-        report_content_ext = reporter_ext.generate_report(result, req, plot_paths)
+        
+        # Convert paths to filenames for the report (images are co-located with report)
+        plot_filenames = {k: Path(p).name for k, p in plot_paths.items()}
+        
+        report_content_ext = reporter_ext.generate_report(result, req, plot_filenames)
         
         report_path_ext = run_dir / "technical_roadmap_report.md"
         with open(report_path_ext, "w") as f:

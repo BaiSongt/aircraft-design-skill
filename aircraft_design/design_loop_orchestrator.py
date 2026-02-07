@@ -173,19 +173,21 @@ def sizing_loop(
         polar = AeroPolar(cd0=guess.cd0, e=guess.oswald_e, ar=guess.aspect_ratio)
         
         # 1. Sustained Turn at Cruise Altitude
-        atm_cruise = isa_tropopause(requirements.cruise_altitude_m)
-        v_cruise = requirements.cruise_mach * atm_cruise.a_m_s
-        tw_req_turn_alt = required_thrust_to_weight_for_sustained_turn(
-            wing_loading_pa=current_ws,
-            rho_kg_m3=atm_cruise.rho_kg_m3,
-            v_m_s=v_cruise,
-            load_factor=requirements.sustained_turn_g,
-            polar=polar,
-        )
-        # Apply lapse to get SL T/W
-        # T_sl = T_alt / (rho/rho_sl)^0.7
-        lapse_cruise = (atm_cruise.rho_kg_m3 / rho_sl)**0.7
-        tw_min_turn = tw_req_turn_alt / lapse_cruise
+        tw_min_turn = 0.0
+        if requirements.sustained_turn_g > 0.1:
+            atm_cruise = isa_tropopause(requirements.cruise_altitude_m)
+            v_cruise = requirements.cruise_mach * atm_cruise.a_m_s
+            tw_req_turn_alt = required_thrust_to_weight_for_sustained_turn(
+                wing_loading_pa=current_ws,
+                rho_kg_m3=atm_cruise.rho_kg_m3,
+                v_m_s=v_cruise,
+                load_factor=requirements.sustained_turn_g,
+                polar=polar,
+            )
+            # Apply lapse to get SL T/W
+            # T_sl = T_alt / (rho/rho_sl)^0.7
+            lapse_cruise = (atm_cruise.rho_kg_m3 / rho_sl)**0.7
+            tw_min_turn = tw_req_turn_alt / lapse_cruise
         
         # 2. Service Ceiling
         atm_ceiling = isa_tropopause(requirements.service_ceiling_m)

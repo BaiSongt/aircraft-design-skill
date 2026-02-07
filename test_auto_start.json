@@ -1,0 +1,13 @@
+{
+    "requirements": {
+        "range_m": 1500000,
+        "payload_kg": 800,
+        "cruise_mach": 1.6,
+        "takeoff_distance_m": 800
+    },
+    "initial_guess": {
+        "mtow_kg": 12000,
+        "wing_loading_kg_m2": 350,
+        "thrust_to_weight": 0.7
+    }
+}
