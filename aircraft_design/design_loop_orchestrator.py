@@ -50,6 +50,7 @@ from .stability_control import (
 from .atmosphere import qbar_pa, isa_tropopause
 from .units import CONST
 from .visualization_realtime import RealTimeVisualizer
+from .geometry_detailed import ParametricGeometry, DetailedWing, DetailedFuselage, DetailedTail
 
 @dataclass
 class DesignRequirements:
@@ -234,11 +235,6 @@ def sizing_loop(
         for i in range(max_iter):
             mtow_old = mtow
             
-            if viz:
-                 error = abs(mtow - guess.mtow_kg) / guess.mtow_kg if i == 0 else abs(mtow - mtow_old) / mtow_old
-                 viz.update_iteration(i, mtow, error)
-                 # Slow down slightly for demo effect if needed, but better not to impact perf too much
-                 # time.sleep(0.1) 
             # Safety check for divergence
             if mtow > 1e7 or math.isnan(mtow): # 10,000 tons is absurd
                 print(f"DEBUG: Divergence detected at iter {i}. MTOW={mtow}")
@@ -251,6 +247,9 @@ def sizing_loop(
             b_wing = math.sqrt(guess.aspect_ratio * s_wing)
             c_root = 2 * s_wing / (b_wing * (1 + guess.taper_ratio)) # Simplified
             
+            # Fuselage Length Assumption
+            l_fus = 0.8 * b_wing
+
             # Tail Sizing (Volume Coefficients)
             # Fighter defaults
             l_tail_approx = 0.4 * b_wing # Approx tail arm
@@ -264,6 +263,42 @@ def sizing_loop(
                 vv_coeff=0.07, # Fighter
             )
             
+            if viz:
+                 error = abs(mtow - guess.mtow_kg) / guess.mtow_kg if i == 0 else abs(mtow - mtow_old) / mtow_old
+                 
+                 # Construct Parametric Geometry
+                 p_geo = ParametricGeometry(
+                    wing=DetailedWing(
+                        area=s_wing,
+                        span=b_wing,
+                        aspect_ratio=guess.aspect_ratio,
+                        taper_ratio=guess.taper_ratio,
+                        sweep_qc=guess.sweep_deg,
+                        thickness_to_chord_root=guess.thickness_ratio,
+                        dihedral=3.0,
+                        incidence=1.0,
+                    ),
+                    fuselage=DetailedFuselage(
+                        length=l_fus,
+                        diameter=l_fus * 0.11,
+                    ),
+                    tail=DetailedTail(
+                        ht_area=tail_geo["s_ht_m2"],
+                        vt_area=tail_geo["s_vt_m2"],
+                        ht_aspect_ratio=4.0,
+                        vt_aspect_ratio=1.5,
+                        ht_sweep=25.0,
+                        vt_sweep=35.0,
+                    )
+                 )
+                 
+                 # We need l_fus defined before geometry construction or use the same logic
+                 # The original code defined l_fus at line 281. I should move l_fus calc up.
+                 
+                 viz.update_iteration(i, mtow, error, geometry=p_geo.generate_mesh())
+                 # Slow down slightly for demo effect if needed
+                 # time.sleep(0.05) 
+
             # 2. Empty Weight Buildup (Theory 03)
             # Structural
             w_wing = calculate_wing_structural_weight(
@@ -277,8 +312,7 @@ def sizing_loop(
             )
             
             # Fuselage (Approx length based on wing span/area scaling or fixed assumption)
-            # For Class I, we can assume L_fus ~ 0.75 * b_wing or derived
-            l_fus = 0.8 * b_wing # Assumption
+            # l_fus calculated above
             w_fus = calculate_fuselage_structural_weight(
                 fuselage_length_m=l_fus,
                 fuselage_height_m=l_fus * 0.12, # Fineness 8
