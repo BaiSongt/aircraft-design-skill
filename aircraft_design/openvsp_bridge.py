@@ -7,14 +7,62 @@ from typing import Any
 
 from .geometry_parametric import ParametricGeometry
 from .geometry_detailed import ParametricGeometry as DetailedParametricGeometry
+from .openvsp_interface import OpenVSPInterface
 
 
 def can_import_openvsp() -> bool:
-    try:
-        import openvsp  # noqa: F401
+    return OpenVSPInterface().is_available()
 
+
+def update_vsp_model(geom: dict | ParametricGeometry | DetailedParametricGeometry, s_ref_m2: float | None = None) -> bool:
+    """
+    Directly updates the OpenVSP model using the Python API.
+    Returns True if successful, False otherwise.
+    """
+    vsp_interface = OpenVSPInterface()
+    if not vsp_interface.is_available():
+        return False
+        
+    vsp = vsp_interface.vsp
+    
+    # Convert to dict if necessary (reuse logic from write_openvsp_script)
+    # Ideally we should refactor the dict conversion logic into a separate helper
+    # For now, let's assume we pass a dict or handle it simply
+    
+    geom_dict = {}
+    if isinstance(geom, dict):
+        geom_dict = geom
+    # TODO: Refactor the conversion logic from write_openvsp_script to be reusable
+    
+    try:
+        vsp.ClearVSPModel()
+        vsp.SetDefaultUnits(vsp.VSP_UNITS_SI)
+        
+        # Fuselage
+        fus = geom_dict.get("fuselage", {})
+        if fus:
+            fid = vsp.AddGeom("FUSELAGE")
+            vsp.SetParmVal(fid, "Length", "Design", fus.get("length_m", 10.0))
+            vsp.SetParmVal(fid, "Diameter", "Design", fus.get("diameter_m", 1.0))
+            vsp.SetParmVal(fid, "X_Location", "XForm", fus.get("x_m", 0.0))
+            vsp.SetParmVal(fid, "Y_Location", "XForm", fus.get("y_m", 0.0))
+            vsp.SetParmVal(fid, "Z_Location", "XForm", fus.get("z_m", 0.0))
+            
+        # Wing
+        wing = geom_dict.get("wing", {})
+        if wing:
+            wid = vsp.AddGeom("WING")
+            s = wing.get("s_ref_m2", 20.0)
+            ar = wing.get("aspect_ratio", 5.0)
+            b = math.sqrt(s * ar)
+            vsp.SetParmVal(wid, "TotalArea", "WingGeom", s)
+            vsp.SetParmVal(wid, "TotalSpan", "WingGeom", b)
+            vsp.SetParmVal(wid, "X_Location", "XForm", wing.get("x_m", 0.0))
+            
+        vsp.Update()
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Error updating VSP model: {e}")
         return False
 
 

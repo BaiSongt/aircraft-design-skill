@@ -49,6 +49,7 @@ from .stability_control import (
 )
 from .atmosphere import qbar_pa, isa_tropopause
 from .units import CONST
+from .visualization_realtime import RealTimeVisualizer
 
 @dataclass
 class DesignRequirements:
@@ -116,10 +117,17 @@ def sizing_loop(
     propulsion_model: PropulsionModel | None = None,
     tolerance: float = 1e-3,
     max_iter: int = 50,
+    enable_visualization: bool = True,
 ) -> SizedAircraft:
     """
     Orchestrates the Class I sizing loop.
     """
+    
+    # Initialize Visualizer
+    viz = None
+    if enable_visualization:
+        viz = RealTimeVisualizer()
+        viz.start()
     
     # 1. Constraint Analysis to Refine T/W and W/S
     # For now, we use the guess as the starting point, but we could enforce constraints here.
@@ -180,6 +188,21 @@ def sizing_loop(
     
     current_tw = max(guess.thrust_to_weight, tw_min_takeoff, tw_min_turn, tw_min_ceiling)
     
+    if viz:
+        # Send constraints data
+        # Generate some points for plotting
+        ws_range = [i for i in range(100, int(ws_max_landing * 1.5), 100)]
+        # This is simplified; ideally we calculate curves for the whole range
+        # For now, just send the points
+        viz.update_constraints(
+            constraints_data={
+                'ws_range': ws_range,
+                'landing': ws_max_landing,
+                # 'takeoff': ..., # Need to calculate curve
+            },
+            design_point={'ws': current_ws, 'tw': current_tw}
+        )
+
     print(f"DEBUG: Constraints: W/S max={ws_max_landing:.1f}")
     print(f"DEBUG: T/W mins: Takeoff={tw_min_takeoff:.3f}, Turn={tw_min_turn:.3f}, Ceiling={tw_min_ceiling:.3f}")
     print(f"DEBUG: Selected: W/S={current_ws:.1f}, T/W={current_tw:.3f}")
@@ -198,6 +221,13 @@ def sizing_loop(
         })
     
     for i in range(max_iter):
+        mtow_old = mtow
+        
+        if viz:
+             error = abs(mtow - guess.mtow_kg) / guess.mtow_kg if i == 0 else abs(mtow - mtow_old) / mtow_old
+             viz.update_iteration(i, mtow, error)
+             # Slow down slightly for demo effect if needed, but better not to impact perf too much
+             # time.sleep(0.1) 
         # Safety check for divergence
         if mtow > 1e7 or math.isnan(mtow): # 10,000 tons is absurd
             print(f"DEBUG: Divergence detected at iter {i}. MTOW={mtow}")

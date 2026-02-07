@@ -1,4 +1,12 @@
+---
+alwaysApply: false
+description: 调用终端的时候
+---
 # Project Rules for Aircraft Design Tool
+
+## terminal
+- **Terminal**: `trae terminal`
+- **Run**: `conda activate base`
 
 ## Lint Commands
 - **Check**: `ruff check .`
