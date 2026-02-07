@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-from .geometry_detailed import DetailedFuselage, DetailedWing
-from .volume_estimation import estimate_wing_fuel_volume
+from .geometry_detailed import DetailedFuselage, DetailedWing, estimate_wing_fuel_volume
 
 @dataclass
 class GeometricConstraint:
@@ -31,9 +30,10 @@ class GeometryConstraintChecker:
         # Using imported estimator if available, else simple geometric
         # Assuming estimate_wing_fuel_volume returns m3
         vol_m3 = estimate_wing_fuel_volume(
-            area=self.wing.area,
-            span=self.wing.span,
-            t_c=self.wing.thickness_to_chord_root, # Simplified
+            area_m2=self.wing.area,
+            span_m=self.wing.span,
+            t_c_root=self.wing.thickness_to_chord_root,
+            t_c_tip=self.wing.thickness_to_chord_root, # Simplified: assume constant t/c
             taper=self.wing.taper_ratio
         )
         req_fuel_kg = self.reqs.get("fuel_weight_kg", 0.0)

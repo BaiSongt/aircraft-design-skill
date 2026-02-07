@@ -52,6 +52,16 @@ def build_propulsion_model(
     sfc_1_s = propulsion_in.get("sfc_1_s", None)
     eta_prop = propulsion_in.get("prop_efficiency", None)
 
+    # Defaults for robustness
+    if ptype == "jet" and tsfc_1_s is None:
+        tsfc_1_s = 2.26e-5  # Approx 0.8 lb/lbf/hr
+    
+    if ptype == "prop":
+        if sfc_1_s is None:
+            sfc_1_s = 8.45e-8  # Approx 0.5 lb/hp/hr
+        if eta_prop is None:
+            eta_prop = 0.8
+
     return PropulsionModel(
         type=ptype,
         thrust_sl_n=thrust_sl_n,

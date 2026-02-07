@@ -50,6 +50,13 @@ class CGEnvelope:
     mac_le_m: float
     scenarios: List[LoadingScenario]
 
+    @property
+    def points(self) -> List[Tuple[float, float]]:
+        """
+        Returns a list of (cg_x_m, weight_kg) points defining the envelope.
+        """
+        return [(s.cg_x_m, s.total_weight_kg) for s in self.scenarios]
+
 
 class WeightBalanceAnalyzer:
     """

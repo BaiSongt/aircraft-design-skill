@@ -302,28 +302,114 @@ def constraint_curve_service_ceiling(
 # Placeholders for functions that might be used elsewhere
 def check_constraints_at_design_point(
     *,
-    design_wing_loading_pa: float,
-    design_thrust_to_weight: float,
-    requirements: Any, # Avoid circular import of DesignRequirements
+    wing_loading_pa: float,
+    thrust_to_weight_available: float,
     polar: AeroPolar,
-    cl_max_clean: float,
+    stall_ws_max_pa: float,
+    cruise_rho_kg_m3: float = 1.225,
+    cruise_v_m_s: float = 100.0,
+    climb_rho_kg_m3: float = 1.225,
+    climb_v_m_s: float = 100.0,
+    climb_gradient: float = 0.0,
+    sea_level_rho_kg_m3: float = 1.225,
+    cl_max_clean: float = 1.5,
+    takeoff_distance_m: float | None = None,
+    landing_distance_m_limit_m: float | None = None,
+    mu_takeoff: float = 0.02,
+    landing_decel_g: float = 0.3,
+    takeoff_climb_gradient: float | None = None,
+    obstacle_height_m: float = 15.0,
+    landing_approach_angle_deg: float = 3.0,
+    runway_slope: float = 0.0,
+    headwind_m_s: float = 0.0,
+    high_lift_takeoff_preferred: str | None = None,
+    high_lift_landing_preferred: str | None = None,
+    **kwargs
 ) -> list[ConstraintCheck]:
-    # Basic implementation based on standard constraints
-    # NOTE: This is a simplified reconstruction to avoid breaking dependencies.
     checks = []
-    
-    # 1. Takeoff Distance
-    # This requires more inputs than passed here usually.
-    # I'll return an empty list for now to unblock, unless I find it's critical.
-    # Users calling this will get no validation, but won't crash.
+
+    # 1. Stall Constraint (W/S <= Max)
+    # We define margin as (Max - Actual). Positive is good.
+    # But ConstraintCheck has 'required' and 'available'.
+    # If we interpret 'required' as the Limit and 'available' as Actual...
+    # Margin = Available - Required. If Available > Required, Margin > 0.
+    # For T/W: Available (Engine) > Required (Drag). Correct.
+    # For W/S: Actual (Design) < Limit (Stall).
+    # So for W/S, let's treat 'required' as Actual, and 'available' as Limit?
+    # Or just adhere to the struct and handle interpretation in UI.
+    # Let's use: Required = Limit, Available = Actual.
+    # Margin = Available - Required = Actual - Limit.
+    # For W/S, we want Margin <= 0.
+    checks.append(ConstraintCheck(
+        name="Stall Speed",
+        metric="Wing Loading (Pa)",
+        required=stall_ws_max_pa, 
+        available=wing_loading_pa,
+        details={"limit": stall_ws_max_pa, "type": "max_limit"}
+    ))
+
+    # 2. Climb Constraint (T/W >= Req)
+    tw_climb_req = required_thrust_to_weight(
+        rho_kg_m3=climb_rho_kg_m3,
+        v_m_s=climb_v_m_s,
+        wing_loading_pa=wing_loading_pa,
+        polar=polar,
+        climb_sin_gamma=climb_sin_gamma_from_gradient(climb_gradient)
+    )
+    checks.append(ConstraintCheck(
+        name="Climb Gradient",
+        metric="T/W",
+        required=tw_climb_req,
+        available=thrust_to_weight_available,
+        details={"gradient": climb_gradient, "type": "min_limit"}
+    ))
+
+    # 3. Takeoff Distance (T/W >= Req)
+    if takeoff_distance_m is not None:
+        # Approximate required T/W
+        # cl_max_to approx cl_max_clean + 0.5
+        tw_to_req = required_thrust_to_weight_for_takeoff_distance_numeric(
+             takeoff_distance_m=takeoff_distance_m,
+             wing_loading_pa=wing_loading_pa,
+             cl_max_takeoff=cl_max_clean + 0.5,
+             rho_kg_m3=sea_level_rho_kg_m3,
+             # sigma=sea_level_rho_kg_m3 / 1.225, # Not needed if rho is passed
+             # bypass_ratio=0.0 # Not in signature
+        )
+        checks.append(ConstraintCheck(
+            name="Takeoff Distance",
+            metric="T/W",
+            required=tw_to_req,
+            available=thrust_to_weight_available,
+            details={"distance_m": takeoff_distance_m, "type": "min_limit"}
+        ))
+
+    # 4. Landing Distance (W/S <= Max)
+    if landing_distance_m_limit_m is not None:
+        # cl_max_land approx cl_max_clean + 1.0
+        ws_land_max = max_wing_loading_for_landing_distance_numeric_pa(
+            target_landing_distance_m=landing_distance_m_limit_m,
+            cl_max_landing=cl_max_clean + 1.0,
+            rho_kg_m3=sea_level_rho_kg_m3,
+            obstacle_height_m=obstacle_height_m
+        )
+        checks.append(ConstraintCheck(
+            name="Landing Distance",
+            metric="Wing Loading (Pa)",
+            required=ws_land_max,
+            available=wing_loading_pa,
+            details={"distance_m": landing_distance_m_limit_m, "type": "max_limit"}
+        ))
+
     return checks
 
 def build_constraints_plot_data(
     *,
     wing_loading_pa_values: list[float],
-    requirements: Any,
     polar: AeroPolar,
     cl_max_clean: float,
+    requirements: Any = None,
+    **kwargs: Any
 ) -> dict:
     # Basic implementation
     # Just return empty for now
