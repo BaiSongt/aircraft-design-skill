@@ -101,6 +101,10 @@ def _convert_geometry_to_dict(geom: ParametricGeometry | DetailedParametricGeome
                 "taper_ratio": geom.wing.taper_ratio,
                 "sweep_deg": geom.wing.sweep_qc,
                 "t_c": geom.wing.thickness_to_chord_root,
+                "airfoil_root": geom.wing.airfoil_root,
+                "airfoil_tip": geom.wing.airfoil_tip,
+                "dihedral": geom.wing.dihedral,
+                "twist": geom.wing.twist,
                 "x_m": geom.wing.x_le_root if hasattr(geom.wing, 'x_le_root') else geom.fuselage.length * 0.4,
                 "y_m": geom.wing.y_root if hasattr(geom.wing, 'y_root') else 0.0,
                 "z_m": geom.wing.z_root if hasattr(geom.wing, 'z_root') else 0.0,
@@ -244,6 +248,7 @@ def write_openvsp_script(
     out_path: str | Path | None = None,
     xform: dict | None = None,
     include_visualization: bool = True,
+    export_obj_path: str | Path | None = None,
 ) -> Path | str:
     """
     Write OpenVSP script.
@@ -255,7 +260,7 @@ def write_openvsp_script(
         # Simple merge logic could be added here
         pass
         
-    script = _geometry_dict_to_vsp_script(geom_dict, include_visualization)
+    script = _geometry_dict_to_vsp_script(geom_dict, include_visualization, export_obj_path)
 
     if out_path is None:
         return script
@@ -266,7 +271,7 @@ def write_openvsp_script(
     return p
 
 
-def _geometry_dict_to_vsp_script(g: dict, include_vis: bool = True) -> str:
+def _geometry_dict_to_vsp_script(g: dict, include_vis: bool = True, export_obj_path: str | Path | None = None) -> str:
     lines = [
         "import openvsp as vsp",
         "import os",
@@ -308,7 +313,47 @@ def _geometry_dict_to_vsp_script(g: dict, include_vis: bool = True) -> str:
         lines.append(f"vsp.SetParmVal(wing_id, 'Root_Chord', 'XSec_1', {c_root})")
         lines.append(f"vsp.SetParmVal(wing_id, 'Tip_Chord', 'XSec_1', {c_tip})")
         lines.append(f"vsp.SetParmVal(wing_id, 'Sweep', 'XSec_1', {sweep})")
-        lines.append(f"vsp.SetParmVal(wing_id, 'ThickChord', 'XSec_1', {tc})")
+        lines.append(f"vsp.SetParmVal(wing_id, 'Dihedral', 'XSec_1', {wing.get('dihedral', 0.0)})")
+        lines.append(f"vsp.SetParmVal(wing_id, 'Twist', 'XSec_1', {wing.get('twist', 0.0)})")
+        
+        # Airfoil handling (NACA 4-digit)
+        # We set parameters on the Cross Section Curves (XSecCurve_0 for root, XSecCurve_1 for tip)
+        af_root = wing.get('airfoil_root', 'naca2412')
+        af_tip = wing.get('airfoil_tip', 'naca0012')
+        tc_default = wing.get('t_c', 0.12)
+
+        def get_naca_params(code):
+            if not code.lower().startswith('naca') or len(code) != 8:
+                return None
+            try:
+                digits = code[4:]
+                m = int(digits[0]) / 100.0
+                p = int(digits[1]) / 10.0
+                t = int(digits[2:]) / 100.0
+                return m, p, t
+            except:
+                return None
+
+        # Root Airfoil (Section 0)
+        root_params = get_naca_params(af_root)
+        if root_params:
+            m, p, t = root_params
+            lines.append(f"vsp.SetParmVal(wing_id, 'Camber', 'XSecCurve_0', {m})")
+            lines.append(f"vsp.SetParmVal(wing_id, 'CamberLoc', 'XSecCurve_0', {p})")
+            lines.append(f"vsp.SetParmVal(wing_id, 'ThickChord', 'XSecCurve_0', {t})")
+        else:
+            lines.append(f"vsp.SetParmVal(wing_id, 'ThickChord', 'XSecCurve_0', {tc_default})")
+
+        # Tip Airfoil (Section 1)
+        tip_params = get_naca_params(af_tip)
+        if tip_params:
+            m, p, t = tip_params
+            lines.append(f"vsp.SetParmVal(wing_id, 'Camber', 'XSecCurve_1', {m})")
+            lines.append(f"vsp.SetParmVal(wing_id, 'CamberLoc', 'XSecCurve_1', {p})")
+            lines.append(f"vsp.SetParmVal(wing_id, 'ThickChord', 'XSecCurve_1', {t})")
+        else:
+            lines.append(f"vsp.SetParmVal(wing_id, 'ThickChord', 'XSecCurve_1', {tc_default})")
+
         lines.append(f"vsp.SetParmVal(wing_id, 'X_Location', 'XForm', {wing.get('x_m', 0.0)})")
         lines.append(f"vsp.SetParmVal(wing_id, 'Y_Location', 'XForm', {wing.get('y_m', 0.0)})")
         lines.append(f"vsp.SetParmVal(wing_id, 'Z_Location', 'XForm', {wing.get('z_m', 0.0)})")
@@ -381,6 +426,18 @@ def _geometry_dict_to_vsp_script(g: dict, include_vis: bool = True) -> str:
     lines.append("")
     lines.append("vsp.WriteVSPFile('generated.vsp3')")
     
+    if export_obj_path:
+        # Escape backslashes for Windows paths if needed, though forward slashes usually work
+        obj_path_str = str(export_obj_path).replace("\\", "/")
+        lines.append("")
+        lines.append(f"# Export OBJ to {obj_path_str}")
+        lines.append("try:")
+        # Check if EXPORT_OBJ is available, otherwise try numeric (0 is usually Native, OBJ is often 1 or check docs)
+        # Safe bet: use the enum if available
+        lines.append(f"    vsp.ExportFile('{obj_path_str}', vsp.SET_ALL, vsp.EXPORT_OBJ)")
+        lines.append("except Exception as e:")
+        lines.append("    print(f'Error exporting OBJ: {e}')")
+
     if include_vis:
         # Add screenshot generation logic
         lines.append("")

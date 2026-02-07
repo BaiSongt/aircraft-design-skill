@@ -198,7 +198,7 @@ class ReportGeneratorExtended:
 全机阻力主要由零升阻力（Parasite Drag）和诱导阻力（Induced Drag）两部分组成。在跨音速区域还需考虑波阻（Wave Drag）。
 采用部件阻力叠加法计算零升阻力系数 $C_{{D0}}$：
 
-$$ C_{{D0}} = \frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_{{D,misc}} + C_{{D,L\&P}} $$
+$$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_{{D,misc}} + C_{{D,L\&P}} $$
 
 其中：
 - $C_f$: 平板表面摩擦系数，与雷诺数和表面粗糙度密切相关。

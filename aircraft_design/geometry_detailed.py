@@ -26,6 +26,8 @@ class DetailedWing:
     x_le_root: float = 0.0
     y_root: float = 0.0
     z_root: float = 0.0
+    airfoil_root: str = "naca2412"
+    airfoil_tip: str = "naca0012"
 
 
 @dataclass
@@ -368,6 +370,10 @@ def geometry_detailed_from_inputs(inputs: dict, sizing_result: Any = None) -> Pa
     taper = guess.get("taper_ratio", 0.4)
     sweep = guess.get("sweep_deg", 0.0)
     tc = guess.get("thickness_ratio", 0.12)
+    dihedral = guess.get("dihedral_deg", 0.0)
+    twist = guess.get("twist_deg", 0.0)
+    airfoil_root = guess.get("airfoil_root", "naca2412")
+    airfoil_tip = guess.get("airfoil_tip", "naca0012")
     
     s_ref = 20.0 # Default fallback
     if sizing_result:
@@ -381,7 +387,11 @@ def geometry_detailed_from_inputs(inputs: dict, sizing_result: Any = None) -> Pa
         aspect_ratio=ar,
         taper_ratio=taper,
         sweep_qc=sweep,
-        thickness_to_chord_root=tc
+        thickness_to_chord_root=tc,
+        dihedral=dihedral,
+        twist=twist,
+        airfoil_root=airfoil_root,
+        airfoil_tip=airfoil_tip
     )
 
     # Fuselage
