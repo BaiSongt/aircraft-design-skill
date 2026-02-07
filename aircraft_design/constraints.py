@@ -166,6 +166,7 @@ def constraint_wing_loading_max_from_landing_distance(
     cl_max_clean: float,
     obstacle_height_m: float = 15.24,
     approach_angle_deg: float = 3.0,
+    decel_g: float | None = None,
     runway_slope: float = 0.0,
     headwind_m_s: float = 0.0,
 ) -> dict:
@@ -174,9 +175,10 @@ def constraint_wing_loading_max_from_landing_distance(
     ws_max = max_wing_loading_for_landing_distance_numeric_pa(
         rho_kg_m3=rho_kg_m3,
         cl_max_landing=cl_l,
-        landing_distance_m=landing_distance_m,
+        target_landing_distance_m=landing_distance_m,
         obstacle_height_m=obstacle_height_m,
         approach_angle_deg=approach_angle_deg,
+        decel_g=decel_g,
         runway_slope=runway_slope,
         headwind_m_s=headwind_m_s,
     )
@@ -186,6 +188,7 @@ def constraint_wing_loading_max_from_landing_distance(
         "delta_cd0": cfg.delta_cd0,
         "obstacle_height_m": obstacle_height_m,
         "approach_angle_deg": approach_angle_deg,
+        "decel_g": decel_g,
         "runway_slope": runway_slope,
         "headwind_m_s": headwind_m_s,
         "wing_loading_pa_max": ws_max,
@@ -207,6 +210,7 @@ def build_constraints_plot_data(
     takeoff_distance_m: float | None = None,
     landing_distance_m: float | None = None,
     mu_takeoff: float = 0.04,
+    landing_decel_g: float = 0.4,
     obstacle_height_m: float = 15.24,
     landing_approach_angle_deg: float = 3.0,
     takeoff_climb_gradient: float | None = None,
@@ -301,6 +305,7 @@ def build_constraints_plot_data(
             cl_max_clean=cl_max_clean,
             obstacle_height_m=obstacle_height_m,
             approach_angle_deg=landing_approach_angle_deg,
+            decel_g=landing_decel_g,
             runway_slope=runway_slope,
             headwind_m_s=headwind_m_s,
         )

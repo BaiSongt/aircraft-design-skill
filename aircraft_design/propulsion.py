@@ -225,14 +225,14 @@ def fuel_flow_n_s(model: PropulsionModel, *, thrust_n: float, shaft_power_w: flo
             sfc_throttle_factor = 1.0 + 0.2 * (1.0 - throttle)
             sfc *= sfc_throttle_factor
             
-        return sfc * max(0.0, thrust_n)
+        return sfc * max(0.0, thrust_n) * CONST.g0_m_s2
         
     if model.type == "prop":
         if model.sfc_1_s is None:
             raise ValueError("Prop model requires sfc_1_s.")
         if shaft_power_w is None:
             raise ValueError("Prop model requires shaft_power_w for fuel flow.")
-        return model.sfc_1_s * max(0.0, shaft_power_w)
+        return model.sfc_1_s * max(0.0, shaft_power_w) * CONST.g0_m_s2
     raise ValueError("propulsion.type must be 'jet' or 'prop'.")
 
 

@@ -194,33 +194,47 @@ def calculate_flight_control_system_weight(
     mtow_kg: float,
     s_wing_m2: float,
     b_wing_m: float,
+    fuselage_length_m: float = 15.0,  # Added for GA formula
     n_limit: float = 9.0,
     num_crew: int = 1,
     num_pax: int = 0,
     control_type: str = "tail",  # tail, tailless, variable_sweep
+    aircraft_type: str = "fighter", # fighter, ga, transport
 ) -> SystemWeightResult:
     """
     Calculate flight control system weight.
     
-    Formula:
-    W_control = K_SC * (W_FW)^0.637 * (N_z * W_FW / S_wing)^0.324 * (b_wing / 100)^0.5 * (N_c + N_p)^0.5
+    Formulas:
+    - Fighter (Nicolai): W_control = K_SC * (W_FW)^0.637 * ...
+    - GA (Raymer): W_control = 0.053 * L^1.536 * B^0.371 * (N_z * W_0 * 10^-4)^0.8
     """
     mtow_lb = mtow_kg * 2.20462
     s_wing_ft2 = s_wing_m2 * 10.7639
     b_wing_ft = b_wing_m * 3.28084
+    fus_len_ft = fuselage_length_m * 3.28084
     
-    k_sc = 138.18  # Default normal tail
-    if control_type == "tailless":
-        k_sc = 106.1
-    elif control_type == "variable_sweep":
-        k_sc = 167.48
+    if aircraft_type == "ga":
+        # Raymer Eq 15.34 (General Aviation)
+        # W_fc = 0.053 * L^1.536 * B^0.371 * (N_z * W_0 * 10^-4)^0.8
+        term1 = fus_len_ft**1.536
+        term2 = b_wing_ft**0.371
+        term3 = (n_limit * mtow_lb * 1e-4)**0.80
+        w_control_lb = 0.053 * term1 * term2 * term3
+        k_sc = 0.053 # Placeholder for details
+    else:
+        # Nicolai Fighter Formula
+        k_sc = 138.18  # Default normal tail
+        if control_type == "tailless":
+            k_sc = 106.1
+        elif control_type == "variable_sweep":
+            k_sc = 167.48
+            
+        term1 = mtow_lb**0.637
+        term2 = (n_limit * mtow_lb / s_wing_ft2)**0.324
+        term3 = (b_wing_ft / 100.0)**0.5
+        term4 = (num_crew + num_pax)**0.5
         
-    term1 = mtow_lb**0.637
-    term2 = (n_limit * mtow_lb / s_wing_ft2)**0.324
-    term3 = (b_wing_ft / 100.0)**0.5
-    term4 = (num_crew + num_pax)**0.5
-    
-    w_control_lb = k_sc * term1 * term2 * term3 * term4
+        w_control_lb = k_sc * term1 * term2 * term3 * term4
     
     return SystemWeightResult(
         w_system_kg=w_control_lb * 0.453592,

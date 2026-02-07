@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+from math import pi
 from typing import Any
 
 from .fixed_wing_overall import run_fixed_wing_overall_design
@@ -59,18 +60,18 @@ class DesignOrchestrator:
         mtow_kg = res["weights"]["w0_kg"]
         fuel_kg = res["weights"]["wf_kg"]
         we_kg = res["weights"]["we_kg"]
-        wing_area = res["sizing"]["wing_area_m2"]
-        thrust_sl_n = res["sizing"]["thrust_sl_n"]
+        wing_area = res["sizing"]["s_m2"]
+        thrust_sl_n = res["sizing"]["thrust_required_takeoff_n"]
         
         # Initial geometry assumptions
         geometry = {
             "wing_area_m2": wing_area,
-            "span_m": res["sizing"]["span_m"],
-            "chord_mean_m": res["sizing"]["chord_mean_m"],
+            "span_m": res["sizing"]["b_m"],
+            "chord_mean_m": res["sizing"]["cbar_m"],
             "aspect_ratio": self.inputs["sizing"]["aspect_ratio"],
             # Default tail inputs if not present
-            "ht_area_m2": res["stability"]["sh_m2"],
-            "vt_area_m2": res["stability"]["sv_m2"],
+            "ht_area_m2": res["tail"]["sh_m2"],
+            "vt_area_m2": res["tail"]["sv_m2"],
             "fuselage_length_m": self.inputs["geometry_detailed"].get("fuselage", {}).get("length_m", 15.0),
         }
         
@@ -93,6 +94,10 @@ class DesignOrchestrator:
         """
         current_state = self.history[-1]
         
+        # Reference geometry for scaling
+        ref_wing_area = current_state.wing_area_m2
+        ref_fus_len = current_state.geometry.get("fuselage_length_m", 15.0)
+        
         for i in range(max_iter):
             prev_mtow = current_state.mtow_kg
             
@@ -110,17 +115,30 @@ class DesignOrchestrator:
             new_chord = new_wing_area / new_span
             
             # Update Tails (Volume coefficients)
-            # L_t approx 0.45 * Fuselage Length? Or based on MAC?
-            # Let's assume fuselage scales with MTOW? Or fixed?
-            # For now, keep fuselage fixed unless specified.
-            fus_len = current_state.geometry["fuselage_length_m"]
+            # Scale fuselage length geometrically with wing area to maintain tail arm ratios
+            # L_new = L_ref * sqrt(S_new / S_ref)
+            if ref_wing_area > 1e-6:
+                scale_factor = (new_wing_area / ref_wing_area)**0.5
+            else:
+                scale_factor = 1.0
+                
+            fus_len = ref_fus_len * scale_factor
             
+            # Estimate tail arms if not provided (Class II rough sizing)
+            # Typically 40-50% of fuselage length
+            lh_ratio = self.inputs.get("stability", {}).get("ht_arm_ratio", 0.45)
+            lv_ratio = self.inputs.get("stability", {}).get("vt_arm_ratio", 0.45)
+            
+            lh_m = fus_len * lh_ratio
+            lv_m = fus_len * lv_ratio
+
             # Recalculate tail areas
             tail_res = tail_areas_from_volume_coefficients(
-                wing_area_m2=new_wing_area,
-                mac_m=new_chord,
-                span_m=new_span,
-                fuselage_length_m=fus_len,
+                s_m2=new_wing_area,
+                cbar_m=new_chord,
+                b_m=new_span,
+                lh_m=lh_m,
+                lv_m=lv_m,
                 vh=self.inputs.get("stability", {}).get("volume_coefficient_h", 0.9),
                 vv=self.inputs.get("stability", {}).get("volume_coefficient_v", 0.06),
             )
@@ -137,22 +155,34 @@ class DesignOrchestrator:
                 composite_fraction=self.inputs["weights"].get("composite_fraction_wing", 0.0),
             )
             
+            # Estimate fuselage height if not provided
+            fus_height = self.inputs.get("geometry_detailed", {}).get("fuselage", {}).get("diameter_m", fus_len / 10.0)
+
             w_fus_res = calculate_fuselage_structural_weight(
-                fuselage_surface_area_m2=fus_len * 2.0, # Crude approx if detailed not avail
-                max_takeoff_weight_kg=current_state.mtow_kg,
                 fuselage_length_m=fus_len,
+                fuselage_height_m=fus_height,
+                max_takeoff_weight_kg=current_state.mtow_kg,
                 n_limit=self.inputs["weights"].get("n_limit", 9.0),
                 composite_fraction=self.inputs["weights"].get("composite_fraction_fuselage", 0.0),
             )
             
             w_ht_res = calculate_horizontal_tail_structural_weight(
                 s_ht_m2=tail_res.sh_m2,
+                aspect_ratio_ht=self.inputs.get("geometry_detailed", {}).get("horizontal_tail", {}).get("aspect_ratio", 4.0),
+                tail_arm_m=lh_m,
+                t_c_ht=self.inputs.get("geometry_detailed", {}).get("horizontal_tail", {}).get("t_c", 0.10),
+                c_wing_m=new_chord,
                 max_takeoff_weight_kg=current_state.mtow_kg,
                 composite_fraction=self.inputs["weights"].get("composite_fraction_tail", 0.0),
             )
             
             w_vt_res = calculate_vertical_tail_structural_weight(
                 s_vt_m2=tail_res.sv_m2,
+                aspect_ratio_vt=self.inputs.get("geometry_detailed", {}).get("vertical_tail", {}).get("aspect_ratio", 1.5),
+                taper_ratio_vt=self.inputs.get("geometry_detailed", {}).get("vertical_tail", {}).get("taper_ratio", 0.5),
+                sweep_quarter_chord_deg=self.inputs.get("geometry_detailed", {}).get("vertical_tail", {}).get("sweep_deg", 25.0),
+                tail_arm_m=lv_m,
+                c_wing_m=new_chord,
                 max_takeoff_weight_kg=current_state.mtow_kg,
                 composite_fraction=self.inputs["weights"].get("composite_fraction_tail", 0.0),
             )
@@ -184,7 +214,9 @@ class DesignOrchestrator:
                 mtow_kg=current_state.mtow_kg,
                 s_wing_m2=new_wing_area,
                 b_wing_m=new_span,
+                fuselage_length_m=fus_len,
                 n_limit=self.inputs["weights"].get("n_limit", 9.0),
+                aircraft_type="ga" if "ga" in self.inputs.get("aircraft_role", "fighter") else "fighter",
             )
             
             w_avionics_res = calculate_avionics_weight(
@@ -202,11 +234,11 @@ class DesignOrchestrator:
             
             # Sum Empty Weight
             new_empty_kg = (
-                w_wing_res.w_structural_kg +
-                w_fus_res.w_structural_kg +
-                w_ht_res.w_structural_kg +
-                w_vt_res.w_structural_kg +
-                w_gear_res.w_structural_kg +
+                w_wing_res.w_struct_kg +
+                w_fus_res.w_struct_kg +
+                w_ht_res.w_struct_kg +
+                w_vt_res.w_struct_kg +
+                w_gear_res.w_struct_kg +
                 w_fuel_sys_res.w_system_kg +
                 w_prop_res.w_system_kg +
                 w_flight_ctrl_res.w_system_kg +
@@ -260,14 +292,24 @@ class DesignOrchestrator:
                 sweep_quarter_chord_deg=self.inputs["geometry_detailed"].get("wing", {}).get("sweep_deg", 0.0),
             )
             
+            # Back-calculate Oswald efficiency e
+            # k = 1 / (pi * e * ar) => e = 1 / (pi * k * ar)
+            if k_factor > 1e-6 and ar > 1e-6:
+                e_efficiency = 1.0 / (pi * ar * k_factor)
+            else:
+                e_efficiency = 0.8
+
             # Build Polar
             polar = AeroPolar(
                 cd0=drag_res.cd0,
-                k=k_factor,
-                cl_max=self.inputs["aero"].get("cl_max_clean", 1.5),
-                cl_min=-0.5
+                e=e_efficiency,
+                ar=ar,
             )
             
+            print(f"DEBUG: Iter={i}, MTOW={current_state.mtow_kg:.2f}, S={new_wing_area:.2f}, CD0={drag_res.cd0:.6f}, k={k_factor:.4f}, e={e_efficiency:.4f}")
+            print(f"DEBUG: Struct Weights: Wing={w_wing_res.w_struct_kg:.1f}, Fus={w_fus_res.w_struct_kg:.1f}, HT={w_ht_res.w_struct_kg:.1f}, VT={w_vt_res.w_struct_kg:.1f}")
+            print(f"DEBUG: Sys Weights: Prop={w_prop_res.w_system_kg:.1f}, FuelSys={w_fuel_sys_res.w_system_kg:.1f}, FC={w_flight_ctrl_res.w_system_kg:.1f}, Avionics={w_avionics_res.w_system_kg:.1f}, Furnish={w_furnish_res.w_system_kg:.1f}")
+
             # Run Mission Analysis
             mission_res = mission_fuel_breakdown(
                 w0_kg=current_state.mtow_kg, # Use previous iteration's MTOW for drag calc
@@ -301,11 +343,11 @@ class DesignOrchestrator:
                 wing_area_m2=new_wing_area,
                 thrust_sl_n=new_thrust_n,
                 component_weights={
-                    "wing": w_wing_res.w_structural_kg,
-                    "fuselage": w_fus_res.w_structural_kg,
-                    "ht": w_ht_res.w_structural_kg,
-                    "vt": w_vt_res.w_structural_kg,
-                    "gear": w_gear_res.w_structural_kg,
+                    "wing": w_wing_res.w_struct_kg,
+                    "fuselage": w_fus_res.w_struct_kg,
+                    "ht": w_ht_res.w_struct_kg,
+                    "vt": w_vt_res.w_struct_kg,
+                    "gear": w_gear_res.w_struct_kg,
                     "fuel_system": w_fuel_sys_res.w_system_kg,
                     "propulsion": w_prop_res.w_system_kg,
                     "flight_control": w_flight_ctrl_res.w_system_kg,

@@ -30,7 +30,7 @@
     "cl_max": 1.8
   },
   "sizing": {
-    "wing_loading_pa": 2500.0,
+    "wing_loading_pa": 1000.0,
     "aspect_ratio": 8.5,
     "thrust_to_weight": 0.30
   },
@@ -38,11 +38,11 @@
     "empty_a": 0.73,
     "empty_b": 0.99,
     "reserve_fraction": 0.07,
-    "w0_guess_kg": 3000.0
+    "w0_guess_kg": 1500.0
   },
   "propulsion": {
     "type": "prop",
-    "sfc_1_s": 0.00000023,
+    "sfc_1_s": 0.000000085,
     "prop_efficiency": 0.82
   },
   "geometry": {
