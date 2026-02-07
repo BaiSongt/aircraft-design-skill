@@ -51,23 +51,23 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 
 ### 2. 执行 Sizing Loop（带可视化）
 
-默认情况下，Sizing Loop 会自动启动实时可视化模块。该模块将在独立窗口中显示收敛曲线、约束图和飞机几何预览。
+Sizing Loop 内置了自动可视化功能。默认情况下，它会自动检测并启动可视化服务器，在独立窗口中显示收敛曲线、约束图和飞机几何预览。
 
+**基本用法**：
 使用 `RunCommand` 工具执行以下命令：
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 aircraft_design/run_sizing.py sizing_input.json --project-name MyDesign
+python3 -m aircraft_design.run_sizing sizing_input.json --project-name MyDesign
 ```
 
+**可选参数**：
+*   `--no-viz`: 如果不需要实时可视化（例如在纯后台模式运行），可添加此参数关闭图形界面。
+
 **可视化交互说明**：
-*   **启动**：脚本运行时会自动弹出一个 Matplotlib 窗口。
-*   **监控**：用户可以实时观察 MTOW 收敛情况和约束分析图。
-*   **控制**：
-    *   `Pause/Resume`: 暂停/继续迭代更新。
-    *   `Save Image`: 保存当前视图快照。
-    *   `Reset View`: 重置视图缩放。
-*   **结束**：设计循环完成后，终端会提示 "Press [Enter] ... to close"。用户查看完毕后，需在终端按回车键关闭窗口并结束脚本。
+*   **自动启动**：脚本运行时会自动弹出一个 3D 可视化窗口（无需手动开启服务器）。
+*   **监控**：用户可以实时观察 MTOW 收敛情况、约束分析图以及飞机的 3D 几何变化。
+*   **结束**：脚本执行完成后会自动退出，但可视化窗口会**保持打开**状态，以便用户继续查看结果。用户可随时手动关闭窗口。
 
 ### 3. 检查结果
 
