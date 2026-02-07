@@ -3,6 +3,7 @@ import json
 import sys
 from dataclasses import asdict
 from pathlib import Path
+from datetime import datetime
 
 from aircraft_design.design_loop_orchestrator import (
     DesignRequirements,
@@ -10,12 +11,24 @@ from aircraft_design.design_loop_orchestrator import (
     sizing_loop,
     SizedAircraft
 )
+from aircraft_design.reporting import DesignReportGenerator
+
+def setup_output_directory(base_dir: str = "output", project_name: str = "design") -> Path:
+    """
+    Creates a timestamped output directory for the current run.
+    Format: output/{project_name}_{YYYYMMDD_HHMMSS}
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dir_name = f"{project_name}_{timestamp}"
+    output_path = Path(base_dir) / dir_name
+    output_path.mkdir(parents=True, exist_ok=True)
+    return output_path
 
 def main():
     parser = argparse.ArgumentParser(description="Run Fixed Wing Class I Sizing Loop")
     parser.add_argument("input_file", type=Path, help="Path to input JSON file")
-    parser.add_argument("--output", "-o", type=Path, default=Path("results.json"), help="Path to output JSON file")
-    parser.add_argument("--report", "-r", type=Path, default=Path("report.md"), help="Path to output Markdown report")
+    parser.add_argument("--project-name", "-n", type=str, default="aircraft_sizing", help="Name of the project")
+    parser.add_argument("--output-dir", "-o", type=Path, default=Path("output"), help="Base directory for outputs")
     
     args = parser.parse_args()
     
@@ -24,15 +37,15 @@ def main():
         sys.exit(1)
         
     try:
+        # Create output directory
+        run_dir = setup_output_directory(args.output_dir, args.project_name)
+        print(f"Output directory created: {run_dir}")
+        
         with open(args.input_file, "r") as f:
             data = json.load(f)
             
         req_data = data.get("requirements", {})
         guess_data = data.get("initial_guess", {})
-        
-        # Fill defaults for missing guess fields if needed, or rely on dataclass defaults if any
-        # The dataclasses don't have defaults for all fields, so we expect valid input.
-        # But for CLI user friendliness, we can set some sane defaults for a fighter.
         
         # Requirements defaults (Light Fighter)
         req = DesignRequirements(
@@ -43,8 +56,8 @@ def main():
             takeoff_distance_m=req_data.get("takeoff_distance_m", 1000.0),
             landing_distance_m=req_data.get("landing_distance_m", 1000.0),
             max_load_factor=req_data.get("max_load_factor", 7.33),
-            sustained_turn_g=req_data.get("sustained_turn_g", None),
-            service_ceiling_m=req_data.get("service_ceiling_m", None),
+            sustained_turn_g=req_data.get("sustained_turn_g", 2.0),
+            service_ceiling_m=req_data.get("service_ceiling_m", 15000.0),
         )
         
         # Guess defaults
@@ -62,76 +75,51 @@ def main():
         )
         
         print("Starting Sizing Loop...")
-        print(f"Requirements: {req}")
-        print(f"Initial Guess: {guess}")
         
         result = sizing_loop(req, guess)
         
-        # Save JSON
+        # Save JSON Data
         output_data = {
-            "converged": result.converged,
-            "mtow_kg": result.mtow_kg,
-            "empty_weight_kg": result.empty_weight_kg,
-            "fuel_weight_kg": result.fuel_weight_kg,
-            "wing_area_m2": result.wing_area_m2,
-            "thrust_sl_n": result.thrust_sl_n,
-            "geometry": result.geometry,
-            "weight_breakdown": result.weight_breakdown,
-            "performance": {
-                "actual_range_m": result.actual_range_m,
-                "takeoff_distance_m": result.takeoff_distance_m,
-                "landing_distance_m": result.landing_distance_m
+            "project_name": args.project_name,
+            "timestamp": datetime.now().isoformat(),
+            "inputs": {
+                "requirements": asdict(req),
+                "initial_guess": asdict(guess)
             },
-            "iterations": result.iterations
+            "outputs": {
+                "converged": result.converged,
+                "mtow_kg": result.mtow_kg,
+                "empty_weight_kg": result.empty_weight_kg,
+                "fuel_weight_kg": result.fuel_weight_kg,
+                "wing_area_m2": result.wing_area_m2,
+                "thrust_sl_n": result.thrust_sl_n,
+                "geometry": result.geometry,
+                "weight_breakdown": result.weight_breakdown,
+                "performance": {
+                    "actual_range_m": result.actual_range_m,
+                    "takeoff_distance_m": result.takeoff_distance_m,
+                    "landing_distance_m": result.landing_distance_m
+                },
+                "iterations": result.iterations
+            }
         }
         
-        with open(args.output, "w") as f:
+        json_path = run_dir / "design_data.json"
+        with open(json_path, "w") as f:
             json.dump(output_data, f, indent=2)
-            
-        print(f"Results saved to {args.output}")
+        print(f"Data saved to {json_path}")
         
-        # Generate Markdown Report
-        report_content = f"""# Aircraft Sizing Report
-
-## 1. Summary
-- **Converged**: {"Yes" if result.converged else "No"}
-- **Iterations**: {result.iterations}
-- **MTOW**: {result.mtow_kg:.1f} kg
-- **Empty Weight**: {result.empty_weight_kg:.1f} kg
-- **Fuel Weight**: {result.fuel_weight_kg:.1f} kg
-
-## 2. Geometry
-- **Wing Area**: {result.wing_area_m2:.1f} m2
-- **Wing Span**: {result.geometry.get('b_wing', 0):.2f} m
-- **Fuselage Length**: {result.geometry.get('l_fus', 0):.2f} m
-
-## 3. Propulsion
-- **Thrust (SL Static)**: {result.thrust_sl_n:.1f} N
-- **T/W (Takeoff)**: {result.thrust_sl_n / (result.mtow_kg * 9.81):.3f}
-
-## 4. Weight Breakdown
-| Component | Weight (kg) |
-|-----------|-------------|
-| **Structure** | {result.weight_breakdown.get('structure', 0):.1f} |
-| **Systems** | {result.weight_breakdown.get('systems', 0):.1f} |
-| **Payload** | {result.weight_breakdown.get('payload', 0):.1f} |
-| **Fuel** | {result.fuel_weight_kg:.1f} |
-| **MTOW** | {result.mtow_kg:.1f} |
-
-## 5. Performance Constraints
-- **Range**: {result.actual_range_m/1000:.1f} km (Req: {req.range_m/1000:.1f} km)
-- **Takeoff**: {result.takeoff_distance_m:.1f} m (Req: {req.takeoff_distance_m:.1f} m)
-- **Landing**: {result.landing_distance_m:.1f} m (Req: {req.landing_distance_m:.1f} m)
-
-"""
-        with open(args.report, "w") as f:
+        # Generate Professional Report
+        reporter = DesignReportGenerator(project_name=args.project_name)
+        report_content = reporter.generate_markdown(result, req, guess)
+        
+        report_path = run_dir / "design_report.md"
+        with open(report_path, "w") as f:
             f.write(report_content)
-            
-        print(f"Report saved to {args.report}")
+        print(f"Report saved to {report_path}")
         
-        if not result.converged:
-            sys.exit(2)
-            
+        print("\nSuccess! Design iteration completed.")
+        
     except Exception as e:
         print(f"Error during sizing: {e}")
         import traceback

@@ -1,0 +1,16 @@
+{
+  "requirements": {
+    "range_m": 2000e3,
+    "payload_kg": 1000.0,
+    "cruise_mach": 0.8,
+    "cruise_altitude_m": 11000.0,
+    "takeoff_distance_m": 1000.0,
+    "landing_distance_m": 1000.0,
+    "max_load_factor": 7.33
+  },
+  "initial_guess": {
+    "mtow_kg": 10000.0,
+    "thrust_to_weight": 0.6,
+    "wing_loading_pa": 3000.0
+  }
+}

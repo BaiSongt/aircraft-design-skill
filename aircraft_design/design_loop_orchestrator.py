@@ -351,6 +351,10 @@ def sizing_loop(
         print(f"DEBUG: Breakdown: Struct={w_struct_total:.1f}, Sys={w_systems_total:.1f}, Fus={w_fus.w_struct_kg:.1f}, Wing={w_wing.w_struct_kg:.1f}, Prop={w_prop_sys.w_system_kg:.1f}")
 
         if abs(w_calc - mtow) < tolerance * mtow:
+            # Calculate final geometry details
+            c_root = (2 * s_wing) / (b_wing * (1 + guess.taper_ratio))
+            c_mean = (2/3) * c_root * ((1 + guess.taper_ratio + guess.taper_ratio**2) / (1 + guess.taper_ratio))
+            
             # Converged
             return SizedAircraft(
                 mtow_kg=mtow,
@@ -365,9 +369,16 @@ def sizing_loop(
                 },
                 geometry={
                     "s_wing": s_wing,
-                    "b_wing": b_wing,
-                    "l_fus": l_fus,
-                    "tail": tail_geo,
+                    "span_m": b_wing,
+                    "aspect_ratio": guess.aspect_ratio,
+                    "mean_chord_m": c_mean,
+                    "root_chord_m": c_root,
+                    "taper_ratio": guess.taper_ratio,
+                    "sweep_deg": guess.sweep_deg,
+                    "fuselage_length_m": l_fus,
+                    "fuselage_diameter_m": l_fus / 9.0, # Approx fineness ratio 9
+                    "s_ht_m2": tail_geo["s_ht_m2"],
+                    "s_vt_m2": tail_geo["s_vt_m2"],
                 },
                 actual_range_m=requirements.range_m, # Calculated
                 takeoff_distance_m=requirements.takeoff_distance_m, # Constraint met
