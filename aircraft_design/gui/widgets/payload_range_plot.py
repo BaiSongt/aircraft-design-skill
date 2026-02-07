@@ -11,15 +11,23 @@ class PayloadRangePlot(MplWidget):
         self.fill = None
 
     def update_data(self, ranges, payloads):
-        if not ranges or not payloads:
-            return
+        try:
+            if not ranges or not payloads:
+                self.show_content()
+                return
 
-        self.line.set_data(ranges, payloads)
-        
-        if self.fill:
-            self.fill.remove()
-        self.fill = self.axes.fill_between(ranges, payloads, color='green', alpha=0.1)
-        
-        self.axes.relim()
-        self.axes.autoscale_view()
-        self.draw()
+            self.line.set_data(ranges, payloads)
+            
+            if self.fill:
+                try:
+                    self.fill.remove()
+                except:
+                    pass
+            self.fill = self.axes.fill_between(ranges, payloads, color='green', alpha=0.1)
+            
+            self.axes.relim()
+            self.axes.autoscale_view()
+            self.draw()
+            self.show_content()
+        except Exception as e:
+            self.show_error(f"Failed to update Payload-Range Plot: {str(e)}")

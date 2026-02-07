@@ -32,17 +32,13 @@ class ReportGallery(QWidget):
             return
 
         # Define expected images and titles
+        # Exclude 3-view images as requested for the Right Panel
         images_map = [
             ("aero_cl_alpha.png", "Lift Curve (CL-alpha)"),
             ("aero_drag_polar.png", "Drag Polar"),
             ("perf_thrust_curves.png", "Thrust Curves"),
             ("perf_flight_envelope.png", "Flight Envelope"),
-            ("struct_vn_diagram.png", "V-n Diagram"),
-            ("view_top_static.png", "Top View (2D)"),
-            ("view_side_static.png", "Side View (2D)"),
-            ("vsp_iso.png", "VSP Iso View"), # Sometimes named differently
-            ("vsp_top.png", "VSP Top View"),
-            ("vsp_side.png", "VSP Side View")
+            ("struct_vn_diagram.png", "V-n Diagram")
         ]
         
         # Scan for matching files
@@ -52,9 +48,6 @@ class ReportGallery(QWidget):
             if img_path.exists():
                 found_files.append((img_path, title))
             
-        # Also check for other pngs not in the map?
-        # Maybe just stick to the map to avoid clutter
-        
         if not found_files:
             lbl = QLabel("No report images found in this directory.")
             self.grid.addWidget(lbl, 0, 0)
@@ -62,7 +55,7 @@ class ReportGallery(QWidget):
             
         row = 0
         col = 0
-        max_cols = 2
+        max_cols = 1 # Single column for side panel
         
         for img_path, title in found_files:
             frame = QFrame()
@@ -79,8 +72,9 @@ class ReportGallery(QWidget):
             lbl_img = QLabel()
             pixmap = QPixmap(str(img_path))
             if not pixmap.isNull():
-                # Scale to reasonable size for gallery
-                scaled = pixmap.scaled(700, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                # Scale to reasonable size for gallery - fit width
+                # We can't easily get width here, use fixed reasonable width or use scaledcontents
+                scaled = pixmap.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 lbl_img.setPixmap(scaled)
                 lbl_img.setAlignment(Qt.AlignCenter)
                 vbox.addWidget(lbl_img)
