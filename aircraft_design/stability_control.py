@@ -1,7 +1,36 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import pi, sqrt, cos, sin, radians, tan, pow
+from math import pi, sqrt, cos, sin, radians, tan, pow, atan
+
+def tail_areas_from_volume_coefficients(
+    *,
+    s_wing_m2: float,
+    b_wing_m: float,
+    c_bar_wing_m: float,
+    l_ht_m: float,
+    l_vt_m: float,
+    vh_coeff: float,
+    vv_coeff: float,
+) -> dict:
+    """
+    Calculates required tail areas based on volume coefficients.
+    
+    S_ht = (V_h * S_w * c_bar) / l_ht
+    S_vt = (V_v * S_w * b_w) / l_vt
+    """
+    if l_ht_m <= 0 or l_vt_m <= 0:
+        raise ValueError("Tail arms must be positive.")
+        
+    s_ht_m2 = (vh_coeff * s_wing_m2 * c_bar_wing_m) / l_ht_m
+    s_vt_m2 = (vv_coeff * s_wing_m2 * b_wing_m) / l_vt_m
+    
+    return {
+        "s_ht_m2": s_ht_m2,
+        "s_vt_m2": s_vt_m2,
+        "vh_coeff": vh_coeff,
+        "vv_coeff": vv_coeff,
+    }
 
 def calculate_subsonic_downwash_gradient(
     *,

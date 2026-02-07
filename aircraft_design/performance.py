@@ -175,6 +175,8 @@ def calculate_sustained_turn_load(
     polar: AeroPolar,
     rho_kg_m3: float,
     v_m_s: float,
+    cl_max: float | None = None,
+    max_load_factor: float | None = None,
 ) -> dict:
     if thrust_n <= 0.0 or weight_kg <= 0.0 or s_m2 <= 0.0 or v_m_s <= 0.0:
         raise ValueError("Invalid thrust, weight, area, or speed inputs.")
@@ -182,23 +184,36 @@ def calculate_sustained_turn_load(
     w_n = weight_kg * CONST.g0_m_s2
     q = 0.5 * rho_kg_m3 * v_m_s**2
     
+    # Thrust limit calculation
     # Thrust = Drag = q * S * (CD0 + K * CL^2)
     # CL = n * W / (q * S)
     # T = q * S * CD0 + q * S * K * (n * W / (q * S))^2
-    # T = q * S * CD0 + (K * n^2 * W^2) / (q * S)
-    # T - q * S * CD0 = (K * n^2 * W^2) / (q * S)
-    # (T - q * S * CD0) * (q * S) / (K * W^2) = n^2
+    # n^2 = (T - q * S * CD0) * (q * S) / (K * W^2)
     
     drag_parasitic = q * s_m2 * polar.cd0
     excess_thrust_for_lift = thrust_n - drag_parasitic
     
     if excess_thrust_for_lift <= 0.0:
         # Cannot even sustain level flight at this speed (or just parasitic drag is too high)
-        n_sustained = 0.0
+        n_thrust = 0.0
     else:
         k = polar.k
         n_sq = (excess_thrust_for_lift * q * s_m2) / (k * w_n**2)
-        n_sustained = sqrt(n_sq)
+        n_thrust = sqrt(n_sq)
+        
+    # Aerodynamic limit (Stall)
+    # CL = n * W / (q * S) <= CL_max -> n <= CL_max * q * S / W
+    n_aero = float("inf")
+    if cl_max is not None:
+        n_aero = cl_max * q * s_m2 / w_n
+        
+    # Structural limit
+    n_struct = float("inf")
+    if max_load_factor is not None:
+        n_struct = max_load_factor
+        
+    # Combined limit
+    n_sustained = min(n_thrust, n_aero, n_struct)
     
     # Calculate resulting CL and CD
     cl_sustained = n_sustained * w_n / (q * s_m2) if n_sustained > 0 else 0.0
@@ -206,6 +221,9 @@ def calculate_sustained_turn_load(
     
     return {
         "n_sustained": n_sustained,
+        "n_thrust_limited": n_thrust,
+        "n_aero_limited": n_aero if n_aero != float("inf") else None,
+        "n_struct_limited": n_struct if n_struct != float("inf") else None,
         "cl": cl_sustained,
         "cd": cd_sustained,
         "lift_to_drag": cl_sustained / cd_sustained if cd_sustained > 0.0 else 0.0,

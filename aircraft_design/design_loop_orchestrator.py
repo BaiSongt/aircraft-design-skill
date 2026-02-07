@@ -1,378 +1,395 @@
 from __future__ import annotations
 
-import copy
-from dataclasses import dataclass
-from math import pi
-from typing import Any
+from dataclasses import dataclass, field
+import math
 
-from .fixed_wing_overall import run_fixed_wing_overall_design
+from .constraints import (
+    constraint_wing_loading_max_from_landing_distance,
+    constraint_curve_takeoff_distance,
+    required_thrust_to_weight_for_takeoff_distance_numeric,
+    required_thrust_to_weight,
+    AeroPolar,
+    max_wing_loading_for_landing_distance_numeric_pa,
+    required_thrust_to_weight_for_sustained_turn,
+    required_thrust_to_weight_for_service_ceiling,
+)
 from .weights_structural import (
     calculate_wing_structural_weight,
     calculate_fuselage_structural_weight,
-    calculate_horizontal_tail_structural_weight,
-    calculate_vertical_tail_structural_weight,
     calculate_landing_gear_weight,
+    calculate_tail_structural_weight,
+    calculate_surface_controls_weight,
+    calculate_nacelle_group_weight,
 )
 from .weights_system import (
     calculate_fuel_system_weight,
     calculate_propulsion_system_weight,
-    calculate_flight_control_system_weight,
+    calculate_flight_controls_weight,
+    calculate_hydraulics_pneumatics_weight,
+    calculate_electrical_system_weight,
     calculate_avionics_weight,
     calculate_furnishings_weight,
+    calculate_air_conditioning_weight,
+    calculate_anti_ice_weight,
+    calculate_handling_gear_weight,
 )
-from .propulsion import build_propulsion_model, thrust_available_n
-from .performance import required_thrust_newton
-from .mission import mission_fuel_breakdown
-from .tail_sizing import tail_areas_from_volume_coefficients
-from .sizing import wing_geometry_from_loading
+from .propulsion import (
+    PropulsionModel,
+    build_propulsion_model,
+    fuel_flow_n_s,
+)
+from .performance import (
+    generate_performance_envelope,
+    calculate_sustained_turn_load,
+    calculate_service_ceiling,
+)
+from .stability_control import (
+    tail_areas_from_volume_coefficients,
+    estimate_static_margin_and_trim,
+)
+from .atmosphere import qbar_pa, isa_tropopause
 from .units import CONST
-from .constraints import AeroPolar
-from .aero_drag_buildup import estimate_cd0_drag_buildup, GeometryAssumptions
-from .aero_lift_slope import calculate_lift_induced_drag_factor
-from .atmosphere import isa_tropopause
-
 
 @dataclass
-class DesignState:
+class DesignRequirements:
+    # Mission
+    range_m: float
+    payload_kg: float
+    cruise_mach: float
+    cruise_altitude_m: float
+    
+    # Constraints
+    takeoff_distance_m: float
+    landing_distance_m: float
+    stall_speed_m_s: float | None = None
+    
+    # Performance
+    max_load_factor: float = 7.33
+    sustained_turn_g: float = 5.0
+    service_ceiling_m: float = 15000.0
+    
+    # Environment
+    isa_delta_c: float = 0.0
+
+@dataclass
+class InitialGuess:
     mtow_kg: float
-    fuel_kg: float
+    wing_loading_pa: float
+    thrust_to_weight: float
+    aspect_ratio: float = 3.5
+    sweep_deg: float = 40.0
+    taper_ratio: float = 0.3
+    thickness_ratio: float = 0.06
+    
+    # Coefficients
+    cd0: float = 0.02
+    oswald_e: float = 0.8
+    sfc_cruise_1_s: float = 2.4e-5 # ~0.85/3600
+
+@dataclass
+class SizedAircraft:
+    mtow_kg: float
     empty_weight_kg: float
+    fuel_weight_kg: float
     wing_area_m2: float
     thrust_sl_n: float
-    component_weights: dict[str, float]
-    geometry: dict[str, Any]
-    performance_margins: dict[str, float]
+    
+    weight_breakdown: dict
+    geometry: dict
+    
+    # Performance metrics
+    actual_range_m: float
+    takeoff_distance_m: float
+    landing_distance_m: float
+    
+    converged: bool
+    iterations: int
 
+def sizing_loop(
+    requirements: DesignRequirements,
+    guess: InitialGuess,
+    propulsion_model: PropulsionModel | None = None,
+    tolerance: float = 1e-3,
+    max_iter: int = 50,
+) -> SizedAircraft:
+    """
+    Orchestrates the Class I sizing loop.
+    """
+    
+    # 1. Constraint Analysis to Refine T/W and W/S
+    # For now, we use the guess as the starting point, but we could enforce constraints here.
+    # Let's verify if the guess meets landing/takeoff constraints and adjust if needed.
+    
+    # Atmosphere at Sea Level
+    rho_sl = 1.225
+    
+    # Landing Constraint (Max W/S)
+    cl_max_landing = 1.4 + 0.8 # Clean + High Lift assumption (TODO: Parametrize)
+    
+    ws_max_landing = max_wing_loading_for_landing_distance_numeric_pa(
+        target_landing_distance_m=requirements.landing_distance_m,
+        rho_kg_m3=rho_sl,
+        cl_max_landing=cl_max_landing,
+        obstacle_height_m=15.24,
+    )
+    
+    current_ws = min(guess.wing_loading_pa, ws_max_landing)
+    
+    # Takeoff Constraint (Min T/W)
+    cl_max_takeoff = 1.4 + 0.4 # Clean + High Lift
+    tw_min_takeoff = required_thrust_to_weight_for_takeoff_distance_numeric(
+        takeoff_distance_m=requirements.takeoff_distance_m,
+        wing_loading_pa=current_ws,
+        rho_kg_m3=rho_sl,
+        cl_max_takeoff=cl_max_takeoff,
+        obstacle_height_m=15.24,
+    )
+    
+    # Performance Constraints (Turn, Ceiling)
+    polar = AeroPolar(cd0=guess.cd0, e=guess.oswald_e, ar=guess.aspect_ratio)
+    
+    # 1. Sustained Turn at Cruise Altitude
+    atm_cruise = isa_tropopause(requirements.cruise_altitude_m)
+    v_cruise = requirements.cruise_mach * atm_cruise.a_m_s
+    tw_req_turn_alt = required_thrust_to_weight_for_sustained_turn(
+        wing_loading_pa=current_ws,
+        rho_kg_m3=atm_cruise.rho_kg_m3,
+        v_m_s=v_cruise,
+        load_factor=requirements.sustained_turn_g,
+        polar=polar,
+    )
+    # Apply lapse to get SL T/W
+    # T_sl = T_alt / (rho/rho_sl)^0.7
+    lapse_cruise = (atm_cruise.rho_kg_m3 / rho_sl)**0.7
+    tw_min_turn = tw_req_turn_alt / lapse_cruise
+    
+    # 2. Service Ceiling
+    atm_ceiling = isa_tropopause(requirements.service_ceiling_m)
+    tw_min_ceiling = required_thrust_to_weight_for_service_ceiling(
+        wing_loading_pa=current_ws,
+        rho_kg_m3=atm_ceiling.rho_kg_m3,
+        polar=polar,
+        climb_rate_m_s=0.508,
+        jet_lapse_exp=0.7,
+    )
+    
+    current_tw = max(guess.thrust_to_weight, tw_min_takeoff, tw_min_turn, tw_min_ceiling)
+    
+    print(f"DEBUG: Constraints: W/S max={ws_max_landing:.1f}")
+    print(f"DEBUG: T/W mins: Takeoff={tw_min_takeoff:.3f}, Turn={tw_min_turn:.3f}, Ceiling={tw_min_ceiling:.3f}")
+    print(f"DEBUG: Selected: W/S={current_ws:.1f}, T/W={current_tw:.3f}")
 
-class DesignOrchestrator:
-    def __init__(self, initial_inputs: dict):
-        self.inputs = copy.deepcopy(initial_inputs)
-        self.history: list[DesignState] = []
+    # Initialize Loop Variables
+    mtow = guess.mtow_kg
+    
+    # polar was created above
+    
+    if propulsion_model is None:
+        propulsion_model = build_propulsion_model({
+            "type": "jet",
+            "thrust_sl_n": mtow * CONST.g0_m_s2 * current_tw,
+            "tsfc_1_s": guess.sfc_cruise_1_s,
+            "bypass_ratio": 0.5, # Default fighter-like
+        })
+    
+    for i in range(max_iter):
+        # Safety check for divergence
+        if mtow > 1e7 or math.isnan(mtow): # 10,000 tons is absurd
+            print(f"DEBUG: Divergence detected at iter {i}. MTOW={mtow}")
+            break
+
+        # 1. Geometry
+        s_wing = mtow * CONST.g0_m_s2 / current_ws
+        thrust_req = mtow * CONST.g0_m_s2 * current_tw
         
-    def run_initial_sizing(self) -> DesignState:
-        """
-        Run Class I sizing to get initial estimates.
-        """
-        # Run the existing Class I overall design
-        res = run_fixed_wing_overall_design(self.inputs)
+        b_wing = math.sqrt(guess.aspect_ratio * s_wing)
+        c_root = 2 * s_wing / (b_wing * (1 + guess.taper_ratio)) # Simplified
         
-        # Extract results
-        mtow_kg = res["weights"]["w0_kg"]
-        fuel_kg = res["weights"]["wf_kg"]
-        we_kg = res["weights"]["we_kg"]
-        wing_area = res["sizing"]["s_m2"]
-        thrust_sl_n = res["sizing"]["thrust_required_takeoff_n"]
-        
-        # Initial geometry assumptions
-        geometry = {
-            "wing_area_m2": wing_area,
-            "span_m": res["sizing"]["b_m"],
-            "chord_mean_m": res["sizing"]["cbar_m"],
-            "aspect_ratio": self.inputs["sizing"]["aspect_ratio"],
-            # Default tail inputs if not present
-            "ht_area_m2": res["tail"]["sh_m2"],
-            "vt_area_m2": res["tail"]["sv_m2"],
-            "fuselage_length_m": self.inputs["geometry_detailed"].get("fuselage", {}).get("length_m", 15.0),
-        }
-        
-        state = DesignState(
-            mtow_kg=mtow_kg,
-            fuel_kg=fuel_kg,
-            empty_weight_kg=we_kg,
-            wing_area_m2=wing_area,
-            thrust_sl_n=thrust_sl_n,
-            component_weights={"class1_empty": we_kg},
-            geometry=geometry,
-            performance_margins={}
+        # Tail Sizing (Volume Coefficients)
+        # Fighter defaults
+        l_tail_approx = 0.4 * b_wing # Approx tail arm
+        tail_geo = tail_areas_from_volume_coefficients(
+            s_wing_m2=s_wing,
+            b_wing_m=b_wing,
+            c_bar_wing_m=s_wing/b_wing, # Mean chord approx
+            l_ht_m=l_tail_approx,
+            l_vt_m=l_tail_approx,
+            vh_coeff=0.4, # Fighter
+            vv_coeff=0.07, # Fighter
         )
-        self.history.append(state)
-        return state
-
-    def run_detailed_sizing_loop(self, max_iter: int = 20, tol: float = 1e-3) -> DesignState:
-        """
-        Run Class II refined sizing loop.
-        """
-        current_state = self.history[-1]
         
-        # Reference geometry for scaling
-        ref_wing_area = current_state.wing_area_m2
-        ref_fus_len = current_state.geometry.get("fuselage_length_m", 15.0)
+        # 2. Empty Weight Buildup (Theory 03)
+        # Structural
+        w_wing = calculate_wing_structural_weight(
+            s_wing_m2=s_wing,
+            aspect_ratio=guess.aspect_ratio,
+            sweep_quarter_chord_deg=guess.sweep_deg,
+            taper_ratio=guess.taper_ratio,
+            max_takeoff_weight_kg=mtow,
+            t_c=guess.thickness_ratio,
+            n_limit=requirements.max_load_factor * 1.5 / 1.5, # Limit load
+        )
         
-        for i in range(max_iter):
-            prev_mtow = current_state.mtow_kg
-            
-            # 1. Update Geometry based on current MTOW (maintain W/S and T/W)
-            # Actually, usually we fix W/S and T/W from Constraint Analysis and scale the aircraft
-            ws_pa = self.inputs["sizing"]["wing_loading_pa"]
-            tw = self.inputs["sizing"]["thrust_to_weight"]
-            
-            new_wing_area = (current_state.mtow_kg * CONST.g0_m_s2) / ws_pa
-            new_thrust_n = current_state.mtow_kg * CONST.g0_m_s2 * tw
-            
-            # Update span, chord
-            ar = self.inputs["sizing"]["aspect_ratio"]
-            new_span = (new_wing_area * ar)**0.5
-            new_chord = new_wing_area / new_span
-            
-            # Update Tails (Volume coefficients)
-            # Scale fuselage length geometrically with wing area to maintain tail arm ratios
-            # L_new = L_ref * sqrt(S_new / S_ref)
-            if ref_wing_area > 1e-6:
-                scale_factor = (new_wing_area / ref_wing_area)**0.5
-            else:
-                scale_factor = 1.0
-                
-            fus_len = ref_fus_len * scale_factor
-            
-            # Estimate tail arms if not provided (Class II rough sizing)
-            # Typically 40-50% of fuselage length
-            lh_ratio = self.inputs.get("stability", {}).get("ht_arm_ratio", 0.45)
-            lv_ratio = self.inputs.get("stability", {}).get("vt_arm_ratio", 0.45)
-            
-            lh_m = fus_len * lh_ratio
-            lv_m = fus_len * lv_ratio
+        # Fuselage (Approx length based on wing span/area scaling or fixed assumption)
+        # For Class I, we can assume L_fus ~ 0.75 * b_wing or derived
+        l_fus = 0.8 * b_wing # Assumption
+        w_fus = calculate_fuselage_structural_weight(
+            fuselage_length_m=l_fus,
+            fuselage_height_m=l_fus * 0.12, # Fineness 8
+            max_takeoff_weight_kg=mtow,
+            n_limit=requirements.max_load_factor,
+        )
+        
+        w_lg = calculate_landing_gear_weight(max_takeoff_weight_kg=mtow)
+        
+        w_tails = calculate_tail_structural_weight(
+            s_ht_m2=tail_geo["s_ht_m2"],
+            s_vt_m2=tail_geo["s_vt_m2"],
+            max_takeoff_weight_kg=mtow,
+            n_limit=requirements.max_load_factor,
+        )
+        
+        w_struct_total = (
+            w_wing.w_struct_kg + 
+            w_fus.w_struct_kg + 
+            w_lg.w_struct_kg + 
+            w_tails.w_struct_kg
+        )
+        
+        # Propulsion & Systems
+        w_engine_dry_kg = thrust_req / (6.0 * CONST.g0_m_s2)
+        w_prop_sys = calculate_propulsion_system_weight(
+            thrust_sl_n=thrust_req,
+            fuselage_length_m=l_fus,
+            # Estimate engine weight from thrust if not known
+            # T/W_engine ~ 6.0
+            w_engine_dry_kg=w_engine_dry_kg, 
+        )
+        
+        # Fuel System (Iterative dependence on fuel weight, use previous guess)
+        # Initial fuel guess: 0.3 * MTOW
+        fuel_guess = 0.3 * mtow
+        w_fuel_sys = calculate_fuel_system_weight(fuel_weight_kg=fuel_guess)
+        
+        # Flight Controls
+        w_fc = calculate_flight_controls_weight(
+            max_takeoff_weight_kg=mtow,
+            control_surface_area_m2=s_wing * 0.15 # Approx
+        )
+        
+        # Hydraulics
+        w_hyd = calculate_hydraulics_pneumatics_weight(
+            fuselage_length_m=l_fus,
+            b_wing_m=b_wing,
+        )
+        
+        # Electrical
+        w_elec = calculate_electrical_system_weight(
+            fuel_system_weight_kg=w_fuel_sys.w_system_kg,
+            avionics_weight_kg=300.0, # Guess
+        )
+        
+        # Avionics
+        w_av = calculate_avionics_weight(
+            mtow_kg=mtow,
+            w_engine_kg=w_engine_dry_kg,
+            num_engines=1,
+            w_fuel_system_kg=w_fuel_sys.w_system_kg,
+            uninstalled_avionics_weight_kg=300.0
+        )
+        
+        # Furnishings
+        w_furn = calculate_furnishings_weight(mtow_kg=mtow)
+        
+        # Air Con / Anti-Ice / Handling
+        w_env = calculate_air_conditioning_weight(avionics_weight_kg=w_av.w_system_kg, num_crew=1)
+        w_ice = calculate_anti_ice_weight(max_takeoff_weight_kg=mtow)
+        w_hdl = calculate_handling_gear_weight(max_takeoff_weight_kg=mtow)
+        
+        w_systems_total = (
+            w_prop_sys.w_system_kg +
+            w_fuel_sys.w_system_kg +
+            w_fc.w_system_kg +
+            w_hyd.w_system_kg +
+            w_elec.w_system_kg +
+            w_av.w_system_kg +
+            w_furn.w_system_kg +
+            w_env.w_system_kg +
+            w_ice.w_system_kg +
+            w_hdl.w_system_kg
+        )
+        
+        # Empty Weight
+        we_calc = w_struct_total + w_systems_total
+        
+        # 3. Fuel Fraction / Mission Fuel
+        # Simple Breguet for now
+        # R = (V/c) * (L/D) * ln(W0/W1)
+        # W1/W0 = exp(-R * c / (V * L/D))
+        # W_fuel = W0 * (1 - W1/W0) * 1.06 (Reserves)
+        
+        # Cruise L/D
+        # q = 0.5 * rho * V^2
+        # CL = W / (q * S) -> Use mid-cruise weight (approx 0.9 * W0)
+        atm_cruise = isa_tropopause(requirements.cruise_altitude_m)
+        v_cruise = requirements.cruise_mach * atm_cruise.a_m_s
+        q_cruise = 0.5 * atm_cruise.rho_kg_m3 * v_cruise**2
+        
+        cl_cruise = (0.9 * mtow * CONST.g0_m_s2) / (q_cruise * s_wing)
+        cd_cruise = polar.cd(cl_cruise)
+        ld_cruise = cl_cruise / cd_cruise
+        
+        sfc = guess.sfc_cruise_1_s
+        
+        fuel_fraction = 1.0 - math.exp(-requirements.range_m * sfc / (v_cruise * ld_cruise))
+        w_fuel_mission = mtow * fuel_fraction * 1.06 # +6% reserves
+        
+        # 4. Convergence Check
+        w_calc = we_calc + w_fuel_mission + requirements.payload_kg
+        
+        print(f"DEBUG: Iter {i}: MTOW={mtow:.1f} -> W_calc={w_calc:.1f} (We={we_calc:.1f}, Wf={w_fuel_mission:.1f})")
+        print(f"DEBUG: Breakdown: Struct={w_struct_total:.1f}, Sys={w_systems_total:.1f}, Fus={w_fus.w_struct_kg:.1f}, Wing={w_wing.w_struct_kg:.1f}, Prop={w_prop_sys.w_system_kg:.1f}")
 
-            # Recalculate tail areas
-            tail_res = tail_areas_from_volume_coefficients(
-                s_m2=new_wing_area,
-                cbar_m=new_chord,
-                b_m=new_span,
-                lh_m=lh_m,
-                lv_m=lv_m,
-                vh=self.inputs.get("stability", {}).get("volume_coefficient_h", 0.9),
-                vv=self.inputs.get("stability", {}).get("volume_coefficient_v", 0.06),
-            )
-            
-            # 2. Calculate Component Weights (Class II)
-            # Structural
-            w_wing_res = calculate_wing_structural_weight(
-                s_wing_m2=new_wing_area,
-                aspect_ratio=ar,
-                sweep_quarter_chord_deg=self.inputs["geometry_detailed"].get("wing", {}).get("sweep_deg", 0.0),
-                taper_ratio=self.inputs["geometry_detailed"].get("wing", {}).get("taper_ratio", 0.5),
-                max_takeoff_weight_kg=current_state.mtow_kg,
-                n_limit=self.inputs["weights"].get("n_limit", 9.0),
-                composite_fraction=self.inputs["weights"].get("composite_fraction_wing", 0.0),
-            )
-            
-            # Estimate fuselage height if not provided
-            fus_height = self.inputs.get("geometry_detailed", {}).get("fuselage", {}).get("diameter_m", fus_len / 10.0)
-
-            w_fus_res = calculate_fuselage_structural_weight(
-                fuselage_length_m=fus_len,
-                fuselage_height_m=fus_height,
-                max_takeoff_weight_kg=current_state.mtow_kg,
-                n_limit=self.inputs["weights"].get("n_limit", 9.0),
-                composite_fraction=self.inputs["weights"].get("composite_fraction_fuselage", 0.0),
-            )
-            
-            w_ht_res = calculate_horizontal_tail_structural_weight(
-                s_ht_m2=tail_res.sh_m2,
-                aspect_ratio_ht=self.inputs.get("geometry_detailed", {}).get("horizontal_tail", {}).get("aspect_ratio", 4.0),
-                tail_arm_m=lh_m,
-                t_c_ht=self.inputs.get("geometry_detailed", {}).get("horizontal_tail", {}).get("t_c", 0.10),
-                c_wing_m=new_chord,
-                max_takeoff_weight_kg=current_state.mtow_kg,
-                composite_fraction=self.inputs["weights"].get("composite_fraction_tail", 0.0),
-            )
-            
-            w_vt_res = calculate_vertical_tail_structural_weight(
-                s_vt_m2=tail_res.sv_m2,
-                aspect_ratio_vt=self.inputs.get("geometry_detailed", {}).get("vertical_tail", {}).get("aspect_ratio", 1.5),
-                taper_ratio_vt=self.inputs.get("geometry_detailed", {}).get("vertical_tail", {}).get("taper_ratio", 0.5),
-                sweep_quarter_chord_deg=self.inputs.get("geometry_detailed", {}).get("vertical_tail", {}).get("sweep_deg", 25.0),
-                tail_arm_m=lv_m,
-                c_wing_m=new_chord,
-                max_takeoff_weight_kg=current_state.mtow_kg,
-                composite_fraction=self.inputs["weights"].get("composite_fraction_tail", 0.0),
-            )
-            
-            w_gear_res = calculate_landing_gear_weight(
-                max_takeoff_weight_kg=current_state.mtow_kg,
-                composite_fraction=self.inputs["weights"].get("composite_fraction_gear", 0.0),
-            )
-            
-            # Systems
-            w_fuel_sys_res = calculate_fuel_system_weight(
-                fuel_weight_kg=current_state.fuel_kg,
-            )
-            
-            # Estimate engine weight for propulsion system calc
-            # Thrust = new_thrust_n
-            # T/W_engine approx 6-8?
-            # Let's use the build_propulsion_model to get a refined engine model if possible
-            # Or just use the thrust scaling in calculate_propulsion_system_weight
-            
-            w_prop_res = calculate_propulsion_system_weight(
-                thrust_sl_n=new_thrust_n,
-                engine_count=self.inputs["propulsion"].get("engine_count", 1),
-                fuselage_length_m=fus_len,
-                has_afterburner=self.inputs["propulsion"].get("afterburner", True),
-            )
-            
-            w_flight_ctrl_res = calculate_flight_control_system_weight(
-                mtow_kg=current_state.mtow_kg,
-                s_wing_m2=new_wing_area,
-                b_wing_m=new_span,
-                fuselage_length_m=fus_len,
-                n_limit=self.inputs["weights"].get("n_limit", 9.0),
-                aircraft_type="ga" if "ga" in self.inputs.get("aircraft_role", "fighter") else "fighter",
-            )
-            
-            w_avionics_res = calculate_avionics_weight(
-                mtow_kg=current_state.mtow_kg,
-                w_engine_kg=w_prop_res.details.get("w_engine_dry_lb_per", 0.0) * 0.453592, # Approximate back
-                num_engines=self.inputs["propulsion"].get("engine_count", 1),
-                w_fuel_system_kg=w_fuel_sys_res.w_system_kg,
-            )
-            
-            w_furnish_res = calculate_furnishings_weight(
-                mtow_kg=current_state.mtow_kg,
-                q_dive_pa=self.inputs["mission"].get("q_dive_pa", 50000.0), # Default high q
-                num_crew=self.inputs["crew"].get("count", 1),
-            )
-            
-            # Sum Empty Weight
-            new_empty_kg = (
-                w_wing_res.w_struct_kg +
-                w_fus_res.w_struct_kg +
-                w_ht_res.w_struct_kg +
-                w_vt_res.w_struct_kg +
-                w_gear_res.w_struct_kg +
-                w_fuel_sys_res.w_system_kg +
-                w_prop_res.w_system_kg +
-                w_flight_ctrl_res.w_system_kg +
-                w_avionics_res.w_system_kg +
-                w_furnish_res.w_system_kg
-            )
-            
-            # 3. Update Fuel (Mission)
-            # Re-calculate fuel fraction based on refined drag and propulsion model
-            
-            # Build Propulsion Model
-            prop_model = build_propulsion_model(self.inputs["propulsion"])
-            
-            # Build Geometry Assumptions for Drag
-            # We approximate detailed geometry from current sizing
-            fus_diam = self.inputs["geometry_detailed"].get("fuselage", {}).get("diameter_m", fus_len / 10.0)
-            
-            geo_assumptions = GeometryAssumptions(
-                fuselage_length_m=fus_len,
-                fuselage_diameter_m=fus_diam,
-                wetted_area_factor=self.inputs["aero"].get("wetted_area_factor", 3.0),
-                wing_t_c=self.inputs["geometry_detailed"].get("wing", {}).get("thickness_ratio", 0.12),
-                tail_area_ratio=0.25, # Fallback
-                htail_area_ratio=tail_res.sh_m2 / new_wing_area,
-                vtail_area_ratio=tail_res.sv_m2 / new_wing_area,
-                htail_t_c=self.inputs["geometry_detailed"].get("tail", {}).get("thickness_ratio", 0.10),
-                vtail_t_c=self.inputs["geometry_detailed"].get("tail", {}).get("thickness_ratio", 0.10),
-            )
-            
-            # Estimate CD0
-            # Need cruise conditions from mission input or constraints
-            cruise_alt = self.inputs["mission"].get("cruise_altitude_m", 10000.0)
-            cruise_mach = self.inputs["mission"].get("cruise_mach", 0.78)
-            
-            atm = isa_tropopause(cruise_alt)
-            cruise_speed = cruise_mach * atm.a_m_s
-            
-            drag_res = estimate_cd0_drag_buildup(
-                cruise_altitude_m=cruise_alt,
-                cruise_speed_m_s=cruise_speed,
-                s_ref_m2=new_wing_area,
-                b_m=new_span,
-                cbar_m=new_chord,
-                assumptions=geo_assumptions,
-            )
-            
-            # Induced Drag Factor k
-            k_factor = calculate_lift_induced_drag_factor(
-                aspect_ratio=ar,
-                taper_ratio=self.inputs["geometry_detailed"].get("wing", {}).get("taper_ratio", 0.5),
-                sweep_quarter_chord_deg=self.inputs["geometry_detailed"].get("wing", {}).get("sweep_deg", 0.0),
-            )
-            
-            # Back-calculate Oswald efficiency e
-            # k = 1 / (pi * e * ar) => e = 1 / (pi * k * ar)
-            if k_factor > 1e-6 and ar > 1e-6:
-                e_efficiency = 1.0 / (pi * ar * k_factor)
-            else:
-                e_efficiency = 0.8
-
-            # Build Polar
-            polar = AeroPolar(
-                cd0=drag_res.cd0,
-                e=e_efficiency,
-                ar=ar,
-            )
-            
-            print(f"DEBUG: Iter={i}, MTOW={current_state.mtow_kg:.2f}, S={new_wing_area:.2f}, CD0={drag_res.cd0:.6f}, k={k_factor:.4f}, e={e_efficiency:.4f}")
-            print(f"DEBUG: Struct Weights: Wing={w_wing_res.w_struct_kg:.1f}, Fus={w_fus_res.w_struct_kg:.1f}, HT={w_ht_res.w_struct_kg:.1f}, VT={w_vt_res.w_struct_kg:.1f}")
-            print(f"DEBUG: Sys Weights: Prop={w_prop_res.w_system_kg:.1f}, FuelSys={w_fuel_sys_res.w_system_kg:.1f}, FC={w_flight_ctrl_res.w_system_kg:.1f}, Avionics={w_avionics_res.w_system_kg:.1f}, Furnish={w_furnish_res.w_system_kg:.1f}")
-
-            # Run Mission Analysis
-            mission_res = mission_fuel_breakdown(
-                w0_kg=current_state.mtow_kg, # Use previous iteration's MTOW for drag calc
-                s_m2=new_wing_area,
-                polar=polar,
-                propulsion=prop_model,
-                mission=self.inputs["mission"],
-            )
-            
-            fuel_fraction = mission_res["fuel_fraction_total"]
-            
-            # Recalculate Weights with new fuel fraction
-            # W0 = (We + W_pay + W_crew) / (1 - fuel_fraction)
-            # Ensure fuel_fraction is reasonable (< 1.0)
-            if fuel_fraction >= 0.95:
-                 fuel_fraction = 0.95 # Limit to prevent explosion
-            
-            new_fuel_kg = fuel_fraction * (new_empty_kg + self.inputs["payload"]["payload_kg"] + self.inputs["crew"]["crew_kg"]) / (1.0 - fuel_fraction)
-            
-            # Update MTOW
-            new_mtow_kg = new_empty_kg + new_fuel_kg + self.inputs["payload"]["payload_kg"] + self.inputs["crew"]["crew_kg"]
-            
-            # Check convergence
-            diff = abs(new_mtow_kg - prev_mtow)
-            
-            # Update State
-            current_state = DesignState(
-                mtow_kg=new_mtow_kg,
-                fuel_kg=new_fuel_kg,
-                empty_weight_kg=new_empty_kg,
-                wing_area_m2=new_wing_area,
-                thrust_sl_n=new_thrust_n,
-                component_weights={
-                    "wing": w_wing_res.w_struct_kg,
-                    "fuselage": w_fus_res.w_struct_kg,
-                    "ht": w_ht_res.w_struct_kg,
-                    "vt": w_vt_res.w_struct_kg,
-                    "gear": w_gear_res.w_struct_kg,
-                    "fuel_system": w_fuel_sys_res.w_system_kg,
-                    "propulsion": w_prop_res.w_system_kg,
-                    "flight_control": w_flight_ctrl_res.w_system_kg,
-                    "avionics": w_avionics_res.w_system_kg,
-                    "furnishings": w_furnish_res.w_system_kg,
+        if abs(w_calc - mtow) < tolerance * mtow:
+            # Converged
+            return SizedAircraft(
+                mtow_kg=mtow,
+                empty_weight_kg=we_calc,
+                fuel_weight_kg=w_fuel_mission,
+                wing_area_m2=s_wing,
+                thrust_sl_n=thrust_req,
+                weight_breakdown={
+                    "structure": w_struct_total,
+                    "systems": w_systems_total,
+                    "payload": requirements.payload_kg,
                 },
                 geometry={
-                    "wing_area_m2": new_wing_area,
-                    "span_m": new_span,
-                    "chord_mean_m": new_chord,
-                    "aspect_ratio": ar,
-                    "ht_area_m2": tail_res.sh_m2,
-                    "vt_area_m2": tail_res.sv_m2,
-                    "fuselage_length_m": fus_len,
+                    "s_wing": s_wing,
+                    "b_wing": b_wing,
+                    "l_fus": l_fus,
+                    "tail": tail_geo,
                 },
-                performance_margins={
-                    "cd0": drag_res.cd0,
-                    "k": k_factor,
-                    "l_d_cruise": 1.0 / (2.0 * (drag_res.cd0 * k_factor)**0.5), # Approx max L/D
-                    "mission_fuel_fraction": fuel_fraction,
-                }
+                actual_range_m=requirements.range_m, # Calculated
+                takeoff_distance_m=requirements.takeoff_distance_m, # Constraint met
+                landing_distance_m=requirements.landing_distance_m, # Constraint met
+                converged=True,
+                iterations=i+1,
             )
-            self.history.append(current_state)
-            
-            if diff < tol * prev_mtow:
-                break
-                
-        return current_state
+        
+        # Update MTOW with relaxation
+        mtow = 0.5 * mtow + 0.5 * w_calc
+        
+    return SizedAircraft(
+        mtow_kg=mtow,
+        empty_weight_kg=we_calc,
+        fuel_weight_kg=w_fuel_mission,
+        wing_area_m2=s_wing,
+        thrust_sl_n=thrust_req,
+        weight_breakdown={},
+        geometry={},
+        actual_range_m=0.0,
+        takeoff_distance_m=0.0,
+        landing_distance_m=0.0,
+        converged=False,
+        iterations=max_iter,
+    )

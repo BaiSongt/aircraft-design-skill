@@ -94,46 +94,53 @@ def landing_distance_m(
     v_a = v_factor_approach * vs
     v_td = v_factor_touchdown * vs
     
-    # 1. Air Segment (Flare)
-    # Approx: S_air = (Va^2 - Vtd^2) / (2g * n_flare_avg?) + linear distance?
-    # Simple approx: S_air ~ R * sin(gamma)? 
-    # Or standard estimation: S_air ~ 0.5 * Va * t_flare?
-    # Let's use a simplified energy/obstacle approach often used in Class I:
-    # S_air = (ObsHeight - 0) / tan(gamma_eff)? 
-    # Usually S_air is approx 300-500m for transport, less for fighters.
-    # Raymer/Roskam approximation: S_air ~ 300-450m?
-    # Or calculate from energy bleed.
-    # Let's use a simplified geometric approach assuming ~3 deg glide slope (gamma ~ 0.052)
-    # S_air_approach = obstacle_height_m / 0.052  (~300m for 15m height)
-    # But flare consumes distance too.
-    # Theory doesn't give explicit S_air formula, just says "from 15m...".
-    # We will use a standard Class I approximation for S_air based on obstacle height and glide.
+    # 1. Air Segment (Descent from Obstacle)
+    # Theory 05 / Raymer / Nicolai Geometric Approximation
+    # S_air = h_obs / tan(gamma)
+    # This assumes a steady glide from obstacle height to touchdown.
+    # While real landings flare, this geometric approximation is standard for Class I 
+    # when detailed flare dynamics are not simulated.
+    # Note: Theory 05 implies "Descent segment and landing roll segment".
     
     if approach_angle_deg <= 0.0:
-         # Fallback to default if invalid
-         gamma = radians(3.0)
+        gamma = radians(3.0)  # Standard default
     else:
-         gamma = radians(approach_angle_deg)
-         
+        gamma = radians(approach_angle_deg)
+        
+    # Prevent division by zero or negative angles
+    if gamma < 1e-4:
+        gamma = radians(3.0)
+
     s_air = obstacle_height_m / tan(gamma)
     
-    # 2. Ground Roll (Braking)
-    # V_start_brake = VTD
-    v_td_ground = max(1.0, v_td - headwind_m_s)
+    # 2. Ground Roll Segment
+    # V_touchdown to 0
+    # a_decel = g * (mu_braking + aerodynamic_drag_effects - idle_thrust_effects)
+    # For Class I, we use the effective friction coefficient approach.
+    # Theory 05 suggests mu=0.4 for braking on concrete.
     
-    # Decel = mu * g (assuming Lift~0 after spoil, Thrust~0)
-    # If reversers/spoilers, decel is higher. mu=0.4 implies heavy braking.
-    if decel_g is not None:
-        eff_decel_g = decel_g
-    else:
-        eff_decel_g = mu_braking + runway_slope
+    eff_mu = mu_braking
+    if decel_g is not None and decel_g > 0.0:
+        eff_mu = decel_g # Treat decel_g as the effective braking coefficient (a/g)
         
-    if eff_decel_g <= 1e-6:
-        return float("inf")
+    # If eff_mu is too small, distance explodes.
+    if eff_mu < 0.01:
+        eff_mu = 0.01
         
-    s_ground = ground_factor * (v_td_ground**2) / (2.0 * CONST.g0_m_s2 * eff_decel_g)
+    a_decel = CONST.g0_m_s2 * eff_mu
     
-    return s_air + s_ground
+    # S_ground = V_td^2 / (2 * a)
+    # Assuming V_touchdown is ground speed (headwind handling below)
+    
+    v_td_ground = max(0.0, v_td - headwind_m_s)
+    s_ground = (v_td_ground * v_td_ground) / (2.0 * a_decel)
+    
+    # Apply ground factor (safety margin) to the total or just ground?
+    # Usually applied to the calculated total distance.
+    # Theory 05 doesn't explicitly state a factor, but standard is 1.67 (FAR 25) or similar.
+    # The default input ground_factor=1.3 is reasonable for military/Class I.
+    
+    return ground_factor * (s_air + s_ground)
 
 
 def takeoff_distance_over_obstacle_m(
@@ -143,15 +150,19 @@ def takeoff_distance_over_obstacle_m(
     cl_max_takeoff: float,
     thrust_to_weight: float,
     obstacle_height_m: float = 15.24,
-    climb_gradient: float = 0.024,
+    climb_gradient: float | None = None,
     mu_roll: float = 0.025,
     runway_slope: float = 0.0,
     headwind_m_s: float = 0.0,
     v_factor: float = 1.12,
     ground_factor: float = 1.15,
+    takeoff_l_d: float = 10.0,
 ) -> float:
     """
     Calculate total takeoff distance over obstacle.
+    
+    If climb_gradient is None, it is estimated from T/W and L/D:
+    gamma = T/W - 1/(L/D) - slope
     """
     s_g = takeoff_ground_roll_m(
         wing_loading_pa=wing_loading_pa,
@@ -168,14 +179,21 @@ def takeoff_distance_over_obstacle_m(
         return s_g
     
     # S_air = h_obs / gamma
-    # Gamma should be calculated at V2?
-    # If climb_gradient provided, use it.
-    if climb_gradient <= 0.0:
+    if climb_gradient is not None:
+        gamma = climb_gradient
+    else:
+        # Estimate gamma from T/W
+        # gamma = (T - D) / W = T/W - 1/(L/D)
+        # Conservative estimate for L/D in takeoff config (gear down, flaps)
+        gamma = thrust_to_weight - (1.0 / takeoff_l_d)
+        
+    if gamma <= 0.001:
+        # Cannot climb
         return float("inf")
         
     # Arc distance for transition + climb?
     # Simple approx: S_air = h / gamma
-    s_air = obstacle_height_m / climb_gradient
+    s_air = obstacle_height_m / gamma
     
     return s_g + s_air
 
@@ -320,7 +338,7 @@ def required_clmax_for_takeoff_distance_numeric(
     rho_kg_m3: float,
     thrust_to_weight: float,
     obstacle_height_m: float = 15.24,
-    climb_gradient: float = 0.024,
+    climb_gradient: float | None = None,
     mu_roll: float = 0.025,
     runway_slope: float = 0.0,
     headwind_m_s: float = 0.0,
@@ -409,7 +427,7 @@ def required_thrust_to_weight_for_takeoff_distance_numeric(
     rho_kg_m3: float,
     cl_max_takeoff: float,
     obstacle_height_m: float = 15.24,
-    climb_gradient: float = 0.024,
+    climb_gradient: float | None = None,
     mu_roll: float = 0.025,
     runway_slope: float = 0.0,
     headwind_m_s: float = 0.0,

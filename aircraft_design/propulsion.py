@@ -20,7 +20,8 @@ class PropulsionModel:
     jet_mach_factor: float = 0.0  # T = T_sl * sigma^n * (1 + factor * M)
     jet_model_method: str = "simple"  # "simple" or "mattingly_low_bypass"
     bypass_ratio: float = 0.3
-
+    mil_to_ab_sfc_ratio: float = 2.5  # Ratio of AB SFC to Mil SFC (SL)
+    tsfc_ab_1_s: float | None = None # Explicit AB SFC if provided
 
 def build_propulsion_model(
     propulsion_in: dict, *, mtow_kg: float | None = None, thrust_to_weight: float | None = None
@@ -39,8 +40,15 @@ def build_propulsion_model(
     
     jet_model_method = propulsion_in.get("jet_model_method", "simple")
     bypass_ratio = float(propulsion_in.get("bypass_ratio", 0.3))
-
+    
     tsfc_1_s = propulsion_in.get("tsfc_1_s", None)
+    tsfc_ab_1_s = propulsion_in.get("tsfc_ab_1_s", None)
+    
+    # If explicit AB SFC provided, calculate/override ratio or just store it
+    mil_to_ab_sfc_ratio = float(propulsion_in.get("mil_to_ab_sfc_ratio", 2.5))
+    if tsfc_1_s is not None and tsfc_ab_1_s is not None and tsfc_1_s > 0:
+        mil_to_ab_sfc_ratio = tsfc_ab_1_s / tsfc_1_s
+
     sfc_1_s = propulsion_in.get("sfc_1_s", None)
     eta_prop = propulsion_in.get("prop_efficiency", None)
 
@@ -57,6 +65,8 @@ def build_propulsion_model(
         jet_mach_factor=jet_mach_factor,
         jet_model_method=jet_model_method,
         bypass_ratio=bypass_ratio,
+        mil_to_ab_sfc_ratio=mil_to_ab_sfc_ratio,
+        tsfc_ab_1_s=tsfc_ab_1_s,
     )
 
 
@@ -177,14 +187,15 @@ def _calculate_mattingly_sfc_factor(
     # Mattingly low-bypass turbofan SFC model
     # Reference: docs/theory/04_engine_characteristics.md
     
-    m_minus_1 = mach - 1.0
+    # We use M instead of (M-1) to ensure factor=1.0 at M=0 (Static)
+    m_val = mach
     
     if afterburner:
-        # SFC_ab = SFC_SL * (1 + 0.5(M-1)) * θ^0.5
-        factor = (1.0 + 0.5 * m_minus_1) * (theta**0.5)
+        # SFC_ab = SFC_SL * (1 + 0.5M) * θ^0.5
+        factor = (1.0 + 0.5 * m_val) * (theta**0.5)
     else:
-        # SFC_mil = SFC_SL * (1 - 0.3(M-1) + 0.1(M-1)^2) * θ^0.5
-        factor = (1.0 - 0.3 * m_minus_1 + 0.1 * (m_minus_1**2)) * (theta**0.5)
+        # SFC_mil = SFC_SL * (1 - 0.3M + 0.1M^2) * θ^0.5
+        factor = (1.0 - 0.3 * m_val + 0.1 * (m_val**2)) * (theta**0.5)
         
     return factor
 
@@ -196,34 +207,38 @@ def fuel_flow_n_s(model: PropulsionModel, *, thrust_n: float, shaft_power_w: flo
         
         sfc = model.tsfc_1_s
         
-        # Calculate throttle setting for SFC correction
-        # We need available thrust at this condition
-        try:
-            t_avail = thrust_available_n(model, altitude_m=altitude_m, speed_m_s=speed_m_s, isa_delta_c=isa_delta_c, rating="mto")
-            throttle = min(1.0, max(0.0, thrust_n / t_avail)) if t_avail > 1e-6 else 1.0
-        except Exception:
-            # Fallback if thrust calculation fails or circular dependency (though unlikely here)
-            throttle = 1.0
-
         if model.jet_model_method == "mattingly_low_bypass":
-            # Adjust SFC based on conditions
+            # Mattingly Model with AB logic
             atm = isa_tropopause(altitude_m, delta_t_k=float(isa_delta_c))
             mach = speed_m_s / atm.a_m_s
             theta = atm.t_k / 288.15
             
-            # Use Mattingly SFC factor for Mach/Altitude
-            factor = _calculate_mattingly_sfc_factor(mach, theta, afterburner=False)
-            sfc = model.tsfc_1_s * factor
+            # Calculate Mil Thrust Available to determine if AB is needed
+            # We assume mct_to_mto_ratio represents Mil/AB ratio if AB is present
+            try:
+                t_mil_avail = thrust_available_n(
+                    model, altitude_m=altitude_m, speed_m_s=speed_m_s, isa_delta_c=isa_delta_c, rating="mct"
+                )
+            except Exception:
+                t_mil_avail = 1.0  # Safe fallback
             
-            # Apply partial power correction (approximate)
-            # SFC typically increases at lower throttle settings
-            # Using a simple linear approximation or the heuristic: SFC ~ SFC_ref * (1 + 0.2 * (1 - throttle))?
-            # calculate_turbofan_sfc uses (1 + 0.5 * (1 - throttle)) which is quite strong.
-            # Mattingly Eq 6.22 (Ed 2) suggests for non-AB:
-            # C/C_max ~ ... complex function of T/T_max.
-            # Let's use a milder correction for low-bypass:
-            sfc_throttle_factor = 1.0 + 0.2 * (1.0 - throttle)
-            sfc *= sfc_throttle_factor
+            # Check if we need AB
+            if thrust_n > t_mil_avail and t_mil_avail > 1.0:
+                 # AB Regime
+                 # Use AB SFC factor
+                 factor = _calculate_mattingly_sfc_factor(mach, theta, afterburner=True)
+                 sfc = model.tsfc_1_s * factor * model.mil_to_ab_sfc_ratio
+                 # We don't apply throttle correction for AB in this simple model
+            else:
+                 # Mil Regime
+                 throttle = min(1.0, max(0.0, thrust_n / t_mil_avail)) if t_mil_avail > 1.0 else 1.0
+                 factor = _calculate_mattingly_sfc_factor(mach, theta, afterburner=False)
+                 sfc = model.tsfc_1_s * factor
+                 
+                 # Throttle correction for Mil (partial power)
+                 sfc_throttle_factor = 1.0 + 0.2 * (1.0 - throttle)
+                 sfc *= sfc_throttle_factor
+
             
         return sfc * max(0.0, thrust_n) * CONST.g0_m_s2
         
