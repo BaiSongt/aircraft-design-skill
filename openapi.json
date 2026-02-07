@@ -1,0 +1,360 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Fixed Wing Aircraft Design Skill API",
+    "description": "API for Fixed Wing Aircraft Class I Sizing Loop. Use this to size an aircraft based on mission requirements.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Read Root",
+        "operationId": "read_root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sizing/run": {
+      "post": {
+        "summary": "Run Sizing Loop",
+        "operationId": "run_sizing_loop_sizing_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SizingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SizingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DesignRequirementsModel": {
+        "properties": {
+          "range_m": {
+            "type": "number",
+            "title": "Range M",
+            "description": "Design range in meters"
+          },
+          "payload_kg": {
+            "type": "number",
+            "title": "Payload Kg",
+            "description": "Payload weight in kg"
+          },
+          "cruise_mach": {
+            "type": "number",
+            "title": "Cruise Mach",
+            "description": "Cruise Mach number"
+          },
+          "cruise_altitude_m": {
+            "type": "number",
+            "title": "Cruise Altitude M",
+            "description": "Cruise altitude in meters"
+          },
+          "takeoff_distance_m": {
+            "type": "number",
+            "title": "Takeoff Distance M",
+            "description": "Takeoff distance constraint in meters"
+          },
+          "landing_distance_m": {
+            "type": "number",
+            "title": "Landing Distance M",
+            "description": "Landing distance constraint in meters"
+          },
+          "stall_speed_m_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stall Speed M S",
+            "description": "Stall speed constraint in m/s"
+          },
+          "max_load_factor": {
+            "type": "number",
+            "title": "Max Load Factor",
+            "description": "Maximum load factor (n)",
+            "default": 7.33
+          },
+          "sustained_turn_g": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sustained Turn G",
+            "description": "Sustained turn load factor (g)"
+          },
+          "service_ceiling_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Ceiling M",
+            "description": "Service ceiling in meters"
+          },
+          "isa_delta_c": {
+            "type": "number",
+            "title": "Isa Delta C",
+            "description": "ISA deviation in Celsius",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "range_m",
+          "payload_kg",
+          "cruise_mach",
+          "cruise_altitude_m",
+          "takeoff_distance_m",
+          "landing_distance_m"
+        ],
+        "title": "DesignRequirementsModel"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InitialGuessModel": {
+        "properties": {
+          "mtow_kg": {
+            "type": "number",
+            "title": "Mtow Kg",
+            "description": "Initial guess for Maximum Takeoff Weight (kg)"
+          },
+          "wing_loading_pa": {
+            "type": "number",
+            "title": "Wing Loading Pa",
+            "description": "Initial guess for Wing Loading (Pa)"
+          },
+          "thrust_to_weight": {
+            "type": "number",
+            "title": "Thrust To Weight",
+            "description": "Initial guess for Thrust-to-Weight ratio"
+          },
+          "aspect_ratio": {
+            "type": "number",
+            "title": "Aspect Ratio",
+            "description": "Wing Aspect Ratio",
+            "default": 3.5
+          },
+          "sweep_deg": {
+            "type": "number",
+            "title": "Sweep Deg",
+            "description": "Wing Sweep Angle in degrees",
+            "default": 40.0
+          },
+          "taper_ratio": {
+            "type": "number",
+            "title": "Taper Ratio",
+            "description": "Wing Taper Ratio",
+            "default": 0.3
+          },
+          "thickness_ratio": {
+            "type": "number",
+            "title": "Thickness Ratio",
+            "description": "Wing Thickness Ratio",
+            "default": 0.06
+          },
+          "cd0": {
+            "type": "number",
+            "title": "Cd0",
+            "description": "Zero-lift drag coefficient",
+            "default": 0.02
+          },
+          "oswald_e": {
+            "type": "number",
+            "title": "Oswald E",
+            "description": "Oswald efficiency factor",
+            "default": 0.8
+          },
+          "sfc_cruise_1_s": {
+            "type": "number",
+            "title": "Sfc Cruise 1 S",
+            "description": "Specific Fuel Consumption in 1/s",
+            "default": 2.4e-05
+          }
+        },
+        "type": "object",
+        "required": [
+          "mtow_kg",
+          "wing_loading_pa",
+          "thrust_to_weight"
+        ],
+        "title": "InitialGuessModel"
+      },
+      "SizingRequest": {
+        "properties": {
+          "requirements": {
+            "$ref": "#/components/schemas/DesignRequirementsModel"
+          },
+          "initial_guess": {
+            "$ref": "#/components/schemas/InitialGuessModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirements",
+          "initial_guess"
+        ],
+        "title": "SizingRequest"
+      },
+      "SizingResponse": {
+        "properties": {
+          "converged": {
+            "type": "boolean",
+            "title": "Converged"
+          },
+          "mtow_kg": {
+            "type": "number",
+            "title": "Mtow Kg"
+          },
+          "empty_weight_kg": {
+            "type": "number",
+            "title": "Empty Weight Kg"
+          },
+          "fuel_weight_kg": {
+            "type": "number",
+            "title": "Fuel Weight Kg"
+          },
+          "wing_area_m2": {
+            "type": "number",
+            "title": "Wing Area M2"
+          },
+          "thrust_sl_n": {
+            "type": "number",
+            "title": "Thrust Sl N"
+          },
+          "geometry": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Geometry"
+          },
+          "weight_breakdown": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Weight Breakdown"
+          },
+          "performance": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Performance"
+          },
+          "iterations": {
+            "type": "integer",
+            "title": "Iterations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "converged",
+          "mtow_kg",
+          "empty_weight_kg",
+          "fuel_weight_kg",
+          "wing_area_m2",
+          "thrust_sl_n",
+          "geometry",
+          "weight_breakdown",
+          "performance",
+          "iterations"
+        ],
+        "title": "SizingResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
