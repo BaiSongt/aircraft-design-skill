@@ -88,12 +88,13 @@ def mission_fuel_breakdown(
     thrust_climb_total = d_climb + w_n * gamma_climb
 
     if propulsion.type == "jet":
-        # Check available thrust at altitude?
-        # Assuming engine sized to provide this.
-        # We need SFC at altitude.
-        # But fuel_flow_n_s uses model which might not have altitude correction for SFC (TSFC usually constant or rises slightly).
-        # We use standard flow.
-        ff = fuel_flow_n_s(propulsion, thrust_n=thrust_climb_total)
+        ff = fuel_flow_n_s(
+            propulsion, 
+            thrust_n=thrust_climb_total, 
+            altitude_m=avg_climb_alt, 
+            speed_m_s=climb_v,
+            isa_delta_c=isa_delta_c
+        )
         climb_fuel_fraction = _fuel_fraction_from_weight_flow(
             w_initial_n=w_n, fuel_weight_flow_n_s=ff, duration_s=climb_time
         )
@@ -140,7 +141,13 @@ def mission_fuel_breakdown(
     )
     cruise_time = max(0.0, cruise_range / cruise_v)
     if propulsion.type == "jet":
-        ff = fuel_flow_n_s(propulsion, thrust_n=d_cruise)
+        ff = fuel_flow_n_s(
+            propulsion, 
+            thrust_n=d_cruise, 
+            altitude_m=cruise_alt, 
+            speed_m_s=cruise_v,
+            isa_delta_c=isa_delta_c
+        )
         cruise_fuel_fraction = _fuel_fraction_from_weight_flow(
             w_initial_n=w_n, fuel_weight_flow_n_s=ff, duration_s=cruise_time
         )
@@ -181,7 +188,13 @@ def mission_fuel_breakdown(
             polar=polar,
         )
         if propulsion.type == "jet":
-            ff = fuel_flow_n_s(propulsion, thrust_n=d_loiter)
+            ff = fuel_flow_n_s(
+                propulsion, 
+                thrust_n=d_loiter, 
+                altitude_m=cruise_alt, 
+                speed_m_s=loiter_speed_m_s,
+                isa_delta_c=isa_delta_c
+            )
             loiter_fuel_fraction = _fuel_fraction_from_weight_flow(
                 w_initial_n=w_n, fuel_weight_flow_n_s=ff, duration_s=loiter_time_s
             )

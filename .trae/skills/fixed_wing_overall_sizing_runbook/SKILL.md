@@ -98,6 +98,7 @@ python -c "import PySide6, numpy, scipy, pyvista, pyvistaqt; import PySide6.QtWe
     "payload_kg": 1000.0,
     "cruise_mach": 0.8,
     "cruise_altitude_m": 11000.0,
+    "assumed_climb_rate_m_s": 50.0,
     "takeoff_distance_m": 1000.0,
     "landing_distance_m": 1000.0,
     "max_load_factor": 7.33,

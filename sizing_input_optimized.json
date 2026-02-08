@@ -15,13 +15,13 @@
   "initial_guess": {
     "thrust_to_weight": 0.8,
     "wing_loading_pa": 3500.0,
-    "aspect_ratio": 3.0,
-    "sweep_deg": 45.0,
-    "taper_ratio": 0.3,
-    "thickness_ratio": 0.08,
+    "aspect_ratio": 2.5,
+    "sweep_deg": 60.0,
+    "taper_ratio": 0.2,
+    "thickness_ratio": 0.05,
     "sfc_cruise_1_s": 0.000222,
-    "cd0": 0.02,
-    "oswald_e": 0.8
+    "cd0": 0.018,
+    "oswald_e": 0.7
   },
   "solver_options": {
     "max_iter": 300,

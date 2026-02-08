@@ -175,7 +175,16 @@ def main():
 
         print("Starting Sizing Loop...")
 
-        result = sizing_loop(req, guess, enable_visualization=not args.no_viz, visualizer=viz)
+        solver_options = data.get("solver_options", {})
+        
+        result = sizing_loop(
+            req, 
+            guess, 
+            enable_visualization=not args.no_viz, 
+            visualizer=viz,
+            tolerance=solver_options.get("tolerance", 1e-3),
+            max_iter=solver_options.get("max_iter", 50)
+        )
 
         # Save JSON Data
         output_data = {
@@ -397,11 +406,19 @@ def main():
             try:
                 atm_cruise = isa_tropopause(req.cruise_altitude_m)
                 v_cruise = req.cruise_mach * atm_cruise.a_m_s
+                
+                # Calculate actual CL at cruise (Start of cruise, W ~= MTOW)
+                # q = 0.5 * rho * V^2
+                q_cruise = 0.5 * atm_cruise.rho_kg_m3 * v_cruise**2
+                # CL = W / (q * S)
+                w_cruise_n = result.mtow_kg * CONST.g0_m_s2
+                cl_cruise_calc = w_cruise_n / max(q_cruise * result.wing_area_m2, 1e-6)
+                
                 design_input = {
                     "cruise_altitude_m": req.cruise_altitude_m,
                     "cruise_speed_m_s": v_cruise,
                     "mtow_kg": result.mtow_kg,
-                    "cl_cruise": 0.6,
+                    "cl_cruise": cl_cruise_calc,
                 }
                 sea_level = isa_tropopause(0.0)
                 wing_loading_pa = result.mtow_kg * CONST.g0_m_s2 / max(result.wing_area_m2, 1e-6)
@@ -412,6 +429,7 @@ def main():
                     "cruise_altitude_m": req.cruise_altitude_m,
                     "cruise_speed_m_s": v_cruise,
                     "v_stall_m_s": v_stall_m_s,
+                    "assumed_climb_rate_m_s": req.assumed_climb_rate_m_s if hasattr(req, "assumed_climb_rate_m_s") else 50.0,
                     "reserve_fraction": 0.06,
                     "segments": [
                         {"type": "taxi", "time_s": 600},

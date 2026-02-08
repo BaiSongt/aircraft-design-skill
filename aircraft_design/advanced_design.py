@@ -5,10 +5,8 @@ from dataclasses import dataclass
 from .aero_drag_buildup import (
     GeometryAssumptions,
     estimate_cd0_drag_buildup,
-    calculate_wave_drag,
-    calculate_compressibility_drag,
-    calculate_induced_drag,
 )
+from .aero_lift_slope import calculate_lift_induced_drag_factor
 from .constraints import AeroPolar
 from .propulsion import (
     PropulsionModel,
@@ -134,53 +132,47 @@ def execute_stage2_aero(
             tail_area_ratio=0.5,
         )
 
+    atm = isa_tropopause(cruise_altitude_m)
+    mach = cruise_speed_m_s / atm.a_m_s
+
     drag_result = estimate_cd0_drag_buildup(
-        cruise_altitude_m=cruise_altitude_m,
-        cruise_speed_m_s=cruise_speed_m_s,
+        geometry=assumptions,
         s_ref_m2=s_ref_m2,
-        b_m=b_m,
-        cbar_m=cbar_m,
-        assumptions=assumptions,
-    )
-
-    mach = drag_result.breakdown["mach"]
-
-    cd_wave = calculate_wave_drag(
         mach=mach,
-        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
-        thickness_ratio=wing_t_c,
-        aspect_ratio=aspect_ratio,
+        altitude_m=cruise_altitude_m,
+        l_char_fuselage_m=assumptions.fuselage_length_m,
+        l_char_wing_m=cbar_m,
+        l_char_tail_m=cbar_m,
     )
 
-    cd_comp = calculate_compressibility_drag(
-        mach=mach,
-        mach_crit=mach_crit,
-        mach_dd=mach_dd,
-        cd0_subsonic=drag_result.cd0,
-        cd0_supersonic=drag_result.cd0 + cd_wave,
-    )
+    # Wave drag is already included in drag_result.cd0 if calculated by buildup
+    cd_wave = drag_result.wave_drag_cd
+    cd_comp = 0.0  # Compressibility/Divergence not separately modeled yet
 
-    cd_i = calculate_induced_drag(
-        cl=cl_cruise,
+    k = calculate_lift_induced_drag_factor(
         aspect_ratio=aspect_ratio,
         taper_ratio=taper_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
     )
+    cd_i = k * cl_cruise**2
 
-    cd_total = drag_result.cd0 + cd_wave + cd_comp + cd_i
+    cd_total = drag_result.cd0 + cd_i
+
+    # Ensure reynolds_numbers is a dict for compatibility
+    reynolds_numbers = {
+        "fuselage": drag_result.reynolds_number_fuselage,
+        "wing": drag_result.reynolds_number_wing,
+    }
 
     return Stage2AeroResult(
         cd0=drag_result.cd0,
-        cd0_breakdown=drag_result.breakdown,
+        cd0_breakdown={c.name: c.cd0_component for c in drag_result.breakdown},
         wave_drag=cd_wave,
         compressibility_drag=cd_comp,
         induced_drag=cd_i,
         cd_total=cd_total,
         mach=mach,
-        reynolds_numbers={
-            "fuselage": drag_result.breakdown.get("re_fuselage", 0),
-            "wing": drag_result.breakdown.get("re_wing", 0),
-        },
+        reynolds_numbers=reynolds_numbers,
     )
 
 
