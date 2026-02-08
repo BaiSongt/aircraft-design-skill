@@ -1,5 +1,6 @@
 import argparse
 import sys
+import io
 import socket
 import json
 import struct
@@ -18,6 +19,7 @@ from aircraft_design.report_generator_extended import ReportGeneratorExtended
 from aircraft_design.visualization_static import StaticPlotter
 from aircraft_design.chart_data_generator import ChartDataGenerator
 from aircraft_design.visualization_interactive import InteractivePlotter, plot_payload_range, plot_weight_breakdown
+from aircraft_design.visualization_3d import build_mesh_parts_from_geometry, generate_three_view_html, mesh_to_obj
 from aircraft_design.geometry_detailed import geometry_detailed_from_inputs
 from aircraft_design.openvsp_bridge import write_openvsp_script
 from aircraft_design.visualization_advanced import AdvancedVisualizer
@@ -29,6 +31,26 @@ from aircraft_design.geometry_constraints import GeometryConstraintChecker
 from aircraft_design.geometry_modeling import parametric_to_aircraft_geometry
 from aircraft_design.vspaero_interface import run_vspaero_analysis
 import shutil
+
+
+class TeeStream(io.TextIOBase):
+    def __init__(self, primary, secondary):
+        self.primary = primary
+        self.secondary = secondary
+
+    def write(self, s):
+        self.primary.write(s)
+        self.primary.flush()
+        self.secondary.write(s)
+        self.secondary.flush()
+        return len(s)
+
+    def flush(self):
+        self.primary.flush()
+        self.secondary.flush()
+
+    def isatty(self):
+        return self.primary.isatty()
 
 
 def send_report_path_to_gui(path: Path):
@@ -69,6 +91,9 @@ def main():
     parser.add_argument("--no-viz", action="store_true", help="Disable real-time visualization")
 
     args = parser.parse_args()
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    log_file = None
 
     if not args.input_file.exists():
         print(f"Error: Input file {args.input_file} not found.")
@@ -98,6 +123,11 @@ def main():
         # Create output directory
         run_dir = setup_output_directory(args.output_dir, args.project_name)
         print(f"Output directory created: {run_dir}")
+        log_path = run_dir / "run.log"
+        log_file = open(log_path, "a", encoding="utf-8")
+        sys.stdout = TeeStream(original_stdout, log_file)
+        sys.stderr = TeeStream(original_stderr, log_file)
+        print(f"Log file: {log_path}")
 
         with open(args.input_file, "r") as f:
             data = json.load(f)
@@ -193,6 +223,24 @@ def main():
 
             detailed_geom = geometry_detailed_from_inputs(inputs_for_geom, result)
             result.geometry_detailed = detailed_geom  # Attach to result if needed
+
+            try:
+                mesh_data = detailed_geom.generate_mesh()
+                mesh_json_path = run_dir / "geometry_mesh.json"
+                with open(mesh_json_path, "w", encoding="utf-8") as f:
+                    json.dump(mesh_data, f, ensure_ascii=False)
+                html_path = run_dir / "geometry_3d.html"
+                generate_three_view_html(mesh_data, str(html_path))
+                mesh_parts = build_mesh_parts_from_geometry(mesh_data)
+                if mesh_parts:
+                    obj_path = run_dir / "geometry.obj"
+                    with open(obj_path, "w", encoding="utf-8") as f:
+                        f.write(mesh_to_obj(mesh_parts))
+                    print(f"3D model OBJ saved to {obj_path}")
+                print(f"3D mesh JSON saved to {mesh_json_path}")
+                print(f"3D HTML preview saved to {html_path}")
+            except Exception as e:
+                print(f"3D model export failed: {e}")
 
             # 2. Chart Data Generation
             chart_gen = ChartDataGenerator(result, req)
@@ -475,6 +523,12 @@ def main():
 
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        if log_file:
+            log_file.flush()
+            log_file.close()
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
 
 if __name__ == "__main__":

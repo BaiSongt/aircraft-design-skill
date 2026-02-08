@@ -82,7 +82,7 @@ source venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
-python -c "import PySide6, pyvista, pyvistaqt, numpy, scipy"
+python -c "import PySide6, numpy, scipy, pyvista, pyvistaqt; import PySide6.QtWebEngineWidgets"
 ```
 
 若依赖检查通过，继续后续步骤；如有错误，先修复依赖问题。
