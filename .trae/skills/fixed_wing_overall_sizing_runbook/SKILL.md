@@ -129,9 +129,11 @@ python -c "import PySide6, numpy, scipy, pyvista, pyvistaqt; import PySide6.QtWe
 **同时启动服务与窗口（默认，必须使用）**：
 在单独终端中执行以下命令（会同时启动服务与 GUI 窗口）：
 
+启动 GUI（必要，除非显示错误）：
+
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 -m aircraft_design.gui.server
+python -m aircraft_design.gui.server
 ```
 
 **仅启动服务（禁止单独使用）**：

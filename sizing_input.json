@@ -8,8 +8,7 @@
     "landing_distance_m": 1000.0,
     "max_load_factor": 7.33,
     "sustained_turn_g": 2.0,
-    "service_ceiling_m": 2000.0,
-    "mtow_limit_kg": 5000.0
+    "service_ceiling_m": 2000.0
   },
   "initial_guess": {
     "thrust_to_weight": 0.6,
