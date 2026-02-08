@@ -1,6 +1,8 @@
 import argparse
 import sys
 import io
+import shutil
+import os
 import socket
 import json
 import struct
@@ -41,13 +43,21 @@ class TeeStream(io.TextIOBase):
     def write(self, s):
         self.primary.write(s)
         self.primary.flush()
-        self.secondary.write(s)
-        self.secondary.flush()
+        if not self.secondary.closed:
+            try:
+                self.secondary.write(s)
+                self.secondary.flush()
+            except ValueError:
+                pass
         return len(s)
 
     def flush(self):
         self.primary.flush()
-        self.secondary.flush()
+        if not self.secondary.closed:
+            try:
+                self.secondary.flush()
+            except ValueError:
+                pass
 
     def isatty(self):
         return self.primary.isatty()
@@ -229,8 +239,24 @@ def main():
                 mesh_json_path = run_dir / "geometry_mesh.json"
                 with open(mesh_json_path, "w", encoding="utf-8") as f:
                     json.dump(mesh_data, f, ensure_ascii=False)
+                
+                # Copy assets for local viewing
+                source_assets = Path(__file__).parent.parent / "assets"
+                dest_assets = run_dir / "assets"
+                if source_assets.exists():
+                    if dest_assets.exists():
+                        shutil.rmtree(dest_assets)
+                    shutil.copytree(source_assets, dest_assets)
+                
+                resource_config = {
+                    "prefer_local": True,
+                    "local_base_url": "assets",
+                    "cdn_base_url": "https://unpkg.com/three@0.147.0",
+                    "use_unminified": True
+                }
+
                 html_path = run_dir / "geometry_3d.html"
-                generate_three_view_html(mesh_data, str(html_path))
+                generate_three_view_html(mesh_data, str(html_path), resource_config=resource_config)
                 mesh_parts = build_mesh_parts_from_geometry(mesh_data)
                 if mesh_parts:
                     obj_path = run_dir / "geometry.obj"

@@ -17,12 +17,20 @@ import csv
 import queue
 import time
 import importlib
+import os
+from pathlib import Path
 from .widgets.convergence_plot import ConvergencePlot
 from .widgets.constraint_plot import ConstraintPlot
 from .widgets.payload_range_plot import PayloadRangePlot
 
 from .widgets.report_gallery import ReportGallery
-from ..visualization_3d import render_three_view_html_from_geometry
+from ..visualization_3d import (
+    build_mesh_parts_from_geometry,
+    mesh_to_obj,
+    parse_obj_to_parts,
+    render_three_view_html_from_geometry,
+    render_three_view_html_from_parts,
+)
 from ..geometry_shape import geometry_shape_from_inputs
 
 SKY_PRESETS = {
@@ -31,6 +39,16 @@ SKY_PRESETS = {
     "深蓝": "linear-gradient(180deg, #0f172a 0%, #1e3a8a 55%, #0b1220 100%)",
     "浅灰": "linear-gradient(180deg, #e2e8f0 0%, #f8fafc 60%, #ffffff 100%)",
 }
+
+RESOURCE_CONFIG = {
+    "prefer_local": True,
+    "local_base_url": "assets",
+    "cdn_base_url": "https://unpkg.com/three@0.147.0",
+    "use_unminified": True,
+}
+
+# Determine project root for reliable asset loading
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _load_webengine_view():
@@ -48,6 +66,7 @@ class Web3DView(QWidget):
         self._available = self._view_class is not None
         self._last_geometry = None
         self._last_update_ts = 0.0
+        self._last_parts = None
         self._min_interval = 0.4
         self._config = {
             "layout": {"columns": [1, 1], "rows": [1, 1]},
@@ -74,35 +93,59 @@ class Web3DView(QWidget):
             if isinstance(self._view, QLabel):
                 self._view.setText("Qt WebEngine 未安装，无法显示 Web 3D 视图")
             return
-        self._view.setHtml(html, QUrl("about:blank"))
+        base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+        self._view.setHtml(html, base_url)
 
     def update_geometry(self, geometry: dict):
         if not geometry:
             return
         self._last_geometry = geometry
+        self._last_parts = None
         if not self._available:
             return
         now = time.monotonic()
         if now - self._last_update_ts < self._min_interval:
             return
         self._last_update_ts = now
-        html = render_three_view_html_from_geometry(geometry, web_config=self._config)
-        self._view.setHtml(html, QUrl("about:blank"))
+        html = render_three_view_html_from_geometry(geometry, resource_config=RESOURCE_CONFIG, web_config=self._config)
+        base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+        self._view.setHtml(html, base_url)
+
+    def update_parts(self, parts: list):
+        if not parts:
+            return
+        self._last_geometry = None
+        self._last_parts = parts
+        if not self._available:
+            return
+        html = render_three_view_html_from_parts(parts, resource_config=RESOURCE_CONFIG, web_config=self._config)
+        base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+        self._view.setHtml(html, base_url)
 
     def reset_view(self):
         if not self._available:
             return
-        if self._last_geometry:
-            html = render_three_view_html_from_geometry(self._last_geometry, web_config=self._config)
-            self._view.setHtml(html, QUrl("about:blank"))
+        if self._last_parts:
+            html = render_three_view_html_from_parts(self._last_parts, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+            self._view.setHtml(html, base_url)
+        elif self._last_geometry:
+            html = render_three_view_html_from_geometry(self._last_geometry, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+            self._view.setHtml(html, base_url)
 
     def update_config(self, config: dict):
         if not isinstance(config, dict):
             return
         self._config.update(config)
-        if self._last_geometry:
-            html = render_three_view_html_from_geometry(self._last_geometry, web_config=self._config)
-            self._view.setHtml(html, QUrl("about:blank"))
+        if self._last_parts:
+            html = render_three_view_html_from_parts(self._last_parts, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+            self._view.setHtml(html, base_url)
+        elif self._last_geometry:
+            html = render_three_view_html_from_geometry(self._last_geometry, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
+            self._view.setHtml(html, base_url)
 
 
 class MainWindow(QMainWindow):
@@ -110,6 +153,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.data_queue = data_queue
         self.command_queue = command_queue
+        self._loaded_obj_parts = None
+        self._last_obj_dir = ""
 
         self.setWindowTitle("Aircraft Design Sizing - Realtime Visualization (PySide6)")
         self.resize(1600, 900)
@@ -149,6 +194,14 @@ class MainWindow(QMainWindow):
         self.btn_demo = QPushButton("加载示例模型")
         self.btn_demo.clicked.connect(self.load_demo_geometry)
         controls_layout.addWidget(self.btn_demo)
+
+        self.btn_import_obj = QPushButton("导入OBJ")
+        self.btn_import_obj.clicked.connect(self.import_obj_model)
+        controls_layout.addWidget(self.btn_import_obj)
+
+        self.btn_export_obj = QPushButton("导出OBJ")
+        self.btn_export_obj.clicked.connect(self.export_obj_model)
+        controls_layout.addWidget(self.btn_export_obj)
 
         self.label_layout = QLabel("布局")
         controls_layout.addWidget(self.label_layout)
@@ -264,8 +317,9 @@ class MainWindow(QMainWindow):
 
     def apply_default_splitter_sizes(self):
         total = max(900, self.width())
-        left = min(320, int(total * 0.22))
-        right = min(320, int(total * 0.22))
+        left = min(350, int(total * 0.25))
+        # Collapse right panel by default to give maximum space to 3D view
+        right = 0 
         center = max(420, total - left - right)
         self.main_splitter.setSizes([left, center, right])
 
@@ -357,7 +411,39 @@ class MainWindow(QMainWindow):
         if not demo:
             return
         self.geometry_data = demo
+        self._loaded_obj_parts = None
         self.web_view.update_geometry(self.geometry_data)
+
+    def import_obj_model(self):
+        path, _ = QFileDialog.getOpenFileName(self, "导入 OBJ 模型", self._last_obj_dir, "OBJ Files (*.obj)")
+        if not path:
+            return
+        parts = parse_obj_to_parts(path)
+        if not parts:
+            self.status_label.setText("OBJ 文件解析失败")
+            return
+        self._loaded_obj_parts = parts
+        self._last_obj_dir = str(Path(path).parent)
+        self.web_view.update_parts(parts)
+        self.status_label.setText(f"已加载 OBJ: {path}")
+
+    def export_obj_model(self):
+        parts = self._loaded_obj_parts
+        if not parts and self.geometry_data:
+            parts = build_mesh_parts_from_geometry(self.geometry_data)
+        if not parts:
+            self.status_label.setText("当前无可导出的模型")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "导出 OBJ 模型", self._last_obj_dir, "OBJ Files (*.obj)")
+        if not path:
+            return
+        if not path.lower().endswith(".obj"):
+            path = f"{path}.obj"
+        obj_text = mesh_to_obj(parts)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(obj_text)
+        self._last_obj_dir = str(Path(path).parent)
+        self.status_label.setText(f"已导出 OBJ: {path}")
 
     @Slot()
     def check_queue(self):
@@ -384,6 +470,7 @@ class MainWindow(QMainWindow):
 
                 if "geometry" in msg:
                     self.geometry_data = msg["geometry"]
+                    self._loaded_obj_parts = None
                     self.web_view.update_geometry(self.geometry_data)
 
         elif msg_type == "constraints":

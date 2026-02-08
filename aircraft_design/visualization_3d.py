@@ -40,9 +40,14 @@ def _three_js_loader_script(resource_config: dict | None, *, include_orbit: bool
         if isinstance(cdn_base_url, str) and cdn_base_url
         else "https://unpkg.com/three@0.160.0"
     )
-    local_three = f"{local_base}/three.min.js" if local_base else ""
+    
+    # Check for unminified option
+    use_unminified = bool(cfg.get("use_unminified", False))
+    three_filename = "three.js" if use_unminified else "three.min.js"
+    
+    local_three = f"{local_base}/{three_filename}" if local_base else ""
     local_orbit = f"{local_base}/OrbitControls.js" if local_base else ""
-    cdn_three = f"{cdn_base}/build/three.min.js"
+    cdn_three = f"{cdn_base}/build/{three_filename}"
     cdn_orbit = f"{cdn_base}/examples/js/controls/OrbitControls.js"
     prefer_flag = "true" if prefer_local and local_base else "false"
     orbit_flag = "true" if include_orbit else "false"
@@ -750,6 +755,25 @@ def render_three_view_html_from_parts(
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"/>
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+        var div = document.createElement("div");
+        div.style.position = "absolute";
+        div.style.top = "10px";
+        div.style.left = "10px";
+        div.style.backgroundColor = "rgba(255, 0, 0, 0.9)";
+        div.style.color = "white";
+        div.style.padding = "10px";
+        div.style.zIndex = "10000";
+        div.style.maxWidth = "90%";
+        div.style.wordWrap = "break-word";
+        div.style.fontFamily = "monospace";
+        div.innerHTML = "<strong>JS Error:</strong> " + msg + "<br>URL: " + url + "<br>Line: " + line;
+        if(document.body) document.body.appendChild(div);
+        else window.addEventListener('DOMContentLoaded', () => document.body.appendChild(div));
+        return false;
+    };
+  </script>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Aircraft Geometry Analysis</title>
   <style>
@@ -1722,18 +1746,123 @@ def mesh_to_obj(parts: list[MeshPart]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def parse_obj_to_parts(path: str) -> list[MeshPart]:
+    parts: list[MeshPart] = []
+    if not isinstance(path, str) or not path:
+        return parts
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except Exception:
+        return parts
+
+    global_verts: list[float] = []
+    objects: list[tuple[str, list[int]]] = []
+    current_name = "object"
+    current_faces: list[int] = []
+
+    def finalize_object():
+        nonlocal current_name, current_faces
+        if current_faces:
+            objects.append((current_name, current_faces))
+        current_faces = []
+
+    for ln in lines:
+        ln = ln.strip()
+        if not ln or ln.startswith("#"):
+            continue
+        parts_str = ln.split()
+        if not parts_str:
+            continue
+
+        k = parts_str[0].lower()
+        if k == "v":
+            try:
+                x, y, z = float(parts_str[1]), float(parts_str[2]), float(parts_str[3])
+                global_verts.extend([x, y, z])
+            except Exception:
+                pass
+        elif k == "o" or k == "g":
+            finalize_object()
+            current_name = " ".join(parts_str[1:]) if len(parts_str) > 1 else "object"
+        elif k == "f":
+            try:
+                poly_verts = []
+                for v_str in parts_str[1:]:
+                    v_idx_raw = int(v_str.split("/")[0])
+                    if v_idx_raw > 0:
+                        v_idx = v_idx_raw - 1
+                    else:
+                        v_idx = (len(global_verts) // 3) + v_idx_raw
+                    poly_verts.append(v_idx)
+                
+                if len(poly_verts) >= 3:
+                    for i in range(1, len(poly_verts) - 1):
+                        current_faces.extend([poly_verts[0], poly_verts[i], poly_verts[i+1]])
+            except Exception:
+                pass
+
+    finalize_object()
+
+    for name, faces in objects:
+        if not faces:
+            continue
+        
+        used_indices = sorted(list(set(faces)))
+        if not used_indices:
+            continue
+            
+        idx_map = {global_idx: local_idx for local_idx, global_idx in enumerate(used_indices)}
+        
+        local_verts = []
+        for global_idx in used_indices:
+            base = global_idx * 3
+            if base + 2 < len(global_verts):
+                local_verts.extend(global_verts[base:base+3])
+            else:
+                local_verts.extend([0.0, 0.0, 0.0])
+                
+        local_indices = [idx_map[idx] for idx in faces]
+        parts.append(MeshPart(name=name, color="#c7d2fe", vertices=local_verts, indices=local_indices))
+
+    return parts
+
+
 def render_geometry_viewer_html(
-    *, parts: list[MeshPart], title: str = "Geometry Viewer", layout: dict | None = None
+    *, parts: list[MeshPart], title: str = "Geometry Viewer", layout: dict | None = None, resource_config: dict | None = None
 ) -> str:
     payload = [{"name": p.name, "color": p.color, "vertices": p.vertices, "indices": p.indices} for p in parts]
     mesh_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     layout_json = json.dumps(
         layout or {"views": ["top", "side", "front", "iso"], "grid": {"rows": 2, "cols": 2}}, ensure_ascii=False
     )
+    rc = resource_config if isinstance(resource_config, dict) else {
+        "prefer_local": True, "local_base_url": "assets", "cdn_base_url": "https://unpkg.com/three@0.147.0"
+    }
+    loader_script = _three_js_loader_script(rc, include_orbit=True)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"/>
+  <script>
+    window.onerror = function(msg, url, line, col, error) {{
+        var div = document.createElement("div");
+        div.style.position = "absolute";
+        div.style.top = "10px";
+        div.style.left = "10px";
+        div.style.backgroundColor = "rgba(255, 0, 0, 0.9)";
+        div.style.color = "white";
+        div.style.padding = "10px";
+        div.style.zIndex = "10000";
+        div.style.maxWidth = "90%";
+        div.style.wordWrap = "break-word";
+        div.style.fontFamily = "monospace";
+        div.innerHTML = "<strong>JS Error:</strong> " + msg + "<br>URL: " + url + "<br>Line: " + line;
+        if(document.body) document.body.appendChild(div);
+        else window.addEventListener('DOMContentLoaded', () => document.body.appendChild(div));
+        return false;
+    }};
+  </script>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>{title}</title>
   <style>
@@ -1767,7 +1896,7 @@ def render_geometry_viewer_html(
       需要启用 JavaScript 才能显示三维预览。
     </div>
   </noscript>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  {loader_script}
   <script>
     const parts = {mesh_json};
     const layout = {layout_json};
