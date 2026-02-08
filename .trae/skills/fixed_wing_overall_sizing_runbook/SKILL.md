@@ -49,17 +49,36 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 
 使用 `Write` 工具创建 `sizing_input.json` 文件。
 
-### 2. 启动 PySide6 可视化服务（必须在设计前启动）
+### 2. 启动 PySide6 可视化服务与窗口
 
-可视化服务必须先启动，Sizing Loop 仅负责连接已有服务并推送数据。
+可视化服务需先启动，Sizing Loop 仅负责连接已有服务并推送数据。
 
-**启动服务**：
+**仅启动服务（推荐分离运行）**：
+在单独终端中执行以下命令：
+
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+python3 -m aircraft_design.gui.server --server-only
+```
+
+**仅启动窗口（服务已运行时使用）**：
+在新终端中执行以下命令：
+
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+python3 -m aircraft_design.gui.server --gui-only
+```
+
+**同时启动服务与窗口（默认行为）**：
 在单独终端中执行以下命令：
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 python3 -m aircraft_design.gui.server
 ```
+
+**如果提示端口已被占用**：
+说明服务已在运行。此时只需执行“仅启动窗口”命令即可。
 
 保持可视化窗口运行，然后再执行设计流程。
 

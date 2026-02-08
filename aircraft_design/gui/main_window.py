@@ -135,6 +135,18 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_queue)
         self.timer.start(100)  # 100ms
+        QTimer.singleShot(0, self.bring_to_front)
+        QTimer.singleShot(500, self.bring_to_front)
+
+    def bring_to_front(self):
+        self.setWindowState(self.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
+        self.showNormal()
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
+        self.show()
 
     @Slot()
     def check_queue(self):
