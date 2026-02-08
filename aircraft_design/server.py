@@ -1,12 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
-from aircraft_design.design_loop_orchestrator import (
-    DesignRequirements,
-    InitialGuess,
-    sizing_loop,
-    SizedAircraft
-)
+from aircraft_design.design_loop_orchestrator import DesignRequirements, InitialGuess, sizing_loop, SizedAircraft
 
 app = FastAPI(
     title="Fixed Wing Aircraft Design Skill API",
@@ -15,6 +10,7 @@ app = FastAPI(
 )
 
 # Pydantic Models for Input/Output
+
 
 class DesignRequirementsModel(BaseModel):
     range_m: float = Field(..., description="Design range in meters")
@@ -29,6 +25,7 @@ class DesignRequirementsModel(BaseModel):
     service_ceiling_m: Optional[float] = Field(None, description="Service ceiling in meters")
     isa_delta_c: float = Field(0.0, description="ISA deviation in Celsius")
 
+
 class InitialGuessModel(BaseModel):
     mtow_kg: float = Field(..., description="Initial guess for Maximum Takeoff Weight (kg)")
     wing_loading_pa: float = Field(..., description="Initial guess for Wing Loading (Pa)")
@@ -41,9 +38,11 @@ class InitialGuessModel(BaseModel):
     oswald_e: float = Field(0.8, description="Oswald efficiency factor")
     sfc_cruise_1_s: float = Field(2.4e-5, description="Specific Fuel Consumption in 1/s")
 
+
 class SizingRequest(BaseModel):
     requirements: DesignRequirementsModel
     initial_guess: InitialGuessModel
+
 
 class SizingResponse(BaseModel):
     converged: bool
@@ -57,9 +56,11 @@ class SizingResponse(BaseModel):
     performance: Dict[str, float]
     iterations: int
 
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Fixed Wing Aircraft Design Skill API. Visit /docs for documentation."}
+
 
 @app.post("/sizing/run", response_model=SizingResponse)
 def run_sizing_loop(request: SizingRequest):
@@ -67,10 +68,10 @@ def run_sizing_loop(request: SizingRequest):
         # Convert Pydantic models to Dataclasses
         req_dc = DesignRequirements(**request.requirements.model_dump())
         guess_dc = InitialGuess(**request.initial_guess.model_dump())
-        
+
         # Run Sizing Loop
         result: SizedAircraft = sizing_loop(req_dc, guess_dc)
-        
+
         # Construct Response
         response = SizingResponse(
             converged=result.converged,
@@ -84,14 +85,16 @@ def run_sizing_loop(request: SizingRequest):
             performance={
                 "actual_range_m": result.actual_range_m,
                 "takeoff_distance_m": result.takeoff_distance_m,
-                "landing_distance_m": result.landing_distance_m
+                "landing_distance_m": result.landing_distance_m,
             },
-            iterations=result.iterations
+            iterations=result.iterations,
         )
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

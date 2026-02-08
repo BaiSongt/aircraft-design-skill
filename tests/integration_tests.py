@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from fastapi.testclient import TestClient
 from backend.app import app
 
@@ -36,7 +35,7 @@ class TestIntegration:
                 "provider": "openai",
                 "apiKey": "test-key",
                 "model": "gpt-4",
-            }
+            },
         )
         assert config_response.status_code == 200
 
@@ -63,7 +62,7 @@ class TestIntegration:
                     "aspect_ratio": 8.0,
                 },
                 "provider": "openai",
-            }
+            },
         )
         assert call_response.status_code == 200
         result = call_response.json()
@@ -96,7 +95,7 @@ class TestIntegration:
                 },
                 "format": "obj",
                 "optimize": True,
-            }
+            },
         )
         assert response.status_code == 200
         result = response.json()
@@ -130,7 +129,7 @@ class TestIntegration:
                 "title": "Constraint Envelope",
                 "showGrid": True,
                 "showLegend": True,
-            }
+            },
         )
         assert response.status_code == 200
         result = response.json()
@@ -184,6 +183,7 @@ class TestIntegration:
         end_time = time.time()
 
         response_time = end_time - start_time
+        assert response.status_code == 200
         assert response_time < 1.0  # 响应时间应小于1秒
 
         # 测试并发请求
@@ -207,7 +207,7 @@ class TestIntegration:
             json={
                 "provider": "openai",
                 "apiKey": "test-key",
-            }
+            },
         )
 
         # 2. 验证配置是否保存
@@ -224,10 +224,7 @@ class TestIntegration:
         assert "access-control-allow-origin" in response.headers
 
         # 测试跨域请求
-        response = client.get(
-            "/api/ai/providers",
-            headers={"Origin": "http://localhost:3000"}
-        )
+        response = client.get("/api/ai/providers", headers={"Origin": "http://localhost:3000"})
         assert response.status_code == 200
 
 

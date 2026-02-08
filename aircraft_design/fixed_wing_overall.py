@@ -43,7 +43,7 @@ def _get_optional(d: dict, key: str, default):
 def run_fixed_wing_overall_design(inputs: dict) -> dict:
     if not inputs.get("_normalized", False):
         inputs, _warnings = normalize_inputs(inputs)
-    geometry_detailed = geometry_detailed_from_inputs(inputs) or {}
+    geometry_detailed: Any = geometry_detailed_from_inputs(inputs) or {}
     geometry_shape = geometry_shape_from_inputs(inputs) or {}
     mission = _get_required(inputs, "mission")
     payload = _get_required(inputs, "payload")
@@ -94,18 +94,20 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
 
     # Helper to calculate fuselage wetted area
     fus_wet = None
-    if geometry_detailed.get("fuselage", {}).get("stations"):
-        stations = geometry_detailed["fuselage"]["stations"]
-        area = 0.0
-        for i in range(len(stations) - 1):
-            s1 = stations[i]
-            s2 = stations[i + 1]
-            dx = float(s2["x_m"]) - float(s1["x_m"])
-            r1 = float(s1.get("radius_m", (float(s1.get("radius_y_m", 0)) + float(s1.get("radius_z_m", 0))) / 2))
-            r2 = float(s2.get("radius_m", (float(s2.get("radius_y_m", 0)) + float(s2.get("radius_z_m", 0))) / 2))
-            area += pi * (r1 + r2) * sqrt(dx**2 + (r2 - r1) ** 2)
-        if area > 0:
-            fus_wet = area
+    if isinstance(geometry_detailed, dict):
+        fuselage = geometry_detailed.get("fuselage", {})
+        if isinstance(fuselage, dict) and fuselage.get("stations"):
+            stations = fuselage["stations"]
+            area = 0.0
+            for i in range(len(stations) - 1):
+                s1 = stations[i]
+                s2 = stations[i + 1]
+                dx = float(s2["x_m"]) - float(s1["x_m"])
+                r1 = float(s1.get("radius_m", (float(s1.get("radius_y_m", 0)) + float(s1.get("radius_z_m", 0))) / 2))
+                r2 = float(s2.get("radius_m", (float(s2.get("radius_y_m", 0)) + float(s2.get("radius_z_m", 0))) / 2))
+                area += pi * (r1 + r2) * sqrt(dx**2 + (r2 - r1) ** 2)
+            if area > 0:
+                fus_wet = area
 
     # Helper to extract tail details
     ht_ratio = None
@@ -155,22 +157,22 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
     else:
         assumptions = None
         if not isinstance(cd0_in, (int, float)):
-             # Fallback to default assumptions if neither geometry nor cd0 is provided
-             assumptions = GeometryAssumptions(
-                 fuselage_length_m=7.5,
-                 fuselage_diameter_m=1.2,
-                 wetted_area_factor=3.4,
-                 wing_t_c=0.12,
-                 tail_area_ratio=0.22,
-                 fuselage_wetted_area_m2=fus_wet,
-                 interference_factor_fuselage=interference_fuse,
-                 interference_factor_wing=interference_wing,
-                 interference_factor_tail=interference_tail,
-                 htail_area_ratio=ht_ratio,
-                 vtail_area_ratio=vt_ratio,
-                 htail_t_c=ht_tc,
-                 vtail_t_c=vt_tc,
-             )
+            # Fallback to default assumptions if neither geometry nor cd0 is provided
+            assumptions = GeometryAssumptions(
+                fuselage_length_m=7.5,
+                fuselage_diameter_m=1.2,
+                wetted_area_factor=3.4,
+                wing_t_c=0.12,
+                tail_area_ratio=0.22,
+                fuselage_wetted_area_m2=fus_wet,
+                interference_factor_fuselage=interference_fuse,
+                interference_factor_wing=interference_wing,
+                interference_factor_tail=interference_tail,
+                htail_area_ratio=ht_ratio,
+                vtail_area_ratio=vt_ratio,
+                htail_t_c=ht_tc,
+                vtail_t_c=vt_tc,
+            )
 
     geom_param = geometry_from_inputs(inputs)
     if geom_param is not None:

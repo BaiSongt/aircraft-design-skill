@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import log10, pi, sqrt, tan
-from typing import TYPE_CHECKING
+from math import sqrt
+from typing import Any
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from .atmosphere import isa_tropopause
-    from .degenerate_geometry import DegenPlate, DegenStick
-    from .units import CONST
+from .atmosphere import isa_tropopause
+from .degenerate_geometry import DegenPlate, DegenStick
 
 
 @dataclass(frozen=True)
@@ -83,8 +81,6 @@ def calculate_form_factor(
     if thickness_ratio <= 0.0 or thickness_ratio > 0.5:
         raise ValueError("thickness_ratio must be in (0, 0.5].")
 
-    sweep_rad = sweep_angle_deg * pi / 180.0
-
     if fineness_ratio is not None:
         ff = 1.0 + 2.0 * thickness_ratio + 60.0 * (thickness_ratio**4)
     else:
@@ -101,17 +97,17 @@ def calculate_interference_factor(
     component_type: str,
     geometry: Any,
 ) -> float:
-    if component_type == 'wing':
+    if component_type == "wing":
         fi = 1.0
-    elif component_type == 'fuselage':
+    elif component_type == "fuselage":
         fi = 1.05
-    elif component_type == 'horizontal_tail':
+    elif component_type == "horizontal_tail":
         fi = 1.1
-    elif component_type == 'vertical_tail':
+    elif component_type == "vertical_tail":
         fi = 1.1
-    elif component_type == 'engine_nacelle':
+    elif component_type == "engine_nacelle":
         fi = 1.2
-    elif component_type == 'landing_gear':
+    elif component_type == "landing_gear":
         fi = 1.3
     else:
         raise ValueError(f"Unsupported component_type: {component_type}")
@@ -184,19 +180,19 @@ def calculate_parasite_drag_enhanced(
 
     cd0_fric = cf * swet / sref
 
-    if hasattr(geometry, 'max_thickness'):
+    if hasattr(geometry, "max_thickness"):
         thickness_ratio = geometry.max_thickness
-    elif hasattr(geometry, 'diameter'):
+    elif hasattr(geometry, "diameter"):
         thickness_ratio = geometry.diameter / lref
     else:
         thickness_ratio = 0.1
 
-    if hasattr(geometry, 'sweep_quarter_chord'):
+    if hasattr(geometry, "sweep_quarter_chord"):
         sweep_angle_deg = geometry.sweep_quarter_chord
     else:
         sweep_angle_deg = 0.0
 
-    if hasattr(geometry, 'fineness_ratio'):
+    if hasattr(geometry, "fineness_ratio"):
         fineness_ratio = geometry.fineness_ratio
     else:
         fineness_ratio = None
@@ -211,13 +207,13 @@ def calculate_parasite_drag_enhanced(
     cd0_form = ff * cd0_fric
 
     if isinstance(geometry, DegenPlate):
-        component_type = 'wing'
+        component_type = "wing"
     elif isinstance(geometry, DegenStick):
-        component_type = 'wing'
-    elif hasattr(geometry, 'diameter'):
-        component_type = 'fuselage'
+        component_type = "wing"
+    elif hasattr(geometry, "diameter"):
+        component_type = "fuselage"
     else:
-        component_type = 'other'
+        component_type = "other"
 
     fi = calculate_interference_factor(
         component_type=component_type,
@@ -229,16 +225,16 @@ def calculate_parasite_drag_enhanced(
     cd0_total = cd0_fric + cd0_form + cd0_interf
 
     component_breakdown = {
-        'cd0_fric': cd0_fric,
-        'cd0_form': cd0_form,
-        'cd0_interf': cd0_interf,
-        'cf': cf,
-        'ff': ff,
-        'fi': fi,
-        'swet': swet,
-        're': re,
-        'mach': mach,
-        'q': q,
+        "cd0_fric": cd0_fric,
+        "cd0_form": cd0_form,
+        "cd0_interf": cd0_interf,
+        "cf": cf,
+        "ff": ff,
+        "fi": fi,
+        "swet": swet,
+        "re": re,
+        "mach": mach,
+        "q": q,
     }
 
     return ParasiteDragResult(
@@ -262,32 +258,28 @@ def calculate_parasite_drag_sweep(
     surface_roughness: float = 0.0,
     isa_delta_c: float = 0.0,
 ) -> dict:
-    results = {
-        'velocity': velocity_range,
-        'altitude': altitude_range,
-        'cd0_total': [],
-        'cd0_fric': [],
-        'cd0_form': [],
-        'cd0_interf': [],
-        'reynolds_number': [],
-        'cf': [],
-        'ff': [],
-        'fi': [],
-        'swet': [],
-        'mach': [],
-    }
+    cd0_total: list[list[float]] = []
+    cd0_fric: list[list[float]] = []
+    cd0_form: list[list[float]] = []
+    cd0_interf: list[list[float]] = []
+    reynolds_number: list[list[float]] = []
+    cf: list[list[float]] = []
+    ff: list[list[float]] = []
+    fi: list[list[float]] = []
+    swet: list[list[float]] = []
+    mach: list[list[float]] = []
 
     for velocity in velocity_range:
-        cd0_row = []
-        cd0_fric_row = []
-        cd0_form_row = []
-        cd0_interf_row = []
-        re_row = []
-        cf_row = []
-        ff_row = []
-        fi_row = []
-        swet_row = []
-        mach_row = []
+        cd0_row: list[float] = []
+        cd0_fric_row: list[float] = []
+        cd0_form_row: list[float] = []
+        cd0_interf_row: list[float] = []
+        re_row: list[float] = []
+        cf_row: list[float] = []
+        ff_row: list[float] = []
+        fi_row: list[float] = []
+        swet_row: list[float] = []
+        mach_row: list[float] = []
 
         for altitude in altitude_range:
             result = calculate_parasite_drag_enhanced(
@@ -304,24 +296,37 @@ def calculate_parasite_drag_sweep(
             cd0_form_row.append(result.cd0_form)
             cd0_interf_row.append(result.cd0_interf)
             re_row.append(result.reynolds_number)
-            cf_row.append(result.component_breakdown['cf'])
-            ff_row.append(result.component_breakdown['ff'])
-            fi_row.append(result.component_breakdown['fi'])
-            swet_row.append(result.component_breakdown['swet'])
-            mach_row.append(result.component_breakdown['mach'])
+            cf_row.append(result.component_breakdown["cf"])
+            ff_row.append(result.component_breakdown["ff"])
+            fi_row.append(result.component_breakdown["fi"])
+            swet_row.append(result.component_breakdown["swet"])
+            mach_row.append(result.component_breakdown["mach"])
 
-        results['cd0_total'].append(cd0_row)
-        results['cd0_fric'].append(cd0_fric_row)
-        results['cd0_form'].append(cd0_form_row)
-        results['cd0_interf'].append(cd0_interf_row)
-        results['reynolds_number'].append(re_row)
-        results['cf'].append(cf_row)
-        results['ff'].append(ff_row)
-        results['fi'].append(fi_row)
-        results['swet'].append(swet_row)
-        results['mach'].append(mach_row)
+        cd0_total.append(cd0_row)
+        cd0_fric.append(cd0_fric_row)
+        cd0_form.append(cd0_form_row)
+        cd0_interf.append(cd0_interf_row)
+        reynolds_number.append(re_row)
+        cf.append(cf_row)
+        ff.append(ff_row)
+        fi.append(fi_row)
+        swet.append(swet_row)
+        mach.append(mach_row)
 
-    return results
+    return {
+        "velocity": velocity_range,
+        "altitude": altitude_range,
+        "cd0_total": cd0_total,
+        "cd0_fric": cd0_fric,
+        "cd0_form": cd0_form,
+        "cd0_interf": cd0_interf,
+        "reynolds_number": reynolds_number,
+        "cf": cf,
+        "ff": ff,
+        "fi": fi,
+        "swet": swet,
+        "mach": mach,
+    }
 
 
 def generate_parasite_drag_envelope(
@@ -333,30 +338,26 @@ def generate_parasite_drag_envelope(
     surface_roughness: float = 0.0,
     isa_delta_c: float = 0.0,
 ) -> dict:
-    envelope = {
-        'mach': mach_range,
-        'altitude_m': altitude_range,
-        'cd0_total': [],
-        'cd0_fric': [],
-        'cd0_form': [],
-        'cd0_interf': [],
-        'reynolds_number': [],
-        'cf': [],
-        'ff': [],
-        'fi': [],
-        'swet': [],
-    }
+    cd0_total: list[list[float]] = []
+    cd0_fric: list[list[float]] = []
+    cd0_form: list[list[float]] = []
+    cd0_interf: list[list[float]] = []
+    reynolds_number: list[list[float]] = []
+    cf: list[list[float]] = []
+    ff: list[list[float]] = []
+    fi: list[list[float]] = []
+    swet: list[list[float]] = []
 
     for mach in mach_range:
-        cd0_row = []
-        cd0_fric_row = []
-        cd0_form_row = []
-        cd0_interf_row = []
-        re_row = []
-        cf_row = []
-        ff_row = []
-        fi_row = []
-        swet_row = []
+        cd0_row: list[float] = []
+        cd0_fric_row: list[float] = []
+        cd0_form_row: list[float] = []
+        cd0_interf_row: list[float] = []
+        re_row: list[float] = []
+        cf_row: list[float] = []
+        ff_row: list[float] = []
+        fi_row: list[float] = []
+        swet_row: list[float] = []
 
         for altitude in altitude_range:
             atm = isa_tropopause(altitude, delta_t_k=float(isa_delta_c))
@@ -376,19 +377,31 @@ def generate_parasite_drag_envelope(
             cd0_form_row.append(result.cd0_form)
             cd0_interf_row.append(result.cd0_interf)
             re_row.append(result.reynolds_number)
-            cf_row.append(result.component_breakdown['cf'])
-            ff_row.append(result.component_breakdown['ff'])
-            fi_row.append(result.component_breakdown['fi'])
-            swet_row.append(result.component_breakdown['swet'])
+            cf_row.append(result.component_breakdown["cf"])
+            ff_row.append(result.component_breakdown["ff"])
+            fi_row.append(result.component_breakdown["fi"])
+            swet_row.append(result.component_breakdown["swet"])
 
-        envelope['cd0_total'].append(cd0_row)
-        envelope['cd0_fric'].append(cd0_fric_row)
-        envelope['cd0_form'].append(cd0_form_row)
-        envelope['cd0_interf'].append(cd0_interf_row)
-        envelope['reynolds_number'].append(re_row)
-        envelope['cf'].append(cf_row)
-        envelope['ff'].append(ff_row)
-        envelope['fi'].append(fi_row)
-        envelope['swet'].append(swet_row)
+        cd0_total.append(cd0_row)
+        cd0_fric.append(cd0_fric_row)
+        cd0_form.append(cd0_form_row)
+        cd0_interf.append(cd0_interf_row)
+        reynolds_number.append(re_row)
+        cf.append(cf_row)
+        ff.append(ff_row)
+        fi.append(fi_row)
+        swet.append(swet_row)
 
-    return envelope
+    return {
+        "mach": mach_range,
+        "altitude_m": altitude_range,
+        "cd0_total": cd0_total,
+        "cd0_fric": cd0_fric,
+        "cd0_form": cd0_form,
+        "cd0_interf": cd0_interf,
+        "reynolds_number": reynolds_number,
+        "cf": cf,
+        "ff": ff,
+        "fi": fi,
+        "swet": swet,
+    }

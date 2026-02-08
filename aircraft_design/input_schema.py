@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+
 try:
     from typing import TypeGuard
 except ImportError:
     from typing import Any
+
     # Fallback for Python < 3.10
-    TypeGuard = Any # type: ignore
+    TypeGuard = Any  # type: ignore
 
 from .config import DEFAULT_RISK_THRESHOLDS, DEFAULT_UNCERTAINTY_CASES
 

@@ -18,7 +18,7 @@ def main():
         max_thickness=0.12,
         num_points=100,
     )
-    print(f"   NACA 4位数翼型生成完成")
+    print("   NACA 4位数翼型生成完成")
     print(f"   最大厚度: {naca4.max_thickness:.4f}")
     print(f"   最大弯度: {naca4.max_camber:.4f}")
     print(f"   前缘半径: {naca4.leading_edge_radius:.6f}")
@@ -29,7 +29,7 @@ def main():
         max_thickness=0.12,
         num_points=100,
     )
-    print(f"   NACA 5位数翼型生成完成")
+    print("   NACA 5位数翼型生成完成")
     print(f"   最大厚度: {naca5.max_thickness:.4f}")
     print(f"   最大弯度: {naca5.max_camber:.4f}")
 
@@ -40,7 +40,7 @@ def main():
         design_lift_coeff=0.3,
         num_points=100,
     )
-    print(f"   NACA 6系列翼型生成完成")
+    print("   NACA 6系列翼型生成完成")
     print(f"   最大厚度: {naca6.max_thickness:.4f}")
     print(f"   最大弯度: {naca6.max_camber:.4f}")
 
@@ -49,7 +49,7 @@ def main():
         airfoil=naca4,
         chord=1.5,
     )
-    print(f"   翼型缩放完成")
+    print("   翼型缩放完成")
     print(f"   弦长: {scaled_naca4.chord:.2f} m")
     print(f"   最大厚度: {scaled_naca4.max_thickness:.4f} m")
 
@@ -67,7 +67,7 @@ def main():
             {"series_char": "64", "max_thickness": 0.12, "design_lift_coeff": 0.4},
         ],
     )
-    print(f"   翼型库生成完成")
+    print("   翼型库生成完成")
     print(f"   翼型数量: {len(library)}")
     for name, airfoil in library.items():
         print(f"   - {name}: 最大厚度={airfoil.max_thickness:.4f}, 最大弯度={airfoil.max_camber:.4f}")

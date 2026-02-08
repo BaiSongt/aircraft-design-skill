@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-from math import pi
+from dataclasses import dataclass
 
 from .aero_drag_buildup import (
-    DragBuildUpResult,
     GeometryAssumptions,
     estimate_cd0_drag_buildup,
     calculate_wave_drag,
     calculate_compressibility_drag,
     calculate_induced_drag,
-    calculate_total_drag,
-    generate_drag_mach_curve,
 )
 from .constraints import AeroPolar
 from .propulsion import (
@@ -23,21 +18,18 @@ from .propulsion import (
 )
 from .mission import (
     mission_fuel_breakdown,
-    generate_mission_envelope,
 )
 from .stability_control import (
-    StaticStabilityResult,
     estimate_static_margin_and_trim,
     tail_areas_from_volume_coefficients,
     calculate_subsonic_downwash_gradient,
     calculate_supersonic_downwash_gradient,
 )
 from .structures_loads import (
-    WingRootLoads,
-    StructuralWeightResult,
     estimate_wing_root_loads,
     estimate_structural_weight_feedback,
 )
+from .performance import required_thrust_newton
 from .atmosphere import isa_tropopause
 from .units import CONST
 
@@ -241,8 +233,12 @@ def execute_stage3_propulsion(
     sfc_cruise = fuel_flow_cruise / thrust_required_cruise_n if thrust_required_cruise_n > 0 else 0
     sfc_climb = fuel_flow_climb / thrust_required_climb_n if thrust_required_climb_n > 0 else 0
 
-    thrust_margin_cruise = (thrust_avail_cruise - thrust_required_cruise_n) / thrust_avail_cruise if thrust_avail_cruise > 0 else 0
-    thrust_margin_climb = (thrust_avail_climb - thrust_required_climb_n) / thrust_avail_climb if thrust_avail_climb > 0 else 0
+    thrust_margin_cruise = (
+        (thrust_avail_cruise - thrust_required_cruise_n) / thrust_avail_cruise if thrust_avail_cruise > 0 else 0
+    )
+    thrust_margin_climb = (
+        (thrust_avail_climb - thrust_required_climb_n) / thrust_avail_climb if thrust_avail_climb > 0 else 0
+    )
 
     return Stage3PropulsionResult(
         thrust_available_cruise=thrust_avail_cruise,
@@ -408,16 +404,17 @@ def execute_stage7_optimization(
     objective_direction: str = "minimize",
     n_iterations: int = 100,
 ) -> Stage7OptimizationResult:
-    feasible_designs = []
-    best_design = None
+    feasible_designs: list[dict[str, float]] = []
+    best_design: dict[str, float] | None = None
     best_objective_value = float("inf") if objective_direction == "minimize" else float("-inf")
 
-    sensitivity_data = {var: [] for var in design_variables.keys()}
+    sensitivity_data: dict[str, list[float]] = {var: [] for var in design_variables.keys()}
 
     for i in range(n_iterations):
-        design_point = {}
+        design_point: dict[str, float] = {}
         for var_name, var_range in design_variables.items():
             import random
+
             design_point[var_name] = random.uniform(var_range[0], var_range[1])
 
         is_feasible = True
@@ -446,6 +443,7 @@ def execute_stage7_optimization(
     for var_name, values in sensitivity_data.items():
         if values:
             import statistics
+
             sensitivity_analysis[var_name] = {
                 "mean": statistics.mean(values),
                 "std": statistics.stdev(values) if len(values) > 1 else 0,
@@ -462,7 +460,10 @@ def execute_stage7_optimization(
             for var_name in design_variables.keys():
                 values = [d[var_name] for d in feasible_designs]
                 import statistics
-                recommendations.append(f"{var_name}: mean = {statistics.mean(values):.4f}, std = {statistics.stdev(values) if len(values) > 1 else 0:.4f}")
+
+                recommendations.append(
+                    f"{var_name}: mean = {statistics.mean(values):.4f}, std = {statistics.stdev(values) if len(values) > 1 else 0:.4f}"
+                )
 
     return Stage7OptimizationResult(
         best_design_point=best_design or {},
@@ -495,7 +496,19 @@ def execute_advanced_design(
     sweep_quarter_chord_deg = geometry_input["sweep_quarter_chord_deg"]
     aspect_ratio = geometry_input["aspect_ratio"]
     taper_ratio = geometry_input["taper_ratio"]
-    cl_cruise = design_input.get("cl_cruise", 0.6)
+    atm_cruise = isa_tropopause(cruise_altitude_m, delta_t_k=float(isa_delta_c))
+    cruise_weight_fraction = float(
+        design_input.get("cruise_weight_fraction", mission_input.get("cruise_weight_fraction", 0.97))
+    )
+    climb_weight_fraction = float(
+        design_input.get("climb_weight_fraction", mission_input.get("climb_weight_fraction", 0.99))
+    )
+    weight_cruise_kg = max(1e-3, mtow_kg * cruise_weight_fraction)
+    weight_climb_kg = max(1e-3, mtow_kg * climb_weight_fraction)
+    cl_cruise = design_input.get("cl_cruise")
+    if cl_cruise is None or cl_cruise <= 0.0:
+        q_cruise = 0.5 * atm_cruise.rho_kg_m3 * (cruise_speed_m_s**2)
+        cl_cruise = (weight_cruise_kg * CONST.g0_m_s2) / max(1e-6, q_cruise * s_ref_m2)
 
     stage2_result = execute_stage2_aero(
         cruise_altitude_m=cruise_altitude_m,
@@ -512,12 +525,33 @@ def execute_advanced_design(
         cl_cruise=cl_cruise,
     )
 
-    cd_total = stage2_result.cd_total
-    lift_required_n = cl_cruise * 0.5 * 1.225 * (cruise_speed_m_s ** 2) * s_ref_m2
-    drag_required_n = cd_total * 0.5 * 1.225 * (cruise_speed_m_s ** 2) * s_ref_m2
-
     climb_altitude_m = mission_input.get("climb_altitude_m", cruise_altitude_m * 0.6)
     climb_speed_m_s = mission_input.get("climb_speed_m_s", cruise_speed_m_s * 0.8)
+    climb_rate_m_s = float(mission_input.get("climb_rate_m_s", mission_input.get("assumed_climb_rate_m_s", 3.0)))
+    atm_climb = isa_tropopause(climb_altitude_m, delta_t_k=float(isa_delta_c))
+
+    polar = AeroPolar(
+        cd0=stage2_result.cd0,
+        e=0.8,
+        ar=aspect_ratio,
+    )
+
+    drag_required_cruise_n = required_thrust_newton(
+        rho_kg_m3=atm_cruise.rho_kg_m3,
+        v_m_s=cruise_speed_m_s,
+        w_kg=weight_cruise_kg,
+        s_m2=s_ref_m2,
+        polar=polar,
+    )
+    drag_required_climb_n = required_thrust_newton(
+        rho_kg_m3=atm_climb.rho_kg_m3,
+        v_m_s=climb_speed_m_s,
+        w_kg=weight_climb_kg,
+        s_m2=s_ref_m2,
+        polar=polar,
+    )
+    gamma_climb = climb_rate_m_s / max(1.0, climb_speed_m_s)
+    thrust_required_climb_n = drag_required_climb_n + (weight_climb_kg * CONST.g0_m_s2 * gamma_climb)
 
     stage3_result = execute_stage3_propulsion(
         propulsion_in=propulsion_input,
@@ -526,18 +560,12 @@ def execute_advanced_design(
         cruise_speed_m_s=cruise_speed_m_s,
         climb_altitude_m=climb_altitude_m,
         climb_speed_m_s=climb_speed_m_s,
-        thrust_required_cruise_n=drag_required_n,
-        thrust_required_climb_n=drag_required_n * 1.5,
+        thrust_required_cruise_n=drag_required_cruise_n,
+        thrust_required_climb_n=thrust_required_climb_n,
         isa_delta_c=isa_delta_c,
     )
 
     propulsion = build_propulsion_model(propulsion_input, mtow_kg=mtow_kg)
-
-    polar = AeroPolar(
-        cd0=stage2_result.cd0,
-        e=0.8,
-        ar=aspect_ratio,
-    )
 
     stage4_result = execute_stage4_mission(
         w0_kg=mtow_kg,

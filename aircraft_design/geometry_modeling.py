@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, pi, sin, sqrt, tan
-from typing import TYPE_CHECKING
+from math import atan, cos, pi, sin, sqrt, tan
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from .airfoil_library import AirfoilGeometry
-    from .geometry_detailed import DetailedWing, DetailedFuselage, DetailedTail, ParametricGeometry as DetailedParametricGeometry
+    from .geometry_detailed import ParametricGeometry as DetailedParametricGeometry
 
 
 @dataclass(frozen=True)
@@ -97,7 +96,7 @@ def translate_geometry(
     dy: float = 0.0,
     dz: float = 0.0,
 ) -> Any:
-    if hasattr(geometry, 'position'):
+    if hasattr(geometry, "position"):
         geometry.position = geometry.position + np.array([dx, dy, dz])
     return geometry
 
@@ -105,36 +104,42 @@ def translate_geometry(
 def rotate_geometry(
     *,
     geometry: Any,
-    axis: str = 'z',
+    axis: str = "z",
     angle_deg: float = 0.0,
 ) -> Any:
     angle_rad = angle_deg * pi / 180.0
 
-    if axis == 'x':
-        rotation_matrix = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, cos(angle_rad), -sin(angle_rad)],
-            [0.0, sin(angle_rad), cos(angle_rad)],
-        ])
-    elif axis == 'y':
-        rotation_matrix = np.array([
-            [cos(angle_rad), 0.0, sin(angle_rad)],
-            [0.0, 1.0, 0.0],
-            [-sin(angle_rad), 0.0, cos(angle_rad)],
-        ])
-    elif axis == 'z':
-        rotation_matrix = np.array([
-            [cos(angle_rad), -sin(angle_rad), 0.0],
-            [sin(angle_rad), cos(angle_rad), 0.0],
-            [0.0, 0.0, 1.0],
-        ])
+    if axis == "x":
+        rotation_matrix = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, cos(angle_rad), -sin(angle_rad)],
+                [0.0, sin(angle_rad), cos(angle_rad)],
+            ]
+        )
+    elif axis == "y":
+        rotation_matrix = np.array(
+            [
+                [cos(angle_rad), 0.0, sin(angle_rad)],
+                [0.0, 1.0, 0.0],
+                [-sin(angle_rad), 0.0, cos(angle_rad)],
+            ]
+        )
+    elif axis == "z":
+        rotation_matrix = np.array(
+            [
+                [cos(angle_rad), -sin(angle_rad), 0.0],
+                [sin(angle_rad), cos(angle_rad), 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
     else:
         raise ValueError(f"Unsupported axis: {axis}. Must be one of: x, y, z.")
 
-    if hasattr(geometry, 'position'):
+    if hasattr(geometry, "position"):
         geometry.position = np.dot(rotation_matrix, geometry.position)
 
-    if hasattr(geometry, 'orientation'):
+    if hasattr(geometry, "orientation"):
         geometry.orientation = np.dot(rotation_matrix, geometry.orientation)
 
     return geometry
@@ -148,31 +153,31 @@ def scale_geometry(
     if scale_factor <= 0.0:
         raise ValueError("scale_factor must be positive.")
 
-    if hasattr(geometry, 'position'):
+    if hasattr(geometry, "position"):
         geometry.position = geometry.position * scale_factor
 
-    if hasattr(geometry, 'area'):
+    if hasattr(geometry, "area"):
         geometry.area = geometry.area * (scale_factor**2)
 
-    if hasattr(geometry, 'span'):
+    if hasattr(geometry, "span"):
         geometry.span = geometry.span * scale_factor
 
-    if hasattr(geometry, 'chord_root'):
+    if hasattr(geometry, "chord_root"):
         geometry.chord_root = geometry.chord_root * scale_factor
 
-    if hasattr(geometry, 'chord_tip'):
+    if hasattr(geometry, "chord_tip"):
         geometry.chord_tip = geometry.chord_tip * scale_factor
 
-    if hasattr(geometry, 'diameter'):
+    if hasattr(geometry, "diameter"):
         geometry.diameter = geometry.diameter * scale_factor
 
-    if hasattr(geometry, 'length'):
+    if hasattr(geometry, "length"):
         geometry.length = geometry.length * scale_factor
 
-    if hasattr(geometry, 'height'):
+    if hasattr(geometry, "height"):
         geometry.height = geometry.height * scale_factor
 
-    if hasattr(geometry, 'track_width'):
+    if hasattr(geometry, "track_width"):
         geometry.track_width = geometry.track_width * scale_factor
 
     return geometry
@@ -181,16 +186,16 @@ def scale_geometry(
 def mirror_geometry(
     *,
     geometry: Any,
-    axis: str = 'x',
+    axis: str = "x",
 ) -> Any:
-    if axis == 'x':
-        if hasattr(geometry, 'position'):
+    if axis == "x":
+        if hasattr(geometry, "position"):
             geometry.position[0] = -geometry.position[0]
-    elif axis == 'y':
-        if hasattr(geometry, 'position'):
+    elif axis == "y":
+        if hasattr(geometry, "position"):
             geometry.position[1] = -geometry.position[1]
-    elif axis == 'z':
-        if hasattr(geometry, 'position'):
+    elif axis == "z":
+        if hasattr(geometry, "position"):
             geometry.position[2] = -geometry.position[2]
     else:
         raise ValueError(f"Unsupported axis: {axis}. Must be one of: x, y, z.")
@@ -414,11 +419,13 @@ def parametric_to_aircraft_geometry(pg: "DetailedParametricGeometry") -> Aircraf
     twist_tip = 0.0
     airfoil_root = pg.wing.airfoil_root if hasattr(pg.wing, "airfoil_root") else "NACA0012"
     airfoil_tip = pg.wing.airfoil_tip if hasattr(pg.wing, "airfoil_tip") else "NACA0012"
-    pos_w = np.array([
-        getattr(pg.wing, "x_le_root", pg.fuselage.length * 0.4),
-        getattr(pg.wing, "y_root", 0.0),
-        getattr(pg.wing, "z_root", 0.0),
-    ])
+    pos_w = np.array(
+        [
+            getattr(pg.wing, "x_le_root", pg.fuselage.length * 0.4),
+            getattr(pg.wing, "y_root", 0.0),
+            getattr(pg.wing, "z_root", 0.0),
+        ]
+    )
     wing = WingGeometry(
         area=pg.wing.area,
         span=span,

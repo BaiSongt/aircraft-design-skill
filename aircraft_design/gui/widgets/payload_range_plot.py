@@ -1,5 +1,6 @@
 from .mpl_widget import MplWidget
 
+
 class PayloadRangePlot(MplWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -7,7 +8,7 @@ class PayloadRangePlot(MplWidget):
         self.axes.set_xlabel("Range (km)")
         self.axes.set_ylabel("Payload (kg)")
         self.axes.grid(True)
-        self.line, = self.axes.plot([], [], 'g-', linewidth=2)
+        (self.line,) = self.axes.plot([], [], "g-", linewidth=2)
         self.fill = None
 
     def update_data(self, ranges, payloads):
@@ -17,14 +18,14 @@ class PayloadRangePlot(MplWidget):
                 return
 
             self.line.set_data(ranges, payloads)
-            
+
             if self.fill:
                 try:
                     self.fill.remove()
-                except:
+                except Exception:
                     pass
-            self.fill = self.axes.fill_between(ranges, payloads, color='green', alpha=0.1)
-            
+            self.fill = self.axes.fill_between(ranges, payloads, color="green", alpha=0.1)
+
             self.axes.relim()
             self.axes.autoscale_view()
             self.draw()

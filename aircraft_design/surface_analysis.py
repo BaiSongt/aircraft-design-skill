@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import pi, sqrt
-from typing import TYPE_CHECKING
+from math import sqrt
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from .degenerate_geometry import DegenPlate
+    pass
 
 
 @dataclass(frozen=True)
@@ -43,17 +43,12 @@ def generate_surface_mesh(
     if num_v < 2:
         raise ValueError("num_v must be >= 2.")
 
-    if hasattr(geometry, 'x') and hasattr(geometry, 'y') and hasattr(geometry, 'z'):
+    if hasattr(geometry, "x") and hasattr(geometry, "y") and hasattr(geometry, "z"):
         x = geometry.x
         y = geometry.y
         z = geometry.z
     else:
         raise ValueError("geometry must have x, y, z attributes.")
-
-    u = np.linspace(0, 1, num_u)
-    v = np.linspace(0, 1, num_v)
-
-    u_grid, v_grid = np.meshgrid(u, v)
 
     x_mesh = x
     y_mesh = y
@@ -77,15 +72,13 @@ def generate_surface_mesh(
     nz = nz / norm
 
     dx = np.zeros_like(x_mesh)
-    dy = np.zeros_like(y_mesh)
-    dz = np.zeros_like(z_mesh)
 
     for i in range(x_mesh.shape[0] - 1):
         for j in range(x_mesh.shape[1] - 1):
             p1 = np.array([x_mesh[i, j], y_mesh[i, j], z_mesh[i, j]])
-            p2 = np.array([x_mesh[i+1, j], y_mesh[i+1, j], z_mesh[i+1, j]])
-            p3 = np.array([x_mesh[i+1, j+1], y_mesh[i+1, j+1], z_mesh[i+1, j+1]])
-            p4 = np.array([x_mesh[i, j+1], y_mesh[i, j+1], z_mesh[i, j+1]])
+            p2 = np.array([x_mesh[i + 1, j], y_mesh[i + 1, j], z_mesh[i + 1, j]])
+            p3 = np.array([x_mesh[i + 1, j + 1], y_mesh[i + 1, j + 1], z_mesh[i + 1, j + 1]])
+            p4 = np.array([x_mesh[i, j + 1], y_mesh[i, j + 1], z_mesh[i, j + 1]])
 
             v1 = p2 - p1
             v2 = p3 - p1
@@ -99,11 +92,13 @@ def generate_surface_mesh(
 
             dx[i, j] = (area1 + area2) / 2.0
 
-    centroid = np.array([
-        np.mean(x_mesh),
-        np.mean(y_mesh),
-        np.mean(z_mesh),
-    ])
+    centroid = np.array(
+        [
+            np.mean(x_mesh),
+            np.mean(y_mesh),
+            np.mean(z_mesh),
+        ]
+    )
 
     return SurfaceMesh(
         x=x_mesh,
@@ -245,9 +240,9 @@ def calculate_surface_volume(
     for i in range(x.shape[0] - 1):
         for j in range(x.shape[1] - 1):
             p1 = np.array([x[i, j], y[i, j], z[i, j]])
-            p2 = np.array([x[i+1, j], y[i+1, j], z[i+1, j]])
-            p3 = np.array([x[i+1, j+1], y[i+1, j+1], z[i+1, j+1]])
-            p4 = np.array([x[i, j+1], y[i, j+1], z[i, j+1]])
+            p2 = np.array([x[i + 1, j], y[i + 1, j], z[i + 1, j]])
+            p3 = np.array([x[i + 1, j + 1], y[i + 1, j + 1], z[i + 1, j + 1]])
+            p4 = np.array([x[i, j + 1], y[i, j + 1], z[i, j + 1]])
 
             v1 = p2 - p1
             v2 = p3 - p1
@@ -273,7 +268,7 @@ def generate_surface_mesh_from_geometry(
     num_u: int = 20,
     num_v: int = 10,
 ) -> SurfaceMesh:
-    if hasattr(geometry, 'coordinates'):
+    if hasattr(geometry, "coordinates"):
         airfoil_coords = geometry.coordinates
         x = airfoil_coords.x
         y_upper = airfoil_coords.y[0]
@@ -282,9 +277,10 @@ def generate_surface_mesh_from_geometry(
         u = np.linspace(0, 1, num_u)
         v = np.linspace(0, 1, num_v)
 
-        u_grid, v_grid = np.meshgrid(u, v)
-
-        x_mesh = x_grid
+        _, v_grid = np.meshgrid(u, v, indexing="ij")
+        chord_param = np.linspace(0, 1, len(x))
+        x_interp = np.interp(u, chord_param, x)
+        x_mesh = np.tile(x_interp[:, None], (1, num_v))
         y_mesh = np.zeros_like(x_mesh)
         z_mesh = np.zeros_like(x_mesh)
 
@@ -318,15 +314,13 @@ def generate_surface_mesh_from_geometry(
         nz = nz / norm
 
         dx = np.zeros_like(x_mesh)
-        dy = np.zeros_like(y_mesh)
-        dz = np.zeros_like(z_mesh)
 
         for i in range(x_mesh.shape[0] - 1):
             for j in range(x_mesh.shape[1] - 1):
                 p1 = np.array([x_mesh[i, j], y_mesh[i, j], z_mesh[i, j]])
-                p2 = np.array([x_mesh[i+1, j], y_mesh[i+1, j], z_mesh[i+1, j]])
-                p3 = np.array([x_mesh[i+1, j+1], y_mesh[i+1, j+1], z_mesh[i+1, j+1]])
-                p4 = np.array([x_mesh[i, j+1], y_mesh[i, j+1], z_mesh[i, j+1]])
+                p2 = np.array([x_mesh[i + 1, j], y_mesh[i + 1, j], z_mesh[i + 1, j]])
+                p3 = np.array([x_mesh[i + 1, j + 1], y_mesh[i + 1, j + 1], z_mesh[i + 1, j + 1]])
+                p4 = np.array([x_mesh[i, j + 1], y_mesh[i, j + 1], z_mesh[i, j + 1]])
 
                 v1 = p2 - p1
                 v2 = p3 - p1
@@ -340,11 +334,13 @@ def generate_surface_mesh_from_geometry(
 
                 dx[i, j] = (area1 + area2) / 2.0
 
-        centroid = np.array([
-            np.mean(x_mesh),
-            np.mean(y_mesh),
-            np.mean(z_mesh),
-        ])
+        centroid = np.array(
+            [
+                np.mean(x_mesh),
+                np.mean(y_mesh),
+                np.mean(z_mesh),
+            ]
+        )
 
         return SurfaceMesh(
             x=x_mesh,

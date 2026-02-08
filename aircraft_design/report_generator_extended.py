@@ -1,23 +1,25 @@
-from typing import Dict, Any, List
+from typing import Dict
 from datetime import datetime
 import math
 from .design_loop_orchestrator import SizedAircraft, DesignRequirements
 from .stability_dynamic import DynamicStabilityAnalyzer
 from .economics import EconomicsAnalyzer
-from .weight_balance import WeightBalanceAnalyzer
+
 
 class ReportGeneratorExtended:
     """
     Enhanced Report Generator complying with the 'Airplane Overall Design Report Template'.
     """
-    
+
     def __init__(self, project_name: str = "Aircraft Design Project"):
         self.project_name = project_name
         self.timestamp = datetime.now().strftime("%Y-%m-%d")
         self.stability_analyzer = DynamicStabilityAnalyzer()
         self.economics_analyzer = EconomicsAnalyzer()
-        
-    def generate_report(self, aircraft: SizedAircraft, requirements: DesignRequirements, plot_paths: Dict[str, str]) -> str:
+
+    def generate_report(
+        self, aircraft: SizedAircraft, requirements: DesignRequirements, plot_paths: Dict[str, str]
+    ) -> str:
         """
         Generates the full markdown report.
         """
@@ -118,7 +120,7 @@ class ReportGeneratorExtended:
 
 | 指标类别 | 参数名称 | 设计指标 | 单位 | 说明 |
 |:---:|:---|:---:|:---:|:---|
-| **任务性能** | 设计航程 | {req.range_m/1000:.1f} | km | 满载情况下 |
+| **任务性能** | 设计航程 | {req.range_m / 1000:.1f} | km | 满载情况下 |
 | | 设计商载 | {req.payload_kg:.1f} | kg | 包含乘客及行李 |
 | | 巡航马赫数 | {req.cruise_mach:.2f} | - | 最佳巡航高度 |
 | | 巡航高度 | {req.cruise_altitude_m:.0f} | m | 对应对流层顶附近 |
@@ -138,13 +140,15 @@ class ReportGeneratorExtended:
 ---
 """
 
-    def _chapter_3_overall_scheme(self, aircraft: SizedAircraft, requirements: DesignRequirements, plot_paths: Dict[str, str]) -> str:
+    def _chapter_3_overall_scheme(
+        self, aircraft: SizedAircraft, requirements: DesignRequirements, plot_paths: Dict[str, str]
+    ) -> str:
         geom = aircraft.geometry
         return f"""## 3. 总体方案设计
 
 ### 3.1 布局选型与设计理念
 经过多轮方案对比，本机最终选定了以下气动布局：
-- **机翼配置**：采用大展弦比梯形机翼，布置于机身中下部（视具体机型而定）。这种布局能够提供较高的升阻比，有利于长航程巡航。机翼设置适度的后掠角（{geom.get('sweep_quarter_chord_deg', 0):.1f}度），以推迟激波产生，适应 {requirements.cruise_mach} 的巡航马赫数。
+- **机翼配置**：采用大展弦比梯形机翼，布置于机身中下部（视具体机型而定）。这种布局能够提供较高的升阻比，有利于长航程巡航。机翼设置适度的后掠角（{geom.get("sweep_quarter_chord_deg", 0):.1f}度），以推迟激波产生，适应 {requirements.cruise_mach} 的巡航马赫数。
 - **机身造型**：机身采用流线型回转体设计，并在驾驶舱和尾椎部位进行了局部修形，以减小压差阻力和干扰阻力。内部空间布局经过人机工效优化，最大化利用率。
 - **尾翼形式**：采用常规单垂尾加平尾布局。平尾安装在机身尾锥处，避开机翼尾流的直接干扰；垂尾提供足够的航向稳定性，并安装方向舵用于偏航控制。
 - **起落架形式**：采用前三点式起落架，主起落架收纳于机翼根部或机身腹部整流罩内。这种布局在地面滑行时具有良好的方向稳定性，且防倾倒能力强。
@@ -154,16 +158,16 @@ class ReportGeneratorExtended:
 
 | 部件 | 参数 | 数值 | 单位 | 备注 |
 |:---|:---|:---:|:---:|:---|
-| **机翼** | 参考面积 ($S_{{ref}}$) | {geom.get('s_ref_m2', 0):.2f} | $m^2$ | 提供主要升力 |
-| | 展长 ($b$) | {math.sqrt(geom.get('s_ref_m2', 0)*geom.get('aspect_ratio', 0)):.2f} | m | 影响诱导阻力 |
-| | 展弦比 ($AR$) | {geom.get('aspect_ratio', 0):.2f} | - | |
-| | 后掠角 ($\Lambda_{{c/4}}$) | {geom.get('sweep_quarter_chord_deg', 0):.1f} | deg | 1/4 弦线处 |
-| | 根梢比 ($\lambda$) | {geom.get('taper_ratio', 0):.2f} | - | |
-| **机身** | 长度 | {geom.get('fuselage_length_m', 0):.2f} | m | |
-| | 最大直径 | {geom.get('fuselage_diameter_m', 0):.2f} | m | |
-| | 长细比 | {geom.get('fuselage_length_m', 0)/geom.get('fuselage_diameter_m', 1):.2f} | - | |
-| **尾翼** | 平尾面积 | {geom.get('s_ref_m2', 0)*0.2:.2f} | $m^2$ | 估算值 |
-| | 垂尾面积 | {geom.get('s_ref_m2', 0)*0.1:.2f} | $m^2$ | 估算值 |
+| **机翼** | 参考面积 ($S_{{ref}}$) | {geom.get("s_ref_m2", 0):.2f} | $m^2$ | 提供主要升力 |
+| | 展长 ($b$) | {math.sqrt(geom.get("s_ref_m2", 0) * geom.get("aspect_ratio", 0)):.2f} | m | 影响诱导阻力 |
+| | 展弦比 ($AR$) | {geom.get("aspect_ratio", 0):.2f} | - | |
+| | 后掠角 ($\Lambda_{{c/4}}$) | {geom.get("sweep_quarter_chord_deg", 0):.1f} | deg | 1/4 弦线处 |
+| | 根梢比 ($\lambda$) | {geom.get("taper_ratio", 0):.2f} | - | |
+| **机身** | 长度 | {geom.get("fuselage_length_m", 0):.2f} | m | |
+| | 最大直径 | {geom.get("fuselage_diameter_m", 0):.2f} | m | |
+| | 长细比 | {geom.get("fuselage_length_m", 0) / geom.get("fuselage_diameter_m", 1):.2f} | - | |
+| **尾翼** | 平尾面积 | {geom.get("s_ref_m2", 0) * 0.2:.2f} | $m^2$ | 估算值 |
+| | 垂尾面积 | {geom.get("s_ref_m2", 0) * 0.1:.2f} | $m^2$ | 估算值 |
 
 ### 3.3 OpenVSP 三维建模与可视化
 为了更直观地展示设计方案，并为后续的气动计算提供几何输入，本项目利用 NASA 开发的 OpenVSP (Open Vehicle Sketch Pad) 软件进行了全参数化的三维建模。
@@ -177,13 +181,13 @@ class ReportGeneratorExtended:
 以下是基于 OpenVSP 模型生成的标准三视图和等轴测视图，图中包含了主要外形尺寸标注。
 
 *(OpenVSP 轴测图 - 展示飞机的整体气动布局)*
-![OpenVSP Isometric View]({plot_paths.get('vsp_iso', 'Placeholder')})
+![OpenVSP Isometric View]({plot_paths.get("vsp_iso", "Placeholder")})
 
 *(OpenVSP 顶视图 - 展示机翼平面形状与布局)*
-![OpenVSP Top View]({plot_paths.get('vsp_top', 'Placeholder')})
+![OpenVSP Top View]({plot_paths.get("vsp_top", "Placeholder")})
 
 *(OpenVSP 侧视图 - 展示机身剖面与尾翼位置)*
-![OpenVSP Side View]({plot_paths.get('vsp_side', 'Placeholder')})
+![OpenVSP Side View]({plot_paths.get("vsp_side", "Placeholder")})
 
 ---
 """
@@ -207,15 +211,15 @@ $$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_
 - $S_{{wet}}$: 部件的湿表面积。
 
 **计算结果汇总**：
-- **全机零升阻力系数 $C_{{D0}}$**: {aircraft.drag_params.get('cd0', 0.02):.4f}
-- **奥斯瓦尔德效率因子 ($e$)**: {aircraft.drag_params.get('oswald_e', 0.8):.2f}
-- **诱导阻力因子 ($K$)**: {aircraft.drag_params.get('k', 0.05):.4f}，其中 $K = 1 / (\pi \cdot AR \cdot e)$
+- **全机零升阻力系数 $C_{{D0}}$**: {aircraft.drag_params.get("cd0", 0.02):.4f}
+- **奥斯瓦尔德效率因子 ($e$)**: {aircraft.drag_params.get("oswald_e", 0.8):.2f}
+- **诱导阻力因子 ($K$)**: {aircraft.drag_params.get("k", 0.05):.4f}，其中 $K = 1 / (\pi \cdot AR \cdot e)$
 
 ### 4.3 升力特性分析
 机翼的升力特性决定了飞机的起降性能和机动能力。
 下图展示了计算得到的升力系数随攻角变化曲线（$C_L - \\alpha$）。
 
-![Lift Curve]({plot_paths.get('cl_alpha', 'Placeholder')})
+![Lift Curve]({plot_paths.get("cl_alpha", "Placeholder")})
 *图 4-1: 升力系数随攻角变化曲线 ($C_L - \\alpha$)*
 
 **技术解读**：
@@ -226,7 +230,7 @@ $$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_
 ### 4.4 极曲线分析
 阻力极曲线（Drag Polar）是描述飞机气动效率的最重要曲线，反映了升力系数与阻力系数的对应关系： $C_D = C_{{D0}} + K C_L^2$。
 
-![Drag Polar]({plot_paths.get('drag_polar', 'Placeholder')})
+![Drag Polar]({plot_paths.get("drag_polar", "Placeholder")})
 *图 4-2: 阻力极曲线 ($C_L - C_D$)*
 
 **技术解读**：
@@ -255,9 +259,9 @@ $$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_
 | 部件 | 重量 (kg) | 占比 (%) | 备注 |
 |:---|:---:|:---:|:---|
 | **最大起飞重量 (MTOW)** | **{aircraft.mtow_kg:.1f}** | **100%** | 设计目标值 |
-| 空重 (OEW) | {aircraft.empty_weight_kg:.1f} | {aircraft.empty_weight_kg/aircraft.mtow_kg*100:.1f}% | 含结构、系统、发动机等 |
-| 燃油重量 (Fuel) | {aircraft.fuel_weight_kg:.1f} | {aircraft.fuel_weight_kg/aircraft.mtow_kg*100:.1f}% | 任务燃油 + 储备燃油 |
-| 商载 (Payload) | {aircraft.weight_breakdown.get('payload', 0):.1f} | {aircraft.weight_breakdown.get('payload', 0)/aircraft.mtow_kg*100:.1f}% | 乘客、行李及货物 |
+| 空重 (OEW) | {aircraft.empty_weight_kg:.1f} | {aircraft.empty_weight_kg / aircraft.mtow_kg * 100:.1f}% | 含结构、系统、发动机等 |
+| 燃油重量 (Fuel) | {aircraft.fuel_weight_kg:.1f} | {aircraft.fuel_weight_kg / aircraft.mtow_kg * 100:.1f}% | 任务燃油 + 储备燃油 |
+| 商载 (Payload) | {aircraft.weight_breakdown.get("payload", 0):.1f} | {aircraft.weight_breakdown.get("payload", 0) / aircraft.mtow_kg * 100:.1f}% | 乘客、行李及货物 |
 
 ### 5.3 重心包线与平衡分析
 重心（CG）位置的变化直接影响飞机的稳定性和操纵性。设计中必须确保在所有飞行状态和装载组合下，重心都位于许用范围内。
@@ -280,13 +284,15 @@ $$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_
 ---
 """
 
-    def _chapter_6_performance(self, aircraft: SizedAircraft, req: DesignRequirements, plot_paths: Dict[str, str]) -> str:
+    def _chapter_6_performance(
+        self, aircraft: SizedAircraft, req: DesignRequirements, plot_paths: Dict[str, str]
+    ) -> str:
         return f"""## 6. 飞行性能计算与优化
 
 ### 6.1 推力需求分析
 为了评估动力系统的匹配程度，计算了飞机在不同高度和速度下的需用推力，并与发动机的可用推力进行了对比。
 
-![Thrust Curves]({plot_paths.get('thrust_curves', 'Placeholder')})
+![Thrust Curves]({plot_paths.get("thrust_curves", "Placeholder")})
 *图 6-1: 需用推力与可用推力曲线*
 
 **技术解读**：
@@ -298,7 +304,7 @@ $$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_
 ### 6.2 飞行包线 (Flight Envelope)
 飞行包线定义了飞机的安全运行边界，是飞行员操纵飞机的依据。
 
-![Flight Envelope]({plot_paths.get('flight_envelope', 'Placeholder')})
+![Flight Envelope]({plot_paths.get("flight_envelope", "Placeholder")})
 *图 6-2: 飞行包线 (H-V 图)*
 
 **技术解读**：
@@ -310,7 +316,7 @@ $$ C_{{D0}} = \\frac{{1}}{{S_{{ref}}}} \sum (C_{{f,i}} F_i Q_i S_{{wet,i}}) + C_
 ### 6.3 航程与航时计算
 基于 Breguet 航程公式对设计航程进行了详细校核：
 $$ R = \\frac{{V}}{{C}} \\frac{{L}}{{D}} \ln(\\frac{{W_{{initial}}}}{{W_{{final}}}}) $$
-计算表明，在设计巡航高度 {req.cruise_altitude_m} m，以马赫数 {req.cruise_mach} 巡航时，飞机的升阻比 $L/D$ 处于较高水平，结合发动机的低耗油率，能够满足 {req.range_m/1000} km 的设计航程要求，并留有规定的燃油储备。
+计算表明，在设计巡航高度 {req.cruise_altitude_m} m，以马赫数 {req.cruise_mach} 巡航时，飞机的升阻比 $L/D$ 处于较高水平，结合发动机的低耗油率，能够满足 {req.range_m / 1000} km 的设计航程要求，并留有规定的燃油储备。
 
 ### 6.4 起降性能分析
 起降性能直接关系到飞机的机场适应性。
@@ -321,9 +327,11 @@ $$ R = \\frac{{V}}{{C}} \\frac{{L}}{{D}} \ln(\\frac{{W_{{initial}}}}{{W_{{final}
 ---
 """
 
-    def _chapter_7_structure(self, aircraft: SizedAircraft, requirements: DesignRequirements, plot_paths: Dict[str, str]) -> str:
-        # Note: This section name in template was confusingly similar to weights. 
-        # But per user request structure, Chapter 7 is Stability? 
+    def _chapter_7_structure(
+        self, aircraft: SizedAircraft, requirements: DesignRequirements, plot_paths: Dict[str, str]
+    ) -> str:
+        # Note: This section name in template was confusingly similar to weights.
+        # But per user request structure, Chapter 7 is Stability?
         # Wait, the prompt asked for:
         # 1. Req, 2. Aero, 3. Structure/Weight, 4. Performance, 5. Stability
         # My TOC has separated them. Let's stick to my TOC but map content correctly.
@@ -335,7 +343,7 @@ $$ R = \\frac{{V}}{{C}} \\frac{{L}}{{D}} \ln(\\frac{{W_{{initial}}}}{{W_{{final}
         # 6. Performance
         # 7. Stability
         # So this function should actually be Stability if I follow TOC strictly?
-        # No, let's keep the code method names consistent with their content, 
+        # No, let's keep the code method names consistent with their content,
         # but output the correct Chapter Number string.
         # Wait, I already output "## 5. ..." in _chapter_5_weights.
         # And "## 6. ..." in _chapter_6_performance.
@@ -355,13 +363,13 @@ $$ R = \\frac{{V}}{{C}} \\frac{{L}}{{D}} \ln(\\frac{{W_{{initial}}}}{{W_{{final}
         # 6. Performance
         # 7. Stability
         # So "Stability" is Chapter 7.
-        
+
         return f"""## 7. 稳定性与控制分析
 
 ### 7.1 载荷分析 (V-n 图)
 结构设计的首要输入是飞行载荷。V-n 图（机动包线）描述了飞机在不同飞行速度下允许的最大法向过载（Load Factor, n），定义了飞机的结构强度边界。
 
-![V-n Diagram]({plot_paths.get('vn_diagram', 'Placeholder')})
+![V-n Diagram]({plot_paths.get("vn_diagram", "Placeholder")})
 *图 7-1: 机动包线 (V-n 图)*
 
 **技术解读**：
@@ -447,13 +455,13 @@ $$ R = \\frac{{V}}{{C}} \\frac{{L}}{{D}} \ln(\\frac{{W_{{initial}}}}{{W_{{final}
 
     def _chapter_11_human_factors(self) -> str:
         # Renaming/Shifting content to match TOC
-        # TOC 10 is Human Factors. 
+        # TOC 10 is Human Factors.
         # Wait, previous method _chapter_10_stability returned "10. Human Factors".
         # So _chapter_10_stability name was wrong in my copy-paste?
         # Let's fix names in next iteration or just ensure content is right.
         # I will overwrite this file completely, so I can fix method names.
-        pass 
-        return "" # Will not be used, I'll merge into `generate_report` logic properly.
+        pass
+        return ""  # Will not be used, I'll merge into `generate_report` logic properly.
 
     def _chapter_12_airworthiness(self) -> str:
         return """## 11. 适航符合性分析

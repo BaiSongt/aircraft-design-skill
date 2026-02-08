@@ -110,8 +110,6 @@ def calculate_rotor_performance(
     thrust_available = rotor_aero.thrust
 
     hover_thrust_required = gross_weight * 9.81
-    hover_power_required = hover_thrust_required * rotor_aero.induced_velocity / 0.7
-
     hover_ceiling = 0.0
     if thrust_available > hover_thrust_required:
         excess_thrust = thrust_available - hover_thrust_required
@@ -176,30 +174,25 @@ def calculate_rotor_performance_envelope(
     sfc: float = 0.5,
     isa_delta_c: float = 0.0,
 ) -> dict:
-    envelope = {
-        'gross_weight': gross_weight_range,
-        'engine_power': engine_power_range,
-        'altitude_m': altitude_range,
-        'hover_ceiling': [],
-        'max_forward_speed': [],
-        'climb_rate': [],
-        'endurance': [],
-        'range': [],
-    }
+    hover_ceiling_grid: list[list[list[float]]] = []
+    max_forward_speed_grid: list[list[list[float]]] = []
+    climb_rate_grid: list[list[list[float]]] = []
+    endurance_grid: list[list[list[float]]] = []
+    range_grid: list[list[list[float]]] = []
 
     for gross_weight in gross_weight_range:
-        hover_ceiling_row = []
-        max_forward_speed_row = []
-        climb_rate_row = []
-        endurance_row = []
-        range_row = []
+        hover_ceiling_row: list[list[float]] = []
+        max_forward_speed_row: list[list[float]] = []
+        climb_rate_row: list[list[float]] = []
+        endurance_row: list[list[float]] = []
+        range_row: list[list[float]] = []
 
         for engine_power in engine_power_range:
-            hover_ceiling_col = []
-            max_forward_speed_col = []
-            climb_rate_col = []
-            endurance_col = []
-            range_col = []
+            hover_ceiling_col: list[float] = []
+            max_forward_speed_col: list[float] = []
+            climb_rate_col: list[float] = []
+            endurance_col: list[float] = []
+            range_col: list[float] = []
 
             for altitude in altitude_range:
                 rotor_aero = calculate_rotor_aerodynamics(
@@ -236,13 +229,22 @@ def calculate_rotor_performance_envelope(
             endurance_row.append(endurance_col)
             range_row.append(range_col)
 
-        envelope['hover_ceiling'].append(hover_ceiling_row)
-        envelope['max_forward_speed'].append(max_forward_speed_row)
-        envelope['climb_rate'].append(climb_rate_row)
-        envelope['endurance'].append(endurance_row)
-        envelope['range'].append(range_row)
+        hover_ceiling_grid.append(hover_ceiling_row)
+        max_forward_speed_grid.append(max_forward_speed_row)
+        climb_rate_grid.append(climb_rate_row)
+        endurance_grid.append(endurance_row)
+        range_grid.append(range_row)
 
-    return envelope
+    return {
+        "gross_weight": gross_weight_range,
+        "engine_power": engine_power_range,
+        "altitude_m": altitude_range,
+        "hover_ceiling": hover_ceiling_grid,
+        "max_forward_speed": max_forward_speed_grid,
+        "climb_rate": climb_rate_grid,
+        "endurance": endurance_grid,
+        "range": range_grid,
+    }
 
 
 def calculate_rotor_power_required(
@@ -258,7 +260,7 @@ def calculate_rotor_power_required(
     rho = atm.rho_kg_m3
 
     climb_thrust = gross_weight * 9.81 + gross_weight * climb_rate / 60.0
-    climb_drag = 0.5 * drag_coefficient * parasite_area * rho * (climb_rate / 60.0)**2
+    climb_drag = 0.5 * drag_coefficient * parasite_area * rho * (climb_rate / 60.0) ** 2
 
     total_thrust = climb_thrust + climb_drag
 
@@ -270,7 +272,7 @@ def calculate_rotor_disk_loading(
     thrust: float,
     rotor_diameter: float,
 ) -> float:
-    rotor_area = pi * (rotor_diameter / 2.0)**2
+    rotor_area = pi * (rotor_diameter / 2.0) ** 2
     disk_loading = thrust / rotor_area
     return disk_loading
 
@@ -280,6 +282,6 @@ def calculate_rotor_power_loading(
     power: float,
     rotor_diameter: float,
 ) -> float:
-    rotor_area = pi * (rotor_diameter / 2.0)**2
+    rotor_area = pi * (rotor_diameter / 2.0) ** 2
     power_loading = power / rotor_area
     return power_loading

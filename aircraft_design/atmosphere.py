@@ -13,6 +13,15 @@ class AtmosphereState:
     p_pa: float
     rho_kg_m3: float
     a_m_s: float
+    mu_kg_ms: float
+    sigma: float
+
+
+def _mu_sutherland_pa_s(t_k: float) -> float:
+    mu0 = 1.716e-5
+    t0 = 273.15
+    s = 110.4
+    return mu0 * (t_k / t0) ** 1.5 * (t0 + s) / (t_k + s)
 
 
 def isa_tropopause(
@@ -41,7 +50,9 @@ def isa_tropopause(
     t = t + float(delta_t_k)
     rho = p / (r * t)
     a = sqrt(CONST.gamma_air * r * t)
-    return AtmosphereState(h_m=h_m, t_k=t, p_pa=p, rho_kg_m3=rho, a_m_s=a)
+    mu = _mu_sutherland_pa_s(t)
+    sigma = rho / CONST.rho0_kg_m3
+    return AtmosphereState(h_m=h_m, t_k=t, p_pa=p, rho_kg_m3=rho, a_m_s=a, mu_kg_ms=mu, sigma=sigma)
 
 
 def qbar_pa(rho_kg_m3: float, v_m_s: float) -> float:

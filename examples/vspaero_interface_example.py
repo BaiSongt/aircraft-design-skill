@@ -13,7 +13,6 @@ from aircraft_design.geometry_modeling import (
     create_vertical_tail,
     assemble_aircraft,
 )
-import numpy as np
 
 
 def main():
@@ -53,7 +52,7 @@ def main():
         h_tail=h_tail,
         v_tail=v_tail,
     )
-    print(f"   飞机创建完成")
+    print("   飞机创建完成")
     print(f"   机翼参考面积: {aircraft.wing.area:.2f} m²")
     print(f"   机身长度: {aircraft.fuselage.length:.2f} m")
     print(f"   平尾面积: {aircraft.h_tail.area:.2f} m²")
@@ -70,11 +69,12 @@ def main():
         num_spanwise=20,
         num_chordwise=10,
     )
-    print(f"   VSPAERO输入文件生成完成")
+    print("   VSPAERO输入文件生成完成")
     print(f"   文件名: {input_file}")
 
     print("\n3. 模拟VSPAERO输出")
     from aircraft_design.vspaero_interface import VSPAEROResult
+
     mock_result = VSPAEROResult(
         cl=0.5,
         cd=0.03,
@@ -91,7 +91,7 @@ def main():
     print("\n4. 解析VSPAERO输出")
     output_file = "vspaero_output.txt"
     parsed_result = parse_vspaero_output(output_file=output_file)
-    print(f"   VSPAERO输出解析完成")
+    print("   VSPAERO输出解析完成")
     print(f"   升力系数 CL: {parsed_result.cl:.4f}")
     print(f"   阻力系数 CD: {parsed_result.cd:.4f}")
     print(f"   俯仰力矩系数 CM: {parsed_result.cm:.4f}")
@@ -101,7 +101,7 @@ def main():
         vspaero_results=mock_result,
         geometry=aircraft,
     )
-    print(f"   升力分布计算完成")
+    print("   升力分布计算完成")
     print(f"   展向位置: {list(lift_dist['spanwise_location'].values())}")
     print(f"   升力系数: {list(lift_dist['lift_coefficient'].values())}")
     print(f"   总升力: {lift_dist['total_lift']:.2f}")
@@ -111,14 +111,14 @@ def main():
         vspaero_results=mock_result,
         geometry=aircraft,
     )
-    print(f"   阻力分布计算完成")
+    print("   阻力分布计算完成")
     print(f"   展向位置: {list(drag_dist['spanwise_location'].values())}")
     print(f"   阻力系数: {list(drag_dist['drag_coefficient'].values())}")
     print(f"   总阻力: {drag_dist['total_drag']:.2f}")
 
     print("\n7. 计算力矩系数")
     moments = calculate_moment_coefficients(vspaero_results=mock_result)
-    print(f"   力矩系数计算完成")
+    print("   力矩系数计算完成")
     print(f"   俯仰力矩: {moments['pitch_moment']:.4f}")
     print(f"   滚转力矩: {moments['roll_moment']:.4f}")
     print(f"   偏航力矩: {moments['yaw_moment']:.4f}")
@@ -130,14 +130,14 @@ def main():
         alpha_range=[0.0, 5.0],
         output_prefix="vspaero_sweep",
     )
-    print(f"   VSPAERO扫描生成完成")
+    print("   VSPAERO扫描生成完成")
     print(f"   马赫数范围: {sweep['mach']}")
     print(f"   攻角范围: {sweep['alpha']}")
-    for i, mach in enumerate(sweep['mach']):
-        for j, alpha in enumerate(sweep['alpha']):
-            cl = sweep['cl'][i][j]
-            cd = sweep['cd'][i][j]
-            l_d = sweep['l_d'][i][j]
+    for i, mach in enumerate(sweep["mach"]):
+        for j, alpha in enumerate(sweep["alpha"]):
+            cl = sweep["cl"][i][j]
+            cd = sweep["cd"][i][j]
+            l_d = sweep["l_d"][i][j]
             print(f"   马赫数={mach:.2f}, 攻角={alpha:.2f} deg: CL={cl:.4f}, CD={cd:.4f}, L/D={l_d:.2f}")
 
     print("\n" + "=" * 50)

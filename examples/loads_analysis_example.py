@@ -36,7 +36,7 @@ def main():
         h_tail=None,
         v_tail=None,
     )
-    print(f"   飞机创建完成")
+    print("   飞机创建完成")
     print(f"   机翼参考面积: {aircraft.wing.area:.2f} m²")
     print(f"   机身长度: {aircraft.fuselage.length:.2f} m")
 
@@ -49,7 +49,7 @@ def main():
         beta_deg=0.0,
         sref=30.0,
     )
-    print(f"   气动载荷计算完成")
+    print("   气动载荷计算完成")
     print(f"   升力: {aero_loads.lift:.2f} N")
     print(f"   阻力: {aero_loads.drag:.2f} N")
     print(f"   俯仰力矩: {aero_loads.moment_pitch:.2f} N·m")
@@ -65,12 +65,16 @@ def main():
         cg=np.array([0.0, 0.0, 0.0]),
         acceleration=np.array([0.0, 0.0, 9.81]),
     )
-    print(f"   惯性载荷计算完成")
+    print("   惯性载荷计算完成")
     print(f"   质量: {inertial_loads.mass:.2f} kg")
     print(f"   重心: ({inertial_loads.cg[0]:.2f}, {inertial_loads.cg[1]:.2f}, {inertial_loads.cg[2]:.2f}) m")
-    print(f"   加速度: ({inertial_loads.acceleration[0]:.2f}, {inertial_loads.acceleration[1]:.2f}, {inertial_loads.acceleration[2]:.2f}) m/s²")
+    print(
+        f"   加速度: ({inertial_loads.acceleration[0]:.2f}, {inertial_loads.acceleration[1]:.2f}, {inertial_loads.acceleration[2]:.2f}) m/s²"
+    )
     print(f"   惯性力: ({inertial_loads.force[0]:.2f}, {inertial_loads.force[1]:.2f}, {inertial_loads.force[2]:.2f}) N")
-    print(f"   惯性力矩: ({inertial_loads.moment[0]:.2f}, {inertial_loads.moment[1]:.2f}, {inertial_loads.moment[2]:.2f}) N·m")
+    print(
+        f"   惯性力矩: ({inertial_loads.moment[0]:.2f}, {inertial_loads.moment[1]:.2f}, {inertial_loads.moment[2]:.2f}) N·m"
+    )
 
     print("\n4. 计算结构载荷")
     struct_loads = calculate_structural_loads(
@@ -80,7 +84,7 @@ def main():
         material_yield_strength=270.0e6,
         safety_factor=1.5,
     )
-    print(f"   结构载荷计算完成")
+    print("   结构载荷计算完成")
     print(f"   最大弯矩: {np.max(np.abs(struct_loads.bending_moment)):.2f} N·m")
     print(f"   最大剪力: {np.max(np.abs(struct_loads.shear_force)):.2f} N")
     print(f"   扭矩: {struct_loads.torque:.2f} N·m")
@@ -96,7 +100,7 @@ def main():
         material_yield_strength=270.0e6,
         safety_factor=1.5,
     )
-    print(f"   载荷包络计算完成")
+    print("   载荷包络计算完成")
     print(f"   速度范围: {envelope['velocity']} m/s")
     print(f"   高度范围: {envelope['altitude_m']} m")
     print(f"   攻角范围: {envelope['alpha']} deg")
@@ -107,7 +111,7 @@ def main():
         velocity=200.0,
         altitude_m=10000.0,
     )
-    print(f"   颤振分析完成")
+    print("   颤振分析完成")
     print(f"   颤振频率: {flutter['flutter_frequency_hz']:.2f} Hz")
     print(f"   颤振速度: {flutter['flutter_velocity_m_s']:.2f} m/s")
     print(f"   颤振角速度: {flutter['flutter_angular_velocity_rad_s']:.2f} rad/s")

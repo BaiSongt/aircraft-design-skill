@@ -1,5 +1,5 @@
-import sys
 from pathlib import Path
+
 
 class AdvancedVisualizer:
     def __init__(self, output_dir: Path):
@@ -7,6 +7,7 @@ class AdvancedVisualizer:
         self.pv = None
         try:
             import pyvista as pv
+
             self.pv = pv
             print("PyVista is available for advanced visualization.")
         except ImportError:
@@ -27,18 +28,18 @@ class AdvancedVisualizer:
         try:
             print(f"Loading 3D model from {obj_path}...")
             mesh = self.pv.read(str(obj_path))
-            
+
             pl = self.pv.Plotter()
-            pl.add_mesh(mesh, color='white', show_edges=True)
+            pl.add_mesh(mesh, color="white", show_edges=True)
             pl.add_axes()
-            pl.add_text("Aircraft Geometry (OpenVSP Export)", position='upper_left')
-            
+            pl.add_text("Aircraft Geometry (OpenVSP Export)", position="upper_left")
+
             # Set camera view
             pl.view_isometric()
-            
+
             print("Opening 3D Visualization Window...")
             pl.show()
-            
+
         except Exception as e:
             print(f"Error visualizing OBJ: {e}")
 
@@ -79,5 +80,5 @@ if __name__ == "__main__":
         script_path = self.output_dir / "visualize_model.py"
         with open(script_path, "w") as f:
             f.write(script_content)
-            
+
         return script_path

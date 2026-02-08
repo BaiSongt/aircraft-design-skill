@@ -32,7 +32,7 @@ def main():
         airfoil_tip="NACA0012",
         position=np.array([0.0, 0.0, 0.0]),
     )
-    print(f"   机翼创建完成")
+    print("   机翼创建完成")
     print(f"   参考面积: {wing.area:.2f} m²")
     print(f"   翼展: {wing.span:.2f} m")
     print(f"   根弦长: {wing.chord_root:.2f} m")
@@ -49,7 +49,7 @@ def main():
         tail_length=4.5,
         position=np.array([0.0, 0.0, 0.0]),
     )
-    print(f"   机身创建完成")
+    print("   机身创建完成")
     print(f"   长度: {fuselage.length:.2f} m")
     print(f"   直径: {fuselage.diameter:.2f} m")
     print(f"   长径比: {fuselage.fineness_ratio:.2f}")
@@ -64,7 +64,7 @@ def main():
         airfoil="NACA0012",
         position=np.array([-5.0, 0.0, 0.0]),
     )
-    print(f"   平尾创建完成")
+    print("   平尾创建完成")
     print(f"   参考面积: {h_tail.area:.2f} m²")
     print(f"   翼展: {h_tail.span:.2f} m")
 
@@ -77,7 +77,7 @@ def main():
         airfoil="NACA0012",
         position=np.array([-5.0, 0.0, 0.0]),
     )
-    print(f"   垂尾创建完成")
+    print("   垂尾创建完成")
     print(f"   参考面积: {v_tail.area:.2f} m²")
     print(f"   翼展: {v_tail.span:.2f} m")
 
@@ -89,7 +89,7 @@ def main():
         position=np.array([2.0, 2.5, -0.5]),
         orientation=np.array([0.0, 0.0, 0.0]),
     )
-    print(f"   发动机创建完成")
+    print("   发动机创建完成")
     print(f"   直径: {engine.diameter:.2f} m")
     print(f"   长度: {engine.length:.2f} m")
     print(f"   涵道比: {engine.bypass_ratio:.2f}")
@@ -101,7 +101,7 @@ def main():
         height=1.5,
         track_width=3.0,
     )
-    print(f"   起落架创建完成")
+    print("   起落架创建完成")
     print(f"   类型: {landing_gear.type}")
     print(f"   高度: {landing_gear.height:.2f} m")
     print(f"   轮距: {landing_gear.track_width:.2f} m")
@@ -115,7 +115,7 @@ def main():
         engines=[engine],
         landing_gear=[landing_gear],
     )
-    print(f"   飞机组装完成")
+    print("   飞机组装完成")
     print(f"   机翼参考面积: {aircraft.wing.area:.2f} m²")
     print(f"   机身长度: {aircraft.fuselage.length:.2f} m")
     print(f"   平尾面积: {aircraft.h_tail.area:.2f} m²")
@@ -131,35 +131,35 @@ def main():
         dy=0.0,
         dz=0.0,
     )
-    print(f"       平移完成")
+    print("       平移完成")
     print(f"       原位置: {wing.position}")
     print(f"       新位置: {translated_wing.position}")
 
     print("   8.2 旋转几何")
-    rotated_wing = rotate_geometry(
+    rotate_geometry(
         geometry=wing,
         axis="z",
         angle_deg=10.0,
     )
-    print(f"       旋转完成")
-    print(f"       旋转角度: 10.0 deg")
+    print("       旋转完成")
+    print("       旋转角度: 10.0 deg")
 
     print("   8.3 缩放几何")
     scaled_wing = scale_geometry(
         geometry=wing,
         scale_factor=1.1,
     )
-    print(f"       缩放完成")
+    print("       缩放完成")
     print(f"       原面积: {wing.area:.2f} m²")
     print(f"       新面积: {scaled_wing.area:.2f} m²")
 
     print("   8.4 镜像几何")
-    mirrored_wing = mirror_geometry(
+    mirror_geometry(
         geometry=wing,
         axis="y",
     )
-    print(f"       镜像完成")
-    print(f"       镜像轴: y")
+    print("       镜像完成")
+    print("       镜像轴: y")
 
     print("\n" + "=" * 50)
     print("几何建模使用示例完成")

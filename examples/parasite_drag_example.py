@@ -17,7 +17,7 @@ def main():
         taper_ratio=0.6,
         sweep_quarter_chord=25.0,
     )
-    print(f"   机翼创建完成")
+    print("   机翼创建完成")
     print(f"   参考面积: {wing.area:.2f} m²")
     print(f"   翼展: {wing.span:.2f} m")
 
@@ -30,7 +30,7 @@ def main():
         surface_roughness=0.0,
         isa_delta_c=0.0,
     )
-    print(f"   寄生阻力计算完成")
+    print("   寄生阻力计算完成")
     print(f"   总阻力系数 CD0: {result.cd0_total:.6f}")
     print(f"   摩擦阻力系数 CD0_fric: {result.cd0_fric:.6f}")
     print(f"   形状阻力系数 CD0_form: {result.cd0_form:.6f}")
@@ -48,12 +48,12 @@ def main():
         surface_roughness=0.0,
         isa_delta_c=0.0,
     )
-    print(f"   寄生阻力扫描完成")
+    print("   寄生阻力扫描完成")
     print(f"   速度范围: {sweep_result['velocity']}")
     print(f"   高度范围: {sweep_result['altitude']} m")
-    for i, velocity in enumerate(sweep_result['velocity']):
-        for j, altitude in enumerate(sweep_result['altitude']):
-            cd0_total = sweep_result['cd0_total'][i][j]
+    for i, velocity in enumerate(sweep_result["velocity"]):
+        for j, altitude in enumerate(sweep_result["altitude"]):
+            cd0_total = sweep_result["cd0_total"][i][j]
             print(f"   速度={velocity:.0f} m/s, 高度={altitude:.0f} m: CD0={cd0_total:.6f}")
 
     print("\n4. 寄生阻力包络")
@@ -65,12 +65,12 @@ def main():
         surface_roughness=0.0,
         isa_delta_c=0.0,
     )
-    print(f"   寄生阻力包络生成完成")
+    print("   寄生阻力包络生成完成")
     print(f"   马赫数范围: {envelope['mach']}")
     print(f"   高度范围: {envelope['altitude_m']} m")
-    for i, mach in enumerate(envelope['mach']):
-        for j, altitude in enumerate(envelope['altitude_m']):
-            cd0_total = envelope['cd0_total'][i][j]
+    for i, mach in enumerate(envelope["mach"]):
+        for j, altitude in enumerate(envelope["altitude_m"]):
+            cd0_total = envelope["cd0_total"][i][j]
             print(f"   马赫数={mach:.2f}, 高度={altitude:.0f} m: CD0={cd0_total:.6f}")
 
     print("\n" + "=" * 50)

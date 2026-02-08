@@ -4,10 +4,7 @@ from dataclasses import dataclass, field
 import math
 
 from .constraints import (
-    constraint_wing_loading_max_from_landing_distance,
-    constraint_curve_takeoff_distance,
     required_thrust_to_weight_for_takeoff_distance_numeric,
-    required_thrust_to_weight,
     AeroPolar,
     max_wing_loading_for_landing_distance_numeric_pa,
     required_thrust_to_weight_for_sustained_turn,
@@ -18,8 +15,6 @@ from .weights_structural import (
     calculate_fuselage_structural_weight,
     calculate_landing_gear_weight,
     calculate_tail_structural_weight,
-    calculate_surface_controls_weight,
-    calculate_nacelle_group_weight,
 )
 from .weights_system import (
     calculate_fuel_system_weight,
@@ -36,21 +31,15 @@ from .weights_system import (
 from .propulsion import (
     PropulsionModel,
     build_propulsion_model,
-    fuel_flow_n_s,
-)
-from .performance import (
-    generate_performance_envelope,
-    calculate_sustained_turn_load,
-    calculate_service_ceiling,
 )
 from .stability_control import (
     tail_areas_from_volume_coefficients,
-    estimate_static_margin_and_trim,
 )
-from .atmosphere import qbar_pa, isa_tropopause
+from .atmosphere import isa_tropopause
 from .units import CONST
 from .visualization_realtime import RealTimeVisualizer
 from .geometry_detailed import ParametricGeometry, DetailedWing, DetailedFuselage, DetailedTail
+
 
 @dataclass
 class DesignRequirements:
@@ -59,19 +48,20 @@ class DesignRequirements:
     payload_kg: float
     cruise_mach: float
     cruise_altitude_m: float
-    
+
     # Constraints
     takeoff_distance_m: float
     landing_distance_m: float
     stall_speed_m_s: float | None = None
-    
+
     # Performance
     max_load_factor: float = 7.33
     sustained_turn_g: float = 5.0
     service_ceiling_m: float = 15000.0
-    
+
     # Environment
     isa_delta_c: float = 0.0
+
 
 @dataclass
 class InitialGuess:
@@ -82,11 +72,12 @@ class InitialGuess:
     sweep_deg: float = 40.0
     taper_ratio: float = 0.3
     thickness_ratio: float = 0.06
-    
+
     # Coefficients
     cd0: float = 0.02
     oswald_e: float = 0.8
-    sfc_cruise_1_s: float = 2.4e-5 # ~0.85/3600
+    sfc_cruise_1_s: float = 2.4e-5  # ~0.85/3600
+
 
 @dataclass
 class SizedAircraft:
@@ -95,23 +86,24 @@ class SizedAircraft:
     fuel_weight_kg: float
     wing_area_m2: float
     thrust_sl_n: float
-    
+
     weight_breakdown: dict
     geometry: dict
-    
+
     # Performance metrics
     actual_range_m: float
     takeoff_distance_m: float
     landing_distance_m: float
-    
+
     converged: bool
     iterations: int
     iteration_history: list[dict] = field(default_factory=list)
-    
+
     # Attached details
     design_point: dict = field(default_factory=dict)
     drag_params: dict = field(default_factory=dict)
     aero_params: dict = field(default_factory=dict)
+
 
 def sizing_loop(
     requirements: DesignRequirements,
@@ -125,7 +117,7 @@ def sizing_loop(
     """
     Orchestrates the Class I sizing loop.
     """
-    
+
     # Initialize Visualizer
     viz = visualizer
     if enable_visualization and viz is None:
@@ -139,29 +131,29 @@ def sizing_loop(
         print("==============================================\n")
         viz = RealTimeVisualizer()
         viz.start()
-    
+
     try:
         # 1. Constraint Analysis to Refine T/W and W/S
         # For now, we use the guess as the starting point, but we could enforce constraints here.
         # Let's verify if the guess meets landing/takeoff constraints and adjust if needed.
-        
+
         # Atmosphere at Sea Level
         rho_sl = 1.225
-        
+
         # Landing Constraint (Max W/S)
-        cl_max_landing = 1.4 + 0.8 # Clean + High Lift assumption (TODO: Parametrize)
-        
+        cl_max_landing = 1.4 + 0.8  # Clean + High Lift assumption (TODO: Parametrize)
+
         ws_max_landing = max_wing_loading_for_landing_distance_numeric_pa(
             target_landing_distance_m=requirements.landing_distance_m,
             rho_kg_m3=rho_sl,
             cl_max_landing=cl_max_landing,
             obstacle_height_m=15.24,
         )
-        
+
         current_ws = min(guess.wing_loading_pa, ws_max_landing)
-        
+
         # Takeoff Constraint (Min T/W)
-        cl_max_takeoff = 1.4 + 0.4 # Clean + High Lift
+        cl_max_takeoff = 1.4 + 0.4  # Clean + High Lift
         tw_min_takeoff = required_thrust_to_weight_for_takeoff_distance_numeric(
             takeoff_distance_m=requirements.takeoff_distance_m,
             wing_loading_pa=current_ws,
@@ -169,10 +161,10 @@ def sizing_loop(
             cl_max_takeoff=cl_max_takeoff,
             obstacle_height_m=15.24,
         )
-        
+
         # Performance Constraints (Turn, Ceiling)
         polar = AeroPolar(cd0=guess.cd0, e=guess.oswald_e, ar=guess.aspect_ratio)
-        
+
         # 1. Sustained Turn at Cruise Altitude
         tw_min_turn = 0.0
         if requirements.sustained_turn_g > 0.1:
@@ -187,9 +179,9 @@ def sizing_loop(
             )
             # Apply lapse to get SL T/W
             # T_sl = T_alt / (rho/rho_sl)^0.7
-            lapse_cruise = (atm_cruise.rho_kg_m3 / rho_sl)**0.7
+            lapse_cruise = (atm_cruise.rho_kg_m3 / rho_sl) ** 0.7
             tw_min_turn = tw_req_turn_alt / lapse_cruise
-        
+
         # 2. Service Ceiling
         atm_ceiling = isa_tropopause(requirements.service_ceiling_m)
         tw_min_ceiling = required_thrust_to_weight_for_service_ceiling(
@@ -199,9 +191,9 @@ def sizing_loop(
             climb_rate_m_s=0.508,
             jet_lapse_exp=0.7,
         )
-        
+
         current_tw = max(guess.thrust_to_weight, tw_min_takeoff, tw_min_turn, tw_min_ceiling)
-        
+
         if viz:
             # Send constraints data
             # Generate some points for plotting
@@ -210,11 +202,11 @@ def sizing_loop(
             # For now, just send the points
             viz.update_constraints(
                 constraints_data={
-                    'ws_range': ws_range,
-                    'landing': ws_max_landing,
+                    "ws_range": ws_range,
+                    "landing": ws_max_landing,
                     # 'takeoff': ..., # Need to calculate curve
                 },
-                design_point={'ws': current_ws, 'tw': current_tw}
+                design_point={"ws": current_ws, "tw": current_tw},
             )
 
         print(f"DEBUG: Constraints: W/S max={ws_max_landing:.1f}")
@@ -224,53 +216,55 @@ def sizing_loop(
         # Initialize Loop Variables
         mtow = guess.mtow_kg
         history = []
-        
+
         # polar was created above
-        
+
         if propulsion_model is None:
-            propulsion_model = build_propulsion_model({
-                "type": "jet",
-                "thrust_sl_n": mtow * CONST.g0_m_s2 * current_tw,
-                "tsfc_1_s": guess.sfc_cruise_1_s,
-                "bypass_ratio": 0.5, # Default fighter-like
-            })
-        
+            propulsion_model = build_propulsion_model(
+                {
+                    "type": "jet",
+                    "thrust_sl_n": mtow * CONST.g0_m_s2 * current_tw,
+                    "tsfc_1_s": guess.sfc_cruise_1_s,
+                    "bypass_ratio": 0.5,  # Default fighter-like
+                }
+            )
+
         for i in range(max_iter):
             mtow_old = mtow
-            
+
             # Safety check for divergence
-            if mtow > 1e7 or math.isnan(mtow): # 10,000 tons is absurd
+            if mtow > 1e7 or math.isnan(mtow):  # 10,000 tons is absurd
                 print(f"DEBUG: Divergence detected at iter {i}. MTOW={mtow}")
                 break
 
             # 1. Geometry
             s_wing = mtow * CONST.g0_m_s2 / current_ws
             thrust_req = mtow * CONST.g0_m_s2 * current_tw
-            
+
             b_wing = math.sqrt(guess.aspect_ratio * s_wing)
-            c_root = 2 * s_wing / (b_wing * (1 + guess.taper_ratio)) # Simplified
-            
+            c_root = 2 * s_wing / (b_wing * (1 + guess.taper_ratio))  # Simplified
+
             # Fuselage Length Assumption
             l_fus = 0.8 * b_wing
 
             # Tail Sizing (Volume Coefficients)
             # Fighter defaults
-            l_tail_approx = 0.4 * b_wing # Approx tail arm
+            l_tail_approx = 0.4 * b_wing  # Approx tail arm
             tail_geo = tail_areas_from_volume_coefficients(
                 s_wing_m2=s_wing,
                 b_wing_m=b_wing,
-                c_bar_wing_m=s_wing/b_wing, # Mean chord approx
+                c_bar_wing_m=s_wing / b_wing,  # Mean chord approx
                 l_ht_m=l_tail_approx,
                 l_vt_m=l_tail_approx,
-                vh_coeff=0.4, # Fighter
-                vv_coeff=0.07, # Fighter
+                vh_coeff=0.4,  # Fighter
+                vv_coeff=0.07,  # Fighter
             )
-            
+
             if viz:
-                 error = abs(mtow - guess.mtow_kg) / guess.mtow_kg if i == 0 else abs(mtow - mtow_old) / mtow_old
-                 
-                 # Construct Parametric Geometry
-                 p_geo = ParametricGeometry(
+                error = abs(mtow - guess.mtow_kg) / guess.mtow_kg if i == 0 else abs(mtow - mtow_old) / mtow_old
+
+                # Construct Parametric Geometry
+                p_geo = ParametricGeometry(
                     wing=DetailedWing(
                         area=s_wing,
                         span=b_wing,
@@ -292,15 +286,15 @@ def sizing_loop(
                         vt_aspect_ratio=1.5,
                         ht_sweep=25.0,
                         vt_sweep=35.0,
-                    )
-                 )
-                 
-                 # We need l_fus defined before geometry construction or use the same logic
-                 # The original code defined l_fus at line 281. I should move l_fus calc up.
-                 
-                 viz.update_iteration(i, mtow, error, geometry=p_geo.generate_mesh())
-                 # Slow down slightly for demo effect if needed
-                 # time.sleep(0.05) 
+                    ),
+                )
+
+                # We need l_fus defined before geometry construction or use the same logic
+                # The original code defined l_fus at line 281. I should move l_fus calc up.
+
+                viz.update_iteration(i, mtow, error, geometry=p_geo.generate_mesh())
+                # Slow down slightly for demo effect if needed
+                # time.sleep(0.05)
 
             # 2. Empty Weight Buildup (Theory 03)
             # Structural
@@ -311,34 +305,29 @@ def sizing_loop(
                 taper_ratio=guess.taper_ratio,
                 max_takeoff_weight_kg=mtow,
                 t_c=guess.thickness_ratio,
-                n_limit=requirements.max_load_factor * 1.5 / 1.5, # Limit load
+                n_limit=requirements.max_load_factor * 1.5 / 1.5,  # Limit load
             )
-            
+
             # Fuselage (Approx length based on wing span/area scaling or fixed assumption)
             # l_fus calculated above
             w_fus = calculate_fuselage_structural_weight(
                 fuselage_length_m=l_fus,
-                fuselage_height_m=l_fus * 0.12, # Fineness 8
+                fuselage_height_m=l_fus * 0.12,  # Fineness 8
                 max_takeoff_weight_kg=mtow,
                 n_limit=requirements.max_load_factor,
             )
-            
+
             w_lg = calculate_landing_gear_weight(max_takeoff_weight_kg=mtow)
-            
+
             w_tails = calculate_tail_structural_weight(
                 s_ht_m2=tail_geo["s_ht_m2"],
                 s_vt_m2=tail_geo["s_vt_m2"],
                 max_takeoff_weight_kg=mtow,
                 n_limit=requirements.max_load_factor,
             )
-            
-            w_struct_total = (
-                w_wing.w_struct_kg + 
-                w_fus.w_struct_kg + 
-                w_lg.w_struct_kg + 
-                w_tails.w_struct_kg
-            )
-            
+
+            w_struct_total = w_wing.w_struct_kg + w_fus.w_struct_kg + w_lg.w_struct_kg + w_tails.w_struct_kg
+
             # Propulsion & Systems
             w_engine_dry_kg = thrust_req / (6.0 * CONST.g0_m_s2)
             w_prop_sys = calculate_propulsion_system_weight(
@@ -346,107 +335,113 @@ def sizing_loop(
                 fuselage_length_m=l_fus,
                 # Estimate engine weight from thrust if not known
                 # T/W_engine ~ 6.0
-                w_engine_dry_kg=w_engine_dry_kg, 
+                w_engine_dry_kg=w_engine_dry_kg,
             )
-            
+
             # Fuel System (Iterative dependence on fuel weight, use previous guess)
             # Initial fuel guess: 0.3 * MTOW
             fuel_guess = 0.3 * mtow
             w_fuel_sys = calculate_fuel_system_weight(fuel_weight_kg=fuel_guess)
-            
+
             # Flight Controls
             w_fc = calculate_flight_controls_weight(
                 max_takeoff_weight_kg=mtow,
-                control_surface_area_m2=s_wing * 0.15 # Approx
+                control_surface_area_m2=s_wing * 0.15,  # Approx
             )
-            
+
             # Hydraulics
             w_hyd = calculate_hydraulics_pneumatics_weight(
                 fuselage_length_m=l_fus,
                 b_wing_m=b_wing,
             )
-            
+
             # Electrical
             w_elec = calculate_electrical_system_weight(
                 fuel_system_weight_kg=w_fuel_sys.w_system_kg,
-                avionics_weight_kg=300.0, # Guess
+                avionics_weight_kg=300.0,  # Guess
             )
-            
+
             # Avionics
             w_av = calculate_avionics_weight(
                 mtow_kg=mtow,
                 w_engine_kg=w_engine_dry_kg,
                 num_engines=1,
                 w_fuel_system_kg=w_fuel_sys.w_system_kg,
-                uninstalled_avionics_weight_kg=300.0
+                uninstalled_avionics_weight_kg=300.0,
             )
-            
+
             # Furnishings
             w_furn = calculate_furnishings_weight(mtow_kg=mtow)
-            
+
             # Air Con / Anti-Ice / Handling
             w_env = calculate_air_conditioning_weight(avionics_weight_kg=w_av.w_system_kg, num_crew=1)
             w_ice = calculate_anti_ice_weight(max_takeoff_weight_kg=mtow)
             w_hdl = calculate_handling_gear_weight(max_takeoff_weight_kg=mtow)
-            
+
             w_systems_total = (
-                w_prop_sys.w_system_kg +
-                w_fuel_sys.w_system_kg +
-                w_fc.w_system_kg +
-                w_hyd.w_system_kg +
-                w_elec.w_system_kg +
-                w_av.w_system_kg +
-                w_furn.w_system_kg +
-                w_env.w_system_kg +
-                w_ice.w_system_kg +
-                w_hdl.w_system_kg
+                w_prop_sys.w_system_kg
+                + w_fuel_sys.w_system_kg
+                + w_fc.w_system_kg
+                + w_hyd.w_system_kg
+                + w_elec.w_system_kg
+                + w_av.w_system_kg
+                + w_furn.w_system_kg
+                + w_env.w_system_kg
+                + w_ice.w_system_kg
+                + w_hdl.w_system_kg
             )
-            
+
             # Empty Weight
             we_calc = w_struct_total + w_systems_total
-            
+
             # 3. Fuel Fraction / Mission Fuel
             # Simple Breguet for now
             # R = (V/c) * (L/D) * ln(W0/W1)
             # W1/W0 = exp(-R * c / (V * L/D))
             # W_fuel = W0 * (1 - W1/W0) * 1.06 (Reserves)
-            
+
             # Cruise L/D
             # q = 0.5 * rho * V^2
             # CL = W / (q * S) -> Use mid-cruise weight (approx 0.9 * W0)
             atm_cruise = isa_tropopause(requirements.cruise_altitude_m)
             v_cruise = requirements.cruise_mach * atm_cruise.a_m_s
             q_cruise = 0.5 * atm_cruise.rho_kg_m3 * v_cruise**2
-            
+
             cl_cruise = (0.9 * mtow * CONST.g0_m_s2) / (q_cruise * s_wing)
             cd_cruise = polar.cd(cl_cruise)
             ld_cruise = cl_cruise / cd_cruise
-            
+
             sfc = guess.sfc_cruise_1_s
-            
+
             fuel_fraction = 1.0 - math.exp(-requirements.range_m * sfc / (v_cruise * ld_cruise))
-            w_fuel_mission = mtow * fuel_fraction * 1.06 # +6% reserves
-            
+            w_fuel_mission = mtow * fuel_fraction * 1.06  # +6% reserves
+
             # 4. Convergence Check
             w_calc = we_calc + w_fuel_mission + requirements.payload_kg
 
-            history.append({
-                "iteration": i,
-                "mtow": mtow,
-                "empty_weight": we_calc,
-                "fuel_weight": w_fuel_mission,
-                "payload_weight": requirements.payload_kg,
-                "error": abs(w_calc - mtow)
-            })
-            
-            print(f"DEBUG: Iter {i}: MTOW={mtow:.1f} -> W_calc={w_calc:.1f} (We={we_calc:.1f}, Wf={w_fuel_mission:.1f})")
-            print(f"DEBUG: Breakdown: Struct={w_struct_total:.1f}, Sys={w_systems_total:.1f}, Fus={w_fus.w_struct_kg:.1f}, Wing={w_wing.w_struct_kg:.1f}, Prop={w_prop_sys.w_system_kg:.1f}")
+            history.append(
+                {
+                    "iteration": i,
+                    "mtow": mtow,
+                    "empty_weight": we_calc,
+                    "fuel_weight": w_fuel_mission,
+                    "payload_weight": requirements.payload_kg,
+                    "error": abs(w_calc - mtow),
+                }
+            )
+
+            print(
+                f"DEBUG: Iter {i}: MTOW={mtow:.1f} -> W_calc={w_calc:.1f} (We={we_calc:.1f}, Wf={w_fuel_mission:.1f})"
+            )
+            print(
+                f"DEBUG: Breakdown: Struct={w_struct_total:.1f}, Sys={w_systems_total:.1f}, Fus={w_fus.w_struct_kg:.1f}, Wing={w_wing.w_struct_kg:.1f}, Prop={w_prop_sys.w_system_kg:.1f}"
+            )
 
             if abs(w_calc - mtow) < tolerance * mtow:
                 # Calculate final geometry details
                 c_root = (2 * s_wing) / (b_wing * (1 + guess.taper_ratio))
-                c_mean = (2/3) * c_root * ((1 + guess.taper_ratio + guess.taper_ratio**2) / (1 + guess.taper_ratio))
-                
+                c_mean = (2 / 3) * c_root * ((1 + guess.taper_ratio + guess.taper_ratio**2) / (1 + guess.taper_ratio))
+
                 # Converged
                 if viz:
                     # Update Payload-Range Diagram (Schematic)
@@ -474,7 +469,7 @@ def sizing_loop(
                         "payload": requirements.payload_kg,
                     },
                     geometry={
-                        "s_ref_m2": s_wing, # Standardize key
+                        "s_ref_m2": s_wing,  # Standardize key
                         "s_wing": s_wing,
                         "span_m": b_wing,
                         "aspect_ratio": guess.aspect_ratio,
@@ -483,15 +478,15 @@ def sizing_loop(
                         "taper_ratio": guess.taper_ratio,
                         "sweep_deg": guess.sweep_deg,
                         "fuselage_length_m": l_fus,
-                        "fuselage_diameter_m": l_fus / 9.0, # Approx fineness ratio 9
+                        "fuselage_diameter_m": l_fus / 9.0,  # Approx fineness ratio 9
                         "s_ht_m2": tail_geo["s_ht_m2"],
                         "s_vt_m2": tail_geo["s_vt_m2"],
                     },
-                    actual_range_m=requirements.range_m, # Calculated
-                    takeoff_distance_m=requirements.takeoff_distance_m, # Constraint met
-                    landing_distance_m=requirements.landing_distance_m, # Constraint met
+                    actual_range_m=requirements.range_m,  # Calculated
+                    takeoff_distance_m=requirements.takeoff_distance_m,  # Constraint met
+                    landing_distance_m=requirements.landing_distance_m,  # Constraint met
                     converged=True,
-                    iterations=i+1,
+                    iterations=i + 1,
                     design_point={
                         "thrust_to_weight": current_tw,
                         "wing_loading_pa": current_ws,
@@ -502,15 +497,15 @@ def sizing_loop(
                         "oswald_e": guess.oswald_e,
                     },
                     aero_params={
-                        "cl_max_clean": 1.5, # Default assumption or passed in
+                        "cl_max_clean": 1.5,  # Default assumption or passed in
                         "cla_per_rad": 5.0,  # Default
                     },
-                    iteration_history=history
+                    iteration_history=history,
                 )
-            
+
             # Update MTOW with relaxation
             mtow = 0.5 * mtow + 0.5 * w_calc
-            
+
         return SizedAircraft(
             mtow_kg=mtow,
             empty_weight_kg=we_calc,
@@ -524,15 +519,15 @@ def sizing_loop(
             landing_distance_m=0.0,
             converged=False,
             iterations=max_iter,
-            iteration_history=history
+            iteration_history=history,
         )
     finally:
         # Ensure cleanup
         # With the new socket-based detached architecture, we don't need to block here.
-        # The visualizer window runs in a separate process and will stay open 
+        # The visualizer window runs in a separate process and will stay open
         # until the user closes it manually, even if this script exits.
         if viz:
             print("\n=== Optimization Complete ===")
             print("Visualization window is active and will remain open.")
             print("You can close it manually.")
-            viz.stop() # Closes the client socket, not the server process
+            viz.stop()  # Closes the client socket, not the server process

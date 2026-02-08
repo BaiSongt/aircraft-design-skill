@@ -33,7 +33,7 @@ def takeoff_ground_roll_m(
 ) -> float:
     """
     Calculate takeoff ground roll distance.
-    
+
     Theory 05:
     - VLOF = 1.12 * VS
     - mu_roll = 0.025
@@ -46,20 +46,20 @@ def takeoff_ground_roll_m(
     # a_mean approx 0.7 * a_initial? Or use the effective T/W at 0.7 VLOF?
     # For now, we stick to the simple T/W - mu model but with updated defaults.
     # Ideally we should integrate, but this is a sizing tool.
-    
+
     eff = thrust_to_weight - mu_roll - runway_slope
     if eff <= 1e-6:
         return float("inf")
-    
+
     vs2 = _stall_speed_squared(wing_loading_pa, rho_kg_m3, cl_max_takeoff)
     v_lof_air = v_factor * sqrt(vs2)
     v_lof_ground = max(1.0, v_lof_air - headwind_m_s)
     v2 = v_lof_ground * v_lof_ground
-    
+
     # S = v^2 / (2 * a_mean)
     # a_mean = g * (T/W - mu - D/W + mu*L/W)_mean
     # The 'ground_factor' 1.15 accounts for the drag/friction integration effects.
-    
+
     s = ground_factor * v2 / (2.0 * CONST.g0_m_s2 * eff)
     return s
 
@@ -73,15 +73,15 @@ def landing_distance_m(
     runway_slope: float = 0.0,
     headwind_m_s: float = 0.0,
     v_factor_approach: float = 1.2,  # Va = 1.2 * VS
-    v_factor_touchdown: float = 1.1, # VTD = 1.1 * VS
-    obstacle_height_m: float = 15.24, # 50 ft
+    v_factor_touchdown: float = 1.1,  # VTD = 1.1 * VS
+    obstacle_height_m: float = 15.24,  # 50 ft
     ground_factor: float = 1.3,
     approach_angle_deg: float = 3.0,
     decel_g: float | None = None,
 ) -> float:
     """
     Calculate landing distance (Air segment + Ground roll).
-    
+
     Theory 05:
     - Va = 1.2 * VS (Approach)
     - VTD = 1.1 * VS (Touchdown)
@@ -90,56 +90,55 @@ def landing_distance_m(
     """
     vs2 = _stall_speed_squared(wing_loading_pa, rho_kg_m3, cl_max_landing)
     vs = sqrt(vs2)
-    
-    v_a = v_factor_approach * vs
+
     v_td = v_factor_touchdown * vs
-    
+
     # 1. Air Segment (Descent from Obstacle)
     # Theory 05 / Raymer / Nicolai Geometric Approximation
     # S_air = h_obs / tan(gamma)
     # This assumes a steady glide from obstacle height to touchdown.
-    # While real landings flare, this geometric approximation is standard for Class I 
+    # While real landings flare, this geometric approximation is standard for Class I
     # when detailed flare dynamics are not simulated.
     # Note: Theory 05 implies "Descent segment and landing roll segment".
-    
+
     if approach_angle_deg <= 0.0:
         gamma = radians(3.0)  # Standard default
     else:
         gamma = radians(approach_angle_deg)
-        
+
     # Prevent division by zero or negative angles
     if gamma < 1e-4:
         gamma = radians(3.0)
 
     s_air = obstacle_height_m / tan(gamma)
-    
+
     # 2. Ground Roll Segment
     # V_touchdown to 0
     # a_decel = g * (mu_braking + aerodynamic_drag_effects - idle_thrust_effects)
     # For Class I, we use the effective friction coefficient approach.
     # Theory 05 suggests mu=0.4 for braking on concrete.
-    
+
     eff_mu = mu_braking
     if decel_g is not None and decel_g > 0.0:
-        eff_mu = decel_g # Treat decel_g as the effective braking coefficient (a/g)
-        
+        eff_mu = decel_g  # Treat decel_g as the effective braking coefficient (a/g)
+
     # If eff_mu is too small, distance explodes.
     if eff_mu < 0.01:
         eff_mu = 0.01
-        
+
     a_decel = CONST.g0_m_s2 * eff_mu
-    
+
     # S_ground = V_td^2 / (2 * a)
     # Assuming V_touchdown is ground speed (headwind handling below)
-    
+
     v_td_ground = max(0.0, v_td - headwind_m_s)
     s_ground = (v_td_ground * v_td_ground) / (2.0 * a_decel)
-    
+
     # Apply ground factor (safety margin) to the total or just ground?
     # Usually applied to the calculated total distance.
     # Theory 05 doesn't explicitly state a factor, but standard is 1.67 (FAR 25) or similar.
     # The default input ground_factor=1.3 is reasonable for military/Class I.
-    
+
     return ground_factor * (s_air + s_ground)
 
 
@@ -160,7 +159,7 @@ def takeoff_distance_over_obstacle_m(
 ) -> float:
     """
     Calculate total takeoff distance over obstacle.
-    
+
     If climb_gradient is None, it is estimated from T/W and L/D:
     gamma = T/W - 1/(L/D) - slope
     """
@@ -177,7 +176,7 @@ def takeoff_distance_over_obstacle_m(
     )
     if obstacle_height_m <= 0.0:
         return s_g
-    
+
     # S_air = h_obs / gamma
     if climb_gradient is not None:
         gamma = climb_gradient
@@ -186,15 +185,15 @@ def takeoff_distance_over_obstacle_m(
         # gamma = (T - D) / W = T/W - 1/(L/D)
         # Conservative estimate for L/D in takeoff config (gear down, flaps)
         gamma = thrust_to_weight - (1.0 / takeoff_l_d)
-        
+
     if gamma <= 0.001:
         # Cannot climb
         return float("inf")
-        
+
     # Arc distance for transition + climb?
     # Simple approx: S_air = h / gamma
     s_air = obstacle_height_m / gamma
-    
+
     return s_g + s_air
 
 
@@ -252,13 +251,13 @@ def required_clmax_for_landing_distance_numeric(
     """
     Numerically solve for required CL_max to achieve a given landing distance.
     """
-    
+
     # Alias to avoid shadowing
     # func = landing_distance_m
-    
+
     # Bounds for CL_max
     low, high = 0.1, 10.0
-    
+
     # Check bounds
     # Distance decreases as CL increases
     try:
@@ -295,10 +294,10 @@ def required_clmax_for_landing_distance_numeric(
         return float("inf")
 
     if d_low < target_landing_distance_m:
-         return low
+        return low
     if d_high > target_landing_distance_m:
-         return float("inf")
-         
+        return float("inf")
+
     for _ in range(max_iter):
         mid = (low + high) / 2.0
         d_mid = landing_distance_m(
@@ -315,19 +314,19 @@ def required_clmax_for_landing_distance_numeric(
             approach_angle_deg=approach_angle_deg,
             decel_g=decel_g,
         )
-        
+
         # d_mid can be float("inf") if something goes wrong, but usually valid.
-        
+
         if abs(d_mid - target_landing_distance_m) < tolerance:
             return mid
-        
+
         # Distance decreases as CL increases
         if d_mid > target_landing_distance_m:
             # Need higher CL to reduce distance
             low = mid
         else:
             high = mid
-            
+
     return (low + high) / 2.0
 
 
@@ -351,11 +350,11 @@ def required_clmax_for_takeoff_distance_numeric(
     Numerically solve for required CL_max to achieve a given takeoff distance.
     """
     func = takeoff_distance_over_obstacle_m
-    
+
     # Distance decreases as CL increases (lower stall speed -> earlier liftoff)
     # Bounds
     low, high = 0.1, 10.0
-    
+
     # Check bounds
     try:
         d_low = func(
@@ -386,12 +385,12 @@ def required_clmax_for_takeoff_distance_numeric(
         )
     except ValueError:
         return float("inf")
-        
+
     if d_low < takeoff_distance_m:
         return low
     if d_high > takeoff_distance_m:
-        return float("inf") # Cannot achieve even with high CL
-        
+        return float("inf")  # Cannot achieve even with high CL
+
     for _ in range(max_iter):
         mid = (low + high) / 2.0
         d_mid = func(
@@ -407,16 +406,16 @@ def required_clmax_for_takeoff_distance_numeric(
             v_factor=v_factor,
             ground_factor=ground_factor,
         )
-        
+
         if abs(d_mid - takeoff_distance_m) < tolerance:
             return mid
-            
+
         if d_mid > takeoff_distance_m:
             # Need higher CL (lower distance)
             low = mid
         else:
             high = mid
-            
+
     return (low + high) / 2.0
 
 
@@ -440,11 +439,11 @@ def required_thrust_to_weight_for_takeoff_distance_numeric(
     Numerically solve for required T/W to achieve a given takeoff distance.
     """
     func = takeoff_distance_over_obstacle_m
-    
+
     # Distance decreases as T/W increases (higher acceleration)
     # Bounds
     low, high = 0.01, 2.0
-    
+
     # Check bounds
     try:
         d_low = func(
@@ -475,14 +474,14 @@ def required_thrust_to_weight_for_takeoff_distance_numeric(
         )
     except ValueError:
         return float("inf")
-        
+
     if d_high > takeoff_distance_m:
         # Even with T/W=2.0, distance is too long?
         return float("inf")
     if d_low < takeoff_distance_m:
         # Even with T/W=0.01, distance is short enough? (Unlikely)
         return low
-        
+
     for _ in range(max_iter):
         mid = (low + high) / 2.0
         d_mid = func(
@@ -498,16 +497,16 @@ def required_thrust_to_weight_for_takeoff_distance_numeric(
             v_factor=v_factor,
             ground_factor=ground_factor,
         )
-        
+
         if abs(d_mid - takeoff_distance_m) < tolerance:
             return mid
-            
+
         if d_mid > takeoff_distance_m:
             # Need higher T/W (lower distance)
             low = mid
         else:
             high = mid
-            
+
     return (low + high) / 2.0
 
 
@@ -525,17 +524,17 @@ def max_wing_loading_for_landing_distance_numeric_pa(
     ground_factor: float = 1.3,
     approach_angle_deg: float = 3.0,
     decel_g: float | None = None,
-    tolerance: float = 1.0, # Pa
+    tolerance: float = 1.0,  # Pa
     max_iter: int = 20,
 ) -> float:
     """
     Numerically solve for maximum Wing Loading (Pa) to achieve a given landing distance.
     """
-    
+
     # Distance increases as W/S increases (higher stall speed)
     # Bounds (Pa)
-    low, high = 100.0, 10000.0 # 10 kg/m2 to 1000 kg/m2 approx
-    
+    low, high = 100.0, 10000.0  # 10 kg/m2 to 1000 kg/m2 approx
+
     # Check bounds
     try:
         d_low = landing_distance_m(
@@ -568,14 +567,14 @@ def max_wing_loading_for_landing_distance_numeric_pa(
         )
     except ValueError:
         return 0.0
-        
+
     if d_low > target_landing_distance_m:
         # Even with very low W/S, distance is too long (e.g. huge obstacle?)
         return 0.0
     if d_high < target_landing_distance_m:
         # Even with very high W/S, distance is short enough (huge runway?)
         return high
-        
+
     for _ in range(max_iter):
         mid = (low + high) / 2.0
         d_mid = landing_distance_m(
@@ -592,14 +591,14 @@ def max_wing_loading_for_landing_distance_numeric_pa(
             approach_angle_deg=approach_angle_deg,
             decel_g=decel_g,
         )
-        
+
         if abs(d_mid - target_landing_distance_m) < tolerance:
             return mid
-            
+
         if d_mid > target_landing_distance_m:
             # Need lower W/S (lower distance)
             high = mid
         else:
             low = mid
-            
+
     return (low + high) / 2.0

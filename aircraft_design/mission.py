@@ -301,7 +301,7 @@ def generate_mission_envelope(
         "taxi_fraction": taxi_fraction,
         "descent_fraction": descent_fraction,
     }
-    
+
     result = mission_fuel_breakdown(
         w0_kg=w0_kg,
         s_m2=s_m2,
@@ -310,10 +310,10 @@ def generate_mission_envelope(
         mission=base_mission,
         isa_delta_c=isa_delta_c,
     )
-    
+
     total_fuel_fraction = result["fuel_fraction_total"]
     total_fuel_kg = w0_kg * total_fuel_fraction / (1.0 - reserve_fraction)
-    
+
     return {
         "mission": base_mission,
         "fuel_breakdown": result,
@@ -344,7 +344,7 @@ def generate_range_envelope(
         "reserve_fuel_kg": [],
         "fuel_fraction_total": [],
     }
-    
+
     for range_m in range_range:
         result = generate_mission_envelope(
             w0_kg=w0_kg,
@@ -359,11 +359,11 @@ def generate_range_envelope(
             descent_fraction=descent_fraction,
             isa_delta_c=isa_delta_c,
         )
-        
+
         envelope["total_fuel_kg"].append(result["total_fuel_kg"])
         envelope["reserve_fuel_kg"].append(result["reserve_fuel_kg"])
         envelope["fuel_fraction_total"].append(result["fuel_fraction_total"])
-    
+
     return envelope
 
 
@@ -388,10 +388,10 @@ def generate_payload_range_envelope(
         "total_fuel_kg": [],
         "mtow_kg": [],
     }
-    
+
     for payload_kg in payload_range:
         w0_kg = w_empty_kg + payload_kg
-        
+
         result = generate_mission_envelope(
             w0_kg=w0_kg,
             s_m2=s_m2,
@@ -405,9 +405,9 @@ def generate_payload_range_envelope(
             descent_fraction=descent_fraction,
             isa_delta_c=isa_delta_c,
         )
-        
+
         envelope["w0_kg"].append(w0_kg)
         envelope["total_fuel_kg"].append(result["total_fuel_kg"])
         envelope["mtow_kg"].append(w0_kg + result["total_fuel_kg"])
-    
+
     return envelope

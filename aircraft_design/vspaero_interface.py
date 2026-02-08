@@ -3,11 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import numpy as np
 
 if TYPE_CHECKING:
     from .geometry_modeling import AircraftGeometry
-    from .degenerate_geometry import DegenPlate, DegenStick
 
 
 @dataclass(frozen=True)
@@ -39,7 +37,7 @@ def generate_vspaero_input(
     if output_file is None or output_file == "":
         raise ValueError("output_file must be specified.")
 
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         f.write("VSPAERO INPUT FILE\n")
         f.write("====================\n\n")
 
@@ -71,7 +69,9 @@ def generate_vspaero_input(
         f.write(f"  {geometry.fuselage.fineness_ratio:.6f}\n")
         f.write(f"  {geometry.fuselage.nose_length:.6f}\n")
         f.write(f"  {geometry.fuselage.tail_length:.6f}\n")
-        f.write(f"  {geometry.fuselage.position[0]:.6f} {geometry.fuselage.position[1]:.6f} {geometry.fuselage.position[2]:.6f}\n")
+        f.write(
+            f"  {geometry.fuselage.position[0]:.6f} {geometry.fuselage.position[1]:.6f} {geometry.fuselage.position[2]:.6f}\n"
+        )
 
         f.write("HTAIL\n")
         f.write(f"  {geometry.h_tail.area:.6f}\n")
@@ -82,7 +82,9 @@ def generate_vspaero_input(
         f.write(f"  {geometry.h_tail.taper_ratio:.6f}\n")
         f.write(f"  {geometry.h_tail.incidence:.6f}\n")
         f.write(f"  {geometry.h_tail.airfoil}\n")
-        f.write(f"  {geometry.h_tail.position[0]:.6f} {geometry.h_tail.position[1]:.6f} {geometry.h_tail.position[2]:.6f}\n")
+        f.write(
+            f"  {geometry.h_tail.position[0]:.6f} {geometry.h_tail.position[1]:.6f} {geometry.h_tail.position[2]:.6f}\n"
+        )
 
         f.write("VTAIL\n")
         f.write(f"  {geometry.v_tail.area:.6f}\n")
@@ -92,10 +94,12 @@ def generate_vspaero_input(
         f.write(f"  {geometry.v_tail.sweep_quarter_chord:.6f}\n")
         f.write(f"  {geometry.v_tail.taper_ratio:.6f}\n")
         f.write(f"  {geometry.v_tail.airfoil}\n")
-        f.write(f"  {geometry.v_tail.position[0]:.6f} {geometry.v_tail.position[1]:.6f} {geometry.v_tail.position[2]:.6f}\n")
+        f.write(
+            f"  {geometry.v_tail.position[0]:.6f} {geometry.v_tail.position[1]:.6f} {geometry.v_tail.position[2]:.6f}\n"
+        )
 
         for i, engine in enumerate(geometry.engines):
-            f.write(f"ENGINE {i+1}\n")
+            f.write(f"ENGINE {i + 1}\n")
             f.write(f"  {engine.diameter:.6f}\n")
             f.write(f"  {engine.length:.6f}\n")
             f.write(f"  {engine.bypass_ratio:.6f}\n")
@@ -103,7 +107,7 @@ def generate_vspaero_input(
             f.write(f"  {engine.orientation[0]:.6f} {engine.orientation[1]:.6f} {engine.orientation[2]:.6f}\n")
 
         for i, gear in enumerate(geometry.landing_gear):
-            f.write(f"LANDING_GEAR {i+1}\n")
+            f.write(f"LANDING_GEAR {i + 1}\n")
             f.write(f"  {gear.type}\n")
             f.write(f"  {gear.position[0]:.6f} {gear.position[1]:.6f} {gear.position[2]:.6f}\n")
             f.write(f"  {gear.height:.6f}\n")
@@ -127,7 +131,7 @@ def parse_vspaero_output(
     drag_distribution = {}
     moment_coefficients = {}
 
-    with open(output_file, 'r') as f:
+    with open(output_file, "r") as f:
         for line in f:
             if line.startswith("CL"):
                 cl = float(line.split()[1])
@@ -182,15 +186,14 @@ def calculate_lift_distribution(
     lift_values = list(vspaero_results.lift_distribution.values())
 
     spanwise_locations_normalized = [
-        (loc - geometry.wing.position[0]) / geometry.wing.span
-        for loc in spanwise_locations
+        (loc - geometry.wing.position[0]) / geometry.wing.span for loc in spanwise_locations
     ]
 
     distribution = {
-        'spanwise_location': spanwise_locations,
-        'spanwise_location_normalized': spanwise_locations_normalized,
-        'lift_coefficient': lift_values,
-        'total_lift': sum(lift_values),
+        "spanwise_location": spanwise_locations,
+        "spanwise_location_normalized": spanwise_locations_normalized,
+        "lift_coefficient": lift_values,
+        "total_lift": sum(lift_values),
     }
 
     return distribution
@@ -205,15 +208,14 @@ def calculate_drag_distribution(
     drag_values = list(vspaero_results.drag_distribution.values())
 
     spanwise_locations_normalized = [
-        (loc - geometry.wing.position[0]) / geometry.wing.span
-        for loc in spanwise_locations
+        (loc - geometry.wing.position[0]) / geometry.wing.span for loc in spanwise_locations
     ]
 
     distribution = {
-        'spanwise_location': spanwise_locations,
-        'spanwise_location_normalized': spanwise_locations_normalized,
-        'drag_coefficient': drag_values,
-        'total_drag': sum(drag_values),
+        "spanwise_location": spanwise_locations,
+        "spanwise_location_normalized": spanwise_locations_normalized,
+        "drag_coefficient": drag_values,
+        "total_drag": sum(drag_values),
     }
 
     return distribution
@@ -224,9 +226,9 @@ def calculate_moment_coefficients(
     vspaero_results: VSPAEROResult,
 ) -> dict:
     return {
-        'pitch_moment': vspaero_results.moment_coefficients.get('CM', 0.0),
-        'roll_moment': vspaero_results.moment_coefficients.get('CR', 0.0),
-        'yaw_moment': vspaero_results.moment_coefficients.get('CY', 0.0),
+        "pitch_moment": vspaero_results.moment_coefficients.get("CM", 0.0),
+        "roll_moment": vspaero_results.moment_coefficients.get("CR", 0.0),
+        "yaw_moment": vspaero_results.moment_coefficients.get("CY", 0.0),
     }
 
 
@@ -246,7 +248,8 @@ def run_vspaero_analysis(
     )
 
     import subprocess
-    result = subprocess.run(
+
+    subprocess.run(
         ["vspaero", input_file],
         capture_output=True,
         text=True,
@@ -262,20 +265,16 @@ def generate_vspaero_sweep(
     alpha_range: list[float],
     output_prefix: str = "vspaero_sweep",
 ) -> dict:
-    results = {
-        'mach': mach_range,
-        'alpha': alpha_range,
-        'cl': [],
-        'cd': [],
-        'cm': [],
-        'l_d': [],
-    }
+    cl_grid: list[list[float]] = []
+    cd_grid: list[list[float]] = []
+    cm_grid: list[list[float]] = []
+    l_d_grid: list[list[float]] = []
 
     for mach in mach_range:
-        cl_row = []
-        cd_row = []
-        cm_row = []
-        l_d_row = []
+        cl_row: list[float] = []
+        cd_row: list[float] = []
+        cm_row: list[float] = []
+        l_d_row: list[float] = []
 
         for alpha in alpha_range:
             output_file = f"{output_prefix}_mach{mach:.2f}_alpha{alpha:.2f}.txt"
@@ -294,9 +293,16 @@ def generate_vspaero_sweep(
             cm_row.append(result.cm)
             l_d_row.append(result.cl / result.cd if result.cd > 0 else 0.0)
 
-        results['cl'].append(cl_row)
-        results['cd'].append(cd_row)
-        results['cm'].append(cm_row)
-        results['l_d'].append(l_d_row)
+        cl_grid.append(cl_row)
+        cd_grid.append(cd_row)
+        cm_grid.append(cm_row)
+        l_d_grid.append(l_d_row)
 
-    return results
+    return {
+        "mach": mach_range,
+        "alpha": alpha_range,
+        "cl": cl_grid,
+        "cd": cd_grid,
+        "cm": cm_grid,
+        "l_d": l_d_grid,
+    }

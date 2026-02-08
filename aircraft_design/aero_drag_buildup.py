@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import log10, pi, sqrt, cos, sin, atan, tan, radians, acos
+from math import log10, pi, cos
 
 from .atmosphere import isa_tropopause
 from .aero_lift_slope import (
@@ -24,11 +24,11 @@ def calculate_lift_slope(
     """
     Calculates the Lift Slope (CLa) for the wing using aero_lift_slope module.
     """
-    
+
     if mach < 1.0:
         res = calculate_lift_slope_subsonic(
             aspect_ratio=aspect_ratio,
-            sweep_quarter_chord_deg=sweep_max_thickness_deg, # Approx
+            sweep_quarter_chord_deg=sweep_max_thickness_deg,  # Approx
             sweep_max_thickness_deg=sweep_max_thickness_deg,
             mach=mach,
             fuselage_diameter_m=fuselage_diameter_m,
@@ -39,20 +39,20 @@ def calculate_lift_slope(
         # For supersonic, we use the simple approximation from aero_lift_slope
         # But wait, aero_lift_slope_supersonic signature is different.
         # calculate_lift_slope_supersonic(aspect_ratio, sweep_leading_edge_deg, taper_ratio, mach, exposed_area_ratio)
-        
+
         # We don't have taper_ratio or sweep_LE passed in easily here?
         # Let's approximate sweep_LE from sweep_max_t.
-        # tan(L_le) = tan(L_max_t) + ... 
+        # tan(L_le) = tan(L_max_t) + ...
         # For now, pass sweep_max_thickness_deg as sweep_leading_edge_deg approximation or 0.0
-        
+
         # Actually, let's keep the simple logic for supersonic here if the other module is too complex or different.
         # But better to use the module.
-        
+
         # Let's assume taper=1.0 for approximation if unknown.
         res = calculate_lift_slope_supersonic(
             aspect_ratio=aspect_ratio,
-            sweep_leading_edge_deg=sweep_max_thickness_deg, # Approx
-            taper_ratio=1.0, # Default
+            sweep_leading_edge_deg=sweep_max_thickness_deg,  # Approx
+            taper_ratio=1.0,  # Default
             mach=mach,
             exposed_area_ratio=s_exposed_m2 / s_ref_m2,
         )
@@ -63,11 +63,8 @@ def calculate_lift_slope(
     # It doesn't explicitly multiply by Se/Sref.
     # So we apply it here.
     cla = cla * (s_exposed_m2 / s_ref_m2)
-        
+
     return cla
-
-
-
 
 
 @dataclass(frozen=True)
@@ -253,17 +250,16 @@ def calculate_wave_drag(
 ) -> float:
     if mach <= 1.0:
         return 0.0
-    
+
     sweep_rad = sweep_quarter_chord_deg * pi / 180.0
-    
+
     mach_normal = mach * cos(sweep_rad)
-    
+
     if mach_normal <= 1.0:
         return 0.0
-    
-    cd_wave = 0.002 * (thickness_ratio**2) * (aspect_ratio / 10.0) * \
-               ((mach_normal - 1.0) / (mach_normal))**3
-    
+
+    cd_wave = 0.002 * (thickness_ratio**2) * (aspect_ratio / 10.0) * ((mach_normal - 1.0) / (mach_normal)) ** 3
+
     return cd_wave
 
 
@@ -297,9 +293,9 @@ def calculate_induced_drag(
         taper_ratio=taper_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
     )
-    
+
     cd_i = k * cl**2
-    
+
     return cd_i
 
 
@@ -321,14 +317,14 @@ def calculate_total_drag(
         taper_ratio=taper_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
     )
-    
+
     cd_wave = calculate_wave_drag(
         mach=mach,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
         thickness_ratio=thickness_ratio,
         aspect_ratio=aspect_ratio,
     )
-    
+
     cd_comp = calculate_compressibility_drag(
         mach=mach,
         mach_crit=mach_crit,
@@ -336,9 +332,9 @@ def calculate_total_drag(
         cd0_subsonic=cd0,
         cd0_supersonic=cd0 + cd_wave,
     )
-    
+
     cd_total = cd0 + cd_i + cd_wave + cd_comp
-    
+
     return {
         "cd0": cd0,
         "cd_i": cd_i,
@@ -362,16 +358,13 @@ def generate_drag_mach_curve(
     mach_dd: float = 1.2,
     thickness_ratio: float = 0.12,
 ) -> dict:
-    results = {
-        "mach": mach_range,
-        "cd0": [],
-        "cd_i": [],
-        "cd_wave": [],
-        "cd_comp": [],
-        "cd_total": [],
-        "regime": [],
-    }
-    
+    cd0: list[float] = []
+    cd_i: list[float] = []
+    cd_wave: list[float] = []
+    cd_comp: list[float] = []
+    cd_total: list[float] = []
+    regimes: list[str] = []
+
     for mach in mach_range:
         drag_result = calculate_total_drag(
             cl=cl,
@@ -384,19 +377,27 @@ def generate_drag_mach_curve(
             mach_dd=mach_dd,
             thickness_ratio=thickness_ratio,
         )
-        
-        results["cd0"].append(drag_result["cd0"])
-        results["cd_i"].append(drag_result["cd_i"])
-        results["cd_wave"].append(drag_result["cd_wave"])
-        results["cd_comp"].append(drag_result["cd_comp"])
-        results["cd_total"].append(drag_result["cd_total"])
-        
+
+        cd0.append(drag_result["cd0"])
+        cd_i.append(drag_result["cd_i"])
+        cd_wave.append(drag_result["cd_wave"])
+        cd_comp.append(drag_result["cd_comp"])
+        cd_total.append(drag_result["cd_total"])
+
         if mach < mach_crit:
             regime = "subsonic"
         elif mach < mach_dd:
             regime = "transonic"
         else:
             regime = "supersonic"
-        results["regime"].append(regime)
-    
-    return results
+        regimes.append(regime)
+
+    return {
+        "mach": mach_range,
+        "cd0": cd0,
+        "cd_i": cd_i,
+        "cd_wave": cd_wave,
+        "cd_comp": cd_comp,
+        "cd_total": cd_total,
+        "regime": regimes,
+    }

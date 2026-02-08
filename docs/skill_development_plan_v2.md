@@ -36,9 +36,9 @@
     *   液压、电气、环控、航电系统基于功率需求和体积估算。
 
 **开发任务**：
-1.  创建 `aircraft_design/weights/weights_class2.py`。
-2.  实现各部件的详细重量函数。
-3.  实现重心 (CG) 坐标的详细计算（基于各部件的形心位置）。
+1.  复用并扩展现有模块：`aircraft_design/weights_structural.py`、`aircraft_design/weights_system.py`。
+2.  补充部件级详细重量函数（翼/机身/尾翼/起落装置），统一接口返回细分项与形心位置。
+3.  新增 CG 计算与汇总：基于各部件形心坐标，输出空重与任务各阶段 CG（%MAC）。
 
 ### 2.2 模块 B：高保真气动分析 (VSPAERO Integration)
 
@@ -57,9 +57,9 @@
     *   **稳定性导数**：计算 $C_{L\alpha}, C_{m\alpha}, C_{n\beta}$。
 
 **开发任务**：
-1.  在 `aircraft_design/analysis/` 下创建 `vspaero_wrapper.py`。
-2.  实现 `VSPAEROManager` 类，管理文件IO和求解器执行。
-3.  实现结果解析器，将 VLM 数据回馈给设计循环。
+1.  完善 `aircraft_design/vspaero_interface.py`：生成输入、调用求解、解析输出。
+2.  引入 `VSPAEROManager` 风格的管理类（文件IO与批量工况扫掠），与现有接口对齐。
+3.  将 VLM 结果回馈到设计循环：更新极曲线、升力线斜率、气动中心、诱导因子。
 
 ### 2.3 模块 C：稳定性与控制 (Stability & Control)
 
@@ -121,18 +121,17 @@ def execute_detailed_analysis(sized_aircraft, requirements):
     sized_aircraft.update_weights(weights_c2) # 更新重量数据
     
     # 3. 运行 VSPAERO 气动分析
-    vsp_manager = VSPAEROManager(geom)
-    aero_data = vsp_manager.run_analysis(mach=requirements.cruise_mach)
+    vsp_data = run_vspaero_analysis(geometry=geom, mach=requirements.cruise_mach)
     
     # 4. 稳定性校核
-    stability = check_stability(weights_c2.cg, aero_data.neutral_point)
+    stability = check_stability(weights_c2.cg, vsp_data.neutral_point)
     if stability.static_margin < 0.05:
         print("警告：静稳定裕度不足，建议增大平尾面积或前移重心")
         
     # 5. 成本估算
     cost = calculate_dapca_cost(sized_aircraft.empty_weight_kg, requirements.max_speed, quantity=500)
     
-    return DetailedAnalysisResult(weights_c2, aero_data, stability, cost)
+    return DetailedAnalysisResult(weights_c2, vsp_data, stability, cost)
 ```
 
 ## 4. 依赖项与环境
@@ -144,6 +143,48 @@ def execute_detailed_analysis(sized_aircraft, requirements):
 ## 5. 里程碑 (Milestones)
 
 1.  **M1 (本周)**: 完成 `weights_class2.py`，实现机翼和机身的详细重量公式。
-2.  **M2 (下周)**: 完成 `vspaero_wrapper.py`，打通 OpenVSP -> VSPAERO -> Python 的数据链路。
+2.  **M2 (下周)**: 完成 `vspaero_interface.py` 扫掠与解析链路，打通 OpenVSP -> VSPAERO -> Python。
 3.  **M3 (下周)**: 实现稳定性校核逻辑，并在报告中输出 Trim Diagram。
 4.  **M4 (后续)**: 集成 DAPCA IV 成本模型，输出经济性分析报告。
+
+---
+
+## 6. 下一批阶段推进计划（Stage 2–7 扩展）
+
+### 阶段 2：气动阻力分解与构型增量
+- 目标：由几何与构型假设生成 `cd0` 与可追溯分解
+- 输出：`aero.cd0_buildup` 与分解表
+- 验收：报告可解释 `cd0` 来源，且随几何变化趋势合理
+
+### 阶段 3：推进随工况变化
+- 目标：提供 `T_avail(h,V)` 或 `P_avail(h,V)` 的一级模型
+- 输出：巡航/爬升工况下 `available_thrust` 与余度
+- 验收：高空巡航推力衰减合理，约束校核一致
+
+### 阶段 4：任务剖面耗油
+- 目标：将燃油分数拆分为 taxi/climb/cruise/descent/reserve 等
+- 输出：`mission_breakdown`
+- 验收：分段耗油和总耗油闭合、可追溯
+
+### 阶段 5：稳定与配平
+- 目标：输出静稳定裕度与配平量级
+- 输出：`stability.static_margin`、`trim_tail_cl`
+- 验收：随 CG/尾容积变化趋势正确
+
+### 阶段 6：结构与载荷
+- 目标：估算翼根弯矩剪力与结构重量回馈接口
+- 输出：`structures.wing_root_moment_n_m`、`structural_weight_kg`
+- 验收：随翼展/载荷因子变化趋势正确
+
+### 阶段 7：迭代与敏感性/优化
+- 目标：基于约束过滤，搜索可行解并给出推荐设计点
+- 输出：`design_loop.best_sizing` 与候选集
+- 验收：在给定网格内找到可行最优解并输出报告摘要
+
+### 新增里程碑（M5–M10）
+5.  **M5**：完成阻力分解模块与报告分解表输出
+6.  **M6**：完成推进随高度/速度变化接口与约束一致性校核
+7.  **M7**：完成任务剖面分段耗油闭合与可视化
+8.  **M8**：完成 Trim Solver 与静稳定裕度报告
+9.  **M9**：完成载荷估算与结构重量回馈接口
+10. **M10**：完成迭代优化与敏感性分析并输出推荐设计点

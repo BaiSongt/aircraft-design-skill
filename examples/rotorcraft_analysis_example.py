@@ -22,7 +22,7 @@ def main():
         altitude_m=0.0,
         isa_delta_c=0.0,
     )
-    print(f"   旋翼气动力计算完成")
+    print("   旋翼气动力计算完成")
     print(f"   推力: {rotor_aero.thrust:.2f} N")
     print(f"   扭矩: {rotor_aero.torque:.2f} N·m")
     print(f"   功率: {rotor_aero.power:.2f} W")
@@ -43,7 +43,7 @@ def main():
         altitude_m=0.0,
         isa_delta_c=0.0,
     )
-    print(f"   旋翼性能计算完成")
+    print("   旋翼性能计算完成")
     print(f"   悬停升限: {performance.hover_ceiling:.2f} m")
     print(f"   最大前飞速度: {performance.max_forward_speed:.2f} m/s")
     print(f"   爬升率: {performance.climb_rate:.2f} m/min")
@@ -67,7 +67,7 @@ def main():
         sfc=0.5,
         isa_delta_c=0.0,
     )
-    print(f"   旋翼性能包络计算完成")
+    print("   旋翼性能包络计算完成")
     print(f"   总重范围: {envelope['gross_weight']} kg")
     print(f"   发动机功率范围: {envelope['engine_power']} W")
     print(f"   高度范围: {envelope['altitude_m']} m")
@@ -81,7 +81,7 @@ def main():
         altitude_m=0.0,
         isa_delta_c=0.0,
     )
-    print(f"   旋翼所需功率计算完成")
+    print("   旋翼所需功率计算完成")
     print(f"   所需功率: {power_required:.2f} W")
 
     print("\n5. 计算旋翼盘载荷")
@@ -89,7 +89,7 @@ def main():
         thrust=rotor_aero.thrust,
         rotor_diameter=10.0,
     )
-    print(f"   旋翼盘载荷计算完成")
+    print("   旋翼盘载荷计算完成")
     print(f"   盘载荷: {disk_loading:.2f} N/m²")
 
     print("\n6. 计算旋翼功率载荷")
@@ -97,7 +97,7 @@ def main():
         power=rotor_aero.power,
         rotor_diameter=10.0,
     )
-    print(f"   旋翼功率载荷计算完成")
+    print("   旋翼功率载荷计算完成")
     print(f"   功率载荷: {power_loading:.2f} W/m²")
 
     print("\n" + "=" * 50)

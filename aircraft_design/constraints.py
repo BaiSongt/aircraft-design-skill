@@ -2,21 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import pi
+from typing import Any
 
 from .atmosphere import qbar_pa
 from .high_lift import (
     max_high_lift_config,
-    select_high_lift_for_required_clmax_with_preference,
 )
 from .takeoff_landing import (
-    landing_distance_over_obstacle_m,
-    takeoff_distance_over_obstacle_m,
-    required_clmax_for_landing_distance_numeric,
-    required_clmax_for_takeoff_distance_numeric,
     required_thrust_to_weight_for_takeoff_distance_numeric,
-    takeoff_ground_roll_m,
     max_wing_loading_for_landing_distance_numeric_pa,
 )
+
 
 @dataclass(frozen=True)
 class AeroPolar:
@@ -31,10 +27,12 @@ class AeroPolar:
     def cd(self, cl: float) -> float:
         return self.cd0 + self.k * cl * cl
 
+
 @dataclass(frozen=True)
 class ConstraintPoint:
     wing_loading_pa: float
     thrust_to_weight_required: float
+
 
 @dataclass(frozen=True)
 class ConstraintCheck:
@@ -48,6 +46,7 @@ class ConstraintCheck:
     def margin(self) -> float:
         return self.available - self.required
 
+
 def stall_wing_loading_max_pa(
     *,
     rho_kg_m3: float,
@@ -55,6 +54,7 @@ def stall_wing_loading_max_pa(
     cl_max: float,
 ) -> float:
     return qbar_pa(rho_kg_m3, v_stall_m_s) * cl_max
+
 
 def required_thrust_to_weight(
     *,
@@ -69,6 +69,7 @@ def required_thrust_to_weight(
     cd = polar.cd(cl)
     return (q * cd) / wing_loading_pa + climb_sin_gamma
 
+
 def climb_sin_gamma_from_gradient(gradient: float) -> float:
     if gradient < 0.0:
         return 0.0
@@ -76,7 +77,9 @@ def climb_sin_gamma_from_gradient(gradient: float) -> float:
         raise ValueError("gradient must be < 1.")
     return gradient
 
+
 # --- New Functions ---
+
 
 def required_thrust_to_weight_for_sustained_turn(
     *,
@@ -90,18 +93,18 @@ def required_thrust_to_weight_for_sustained_turn(
     Calculate required T/W for sustained turn at specified n.
     T = D = q*S*CD
     L = n*W = q*S*CL -> CL = n*W / (q*S)
-    
+
     T/W = q*CD0/(W/S) + K*(n^2)/(q/(W/S))
     """
     q = qbar_pa(rho_kg_m3, v_m_s)
-    
+
     cd0 = polar.cd0
     k = polar.k
-    
+
     # Term 1: Parasitic Drag
     # D_p / W = (q * S * CD0) / W = q * CD0 / (W/S)
     term1 = q * cd0 / wing_loading_pa
-    
+
     # Term 2: Induced Drag
     # D_i / W = (q * S * K * CL^2) / W
     # CL = n * W / (q * S) = n * (W/S) / q
@@ -109,47 +112,50 @@ def required_thrust_to_weight_for_sustained_turn(
     #         = q * S * K * n^2 * (W/S)^2 / q^2 / W
     #         = K * n^2 * (W/S) / q
     term2 = k * (load_factor**2) * wing_loading_pa / q
-    
+
     return term1 + term2
+
 
 def required_thrust_to_weight_for_service_ceiling(
     *,
     wing_loading_pa: float,
     rho_kg_m3: float,
     polar: AeroPolar,
-    climb_rate_m_s: float = 0.508, # 100 ft/min
+    climb_rate_m_s: float = 0.508,  # 100 ft/min
     jet_lapse_exp: float = 0.7,
-    thrust_sl_n: float | None = None, # Not used for T/W calc directly, but needed if lapse is complex
+    thrust_sl_n: float | None = None,  # Not used for T/W calc directly, but needed if lapse is complex
 ) -> float:
     """
     Calculate required T_SL/W for service ceiling.
     """
     k = polar.k
     cd0 = polar.cd0
-    
+
     # Max L/D conditions
-    ld_max = 1.0 / (2.0 * (cd0 * k)**0.5)
-    dw_min = 1.0 / ld_max # 2 * sqrt(CD0 * K)
-    
-    cl_md = (cd0 / k)**0.5
-    
+    ld_max = 1.0 / (2.0 * (cd0 * k) ** 0.5)
+    dw_min = 1.0 / ld_max  # 2 * sqrt(CD0 * K)
+
+    cl_md = (cd0 / k) ** 0.5
+
     # V_md = sqrt(2 * (W/S) / (rho * CL_md))
-    v_md = (2.0 * wing_loading_pa / (rho_kg_m3 * cl_md))**0.5
-    
+    v_md = (2.0 * wing_loading_pa / (rho_kg_m3 * cl_md)) ** 0.5
+
     # Thrust lapse
     # Simple model: T/T_sl = (rho/rho_sl)^n
     # Assume rho provided is at ceiling.
     rho_sl = 1.225
     sigma = rho_kg_m3 / rho_sl
     lapse = sigma**jet_lapse_exp
-    
+
     term_rc = climb_rate_m_s / v_md
-    
+
     tw_sl_req = (term_rc + dw_min) / lapse
-    
+
     return tw_sl_req
 
+
 # --- Curve Generators ---
+
 
 def constraint_curve_cruise(
     *,
@@ -163,6 +169,7 @@ def constraint_curve_cruise(
         tw = required_thrust_to_weight(rho_kg_m3=rho_kg_m3, v_m_s=v_m_s, wing_loading_pa=ws, polar=polar)
         pts.append(ConstraintPoint(wing_loading_pa=ws, thrust_to_weight_required=tw))
     return pts
+
 
 def constraint_curve_climb_gradient(
     *,
@@ -184,6 +191,7 @@ def constraint_curve_climb_gradient(
         )
         pts.append(ConstraintPoint(wing_loading_pa=ws, thrust_to_weight_required=tw))
     return pts
+
 
 def constraint_curve_takeoff_distance(
     *,
@@ -224,6 +232,7 @@ def constraint_curve_takeoff_distance(
         "points": pts,
     }
 
+
 def constraint_wing_loading_max_from_landing_distance(
     *,
     rho_kg_m3: float,
@@ -259,6 +268,7 @@ def constraint_wing_loading_max_from_landing_distance(
         "wing_loading_pa_max": ws_max,
     }
 
+
 def constraint_curve_sustained_turn(
     *,
     rho_kg_m3: float,
@@ -279,6 +289,7 @@ def constraint_curve_sustained_turn(
         pts.append(ConstraintPoint(wing_loading_pa=ws, thrust_to_weight_required=tw))
     return pts
 
+
 def constraint_curve_service_ceiling(
     *,
     rho_kg_m3: float,
@@ -298,6 +309,7 @@ def constraint_curve_service_ceiling(
         )
         pts.append(ConstraintPoint(wing_loading_pa=ws, thrust_to_weight_required=tw))
     return pts
+
 
 # Placeholders for functions that might be used elsewhere
 def check_constraints_at_design_point(
@@ -324,7 +336,7 @@ def check_constraints_at_design_point(
     headwind_m_s: float = 0.0,
     high_lift_takeoff_preferred: str | None = None,
     high_lift_landing_preferred: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> list[ConstraintCheck]:
     checks = []
 
@@ -340,13 +352,15 @@ def check_constraints_at_design_point(
     # Let's use: Required = Limit, Available = Actual.
     # Margin = Available - Required = Actual - Limit.
     # For W/S, we want Margin <= 0.
-    checks.append(ConstraintCheck(
-        name="Stall Speed",
-        metric="Wing Loading (Pa)",
-        required=stall_ws_max_pa, 
-        available=wing_loading_pa,
-        details={"limit": stall_ws_max_pa, "type": "max_limit"}
-    ))
+    checks.append(
+        ConstraintCheck(
+            name="Stall Speed",
+            metric="Wing Loading (Pa)",
+            required=stall_ws_max_pa,
+            available=wing_loading_pa,
+            details={"limit": stall_ws_max_pa, "type": "max_limit"},
+        )
+    )
 
     # 2. Climb Constraint (T/W >= Req)
     tw_climb_req = required_thrust_to_weight(
@@ -354,35 +368,39 @@ def check_constraints_at_design_point(
         v_m_s=climb_v_m_s,
         wing_loading_pa=wing_loading_pa,
         polar=polar,
-        climb_sin_gamma=climb_sin_gamma_from_gradient(climb_gradient)
+        climb_sin_gamma=climb_sin_gamma_from_gradient(climb_gradient),
     )
-    checks.append(ConstraintCheck(
-        name="Climb Gradient",
-        metric="T/W",
-        required=tw_climb_req,
-        available=thrust_to_weight_available,
-        details={"gradient": climb_gradient, "type": "min_limit"}
-    ))
+    checks.append(
+        ConstraintCheck(
+            name="Climb Gradient",
+            metric="T/W",
+            required=tw_climb_req,
+            available=thrust_to_weight_available,
+            details={"gradient": climb_gradient, "type": "min_limit"},
+        )
+    )
 
     # 3. Takeoff Distance (T/W >= Req)
     if takeoff_distance_m is not None:
         # Approximate required T/W
         # cl_max_to approx cl_max_clean + 0.5
         tw_to_req = required_thrust_to_weight_for_takeoff_distance_numeric(
-             takeoff_distance_m=takeoff_distance_m,
-             wing_loading_pa=wing_loading_pa,
-             cl_max_takeoff=cl_max_clean + 0.5,
-             rho_kg_m3=sea_level_rho_kg_m3,
-             # sigma=sea_level_rho_kg_m3 / 1.225, # Not needed if rho is passed
-             # bypass_ratio=0.0 # Not in signature
+            takeoff_distance_m=takeoff_distance_m,
+            wing_loading_pa=wing_loading_pa,
+            cl_max_takeoff=cl_max_clean + 0.5,
+            rho_kg_m3=sea_level_rho_kg_m3,
+            # sigma=sea_level_rho_kg_m3 / 1.225, # Not needed if rho is passed
+            # bypass_ratio=0.0 # Not in signature
         )
-        checks.append(ConstraintCheck(
-            name="Takeoff Distance",
-            metric="T/W",
-            required=tw_to_req,
-            available=thrust_to_weight_available,
-            details={"distance_m": takeoff_distance_m, "type": "min_limit"}
-        ))
+        checks.append(
+            ConstraintCheck(
+                name="Takeoff Distance",
+                metric="T/W",
+                required=tw_to_req,
+                available=thrust_to_weight_available,
+                details={"distance_m": takeoff_distance_m, "type": "min_limit"},
+            )
+        )
 
     # 4. Landing Distance (W/S <= Max)
     if landing_distance_m_limit_m is not None:
@@ -391,17 +409,20 @@ def check_constraints_at_design_point(
             target_landing_distance_m=landing_distance_m_limit_m,
             cl_max_landing=cl_max_clean + 1.0,
             rho_kg_m3=sea_level_rho_kg_m3,
-            obstacle_height_m=obstacle_height_m
+            obstacle_height_m=obstacle_height_m,
         )
-        checks.append(ConstraintCheck(
-            name="Landing Distance",
-            metric="Wing Loading (Pa)",
-            required=ws_land_max,
-            available=wing_loading_pa,
-            details={"distance_m": landing_distance_m_limit_m, "type": "max_limit"}
-        ))
+        checks.append(
+            ConstraintCheck(
+                name="Landing Distance",
+                metric="Wing Loading (Pa)",
+                required=ws_land_max,
+                available=wing_loading_pa,
+                details={"distance_m": landing_distance_m_limit_m, "type": "max_limit"},
+            )
+        )
 
     return checks
+
 
 def build_constraints_plot_data(
     *,
@@ -409,7 +430,7 @@ def build_constraints_plot_data(
     polar: AeroPolar,
     cl_max_clean: float,
     requirements: Any = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> dict:
     # Basic implementation
     # Just return empty for now

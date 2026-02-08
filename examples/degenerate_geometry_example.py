@@ -23,7 +23,7 @@ def main():
         taper_ratio=0.6,
         sweep_quarter_chord=25.0,
     )
-    print(f"   机翼创建完成")
+    print("   机翼创建完成")
     print(f"   参考面积: {wing.area:.2f} m²")
     print(f"   翼展: {wing.span:.2f} m")
 
@@ -33,7 +33,7 @@ def main():
         num_chordwise=10,
         num_spanwise=5,
     )
-    print(f"   平板退化完成")
+    print("   平板退化完成")
     print(f"   网格尺寸: {plate.x.shape[0]} x {plate.x.shape[1]}")
     print(f"   总面积: {np.sum(plate.area):.2f} m²")
 
@@ -42,7 +42,7 @@ def main():
         wing=wing,
         num_sections=10,
     )
-    print(f"   梁退化完成")
+    print("   梁退化完成")
     print(f"   截面数量: {len(stick.le)}")
 
     print("\n4. 创建机身")
@@ -50,7 +50,7 @@ def main():
         length=15.0,
         diameter=2.0,
     )
-    print(f"   机身创建完成")
+    print("   机身创建完成")
     print(f"   长度: {fuselage.length:.2f} m")
     print(f"   直径: {fuselage.diameter:.2f} m")
 
@@ -59,7 +59,7 @@ def main():
         fuselage=fuselage,
         num_sections=20,
     )
-    print(f"   圆柱退化完成")
+    print("   圆柱退化完成")
     print(f"   网格尺寸: {cylinder.x.shape[0]} x {cylinder.x.shape[1]}")
     print(f"   总面积: {np.sum(cylinder.area):.2f} m²")
 
@@ -69,7 +69,7 @@ def main():
         position=np.array([5.0, 0.0, 0.0]),
         normal=np.array([0.0, 0.0, 1.0]),
     )
-    print(f"   圆盘退化完成")
+    print("   圆盘退化完成")
     print(f"   直径: {disk.diameter:.2f} m")
 
     print("\n7. 计算质量属性")
@@ -77,7 +77,7 @@ def main():
         geometry=plate,
         density=2700.0,
     )
-    print(f"   质量属性计算完成")
+    print("   质量属性计算完成")
     print(f"   面积: {mass_props.area:.2f} m²")
     print(f"   体积: {mass_props.volume:.4f} m³")
     print(f"   质量: {mass_props.mass:.2f} kg")

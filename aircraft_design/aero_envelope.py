@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .aero_lift_slope import LiftSlopeResult
-    from .aero_drag_buildup import DragBuildUpResult
+    pass
 
 
 @dataclass(frozen=True)
@@ -30,20 +29,14 @@ def generate_aero_envelope(
     mach_dd: float = 1.2,
 ) -> AeroEnvelopeResult:
     from .aero_lift_slope import (
-        calculate_lift_slope_subsonic,
-        calculate_lift_slope_supersonic,
-        calculate_lift_slope_transonic,
         calculate_oswald_efficiency,
         generate_cl_alpha_curve,
         generate_lift_drag_polar,
     )
     from .aero_drag_buildup import (
-        calculate_wave_drag,
-        calculate_compressibility_drag,
-        calculate_total_drag,
         generate_drag_mach_curve,
     )
-    
+
     cl_alpha_curve = generate_cl_alpha_curve(
         aspect_ratio=aspect_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
@@ -52,7 +45,7 @@ def generate_aero_envelope(
         fuselage_diameter_m=fuselage_diameter_m,
         wing_span_m=wing_span_m,
     )
-    
+
     polar = generate_lift_drag_polar(
         cd0=cd0,
         aspect_ratio=aspect_ratio,
@@ -60,13 +53,13 @@ def generate_aero_envelope(
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
         cl_range=cl_range,
     )
-    
+
     oswald_efficiency = calculate_oswald_efficiency(
         aspect_ratio=aspect_ratio,
         taper_ratio=taper_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
     )
-    
+
     drag_mach_curve = generate_drag_mach_curve(
         cl=0.5,
         cd0_subsonic=cd0,
@@ -78,14 +71,14 @@ def generate_aero_envelope(
         mach_dd=mach_dd,
         thickness_ratio=thickness_ratio,
     )
-    
+
     envelope_data = {
         "cl_alpha_curve": cl_alpha_curve,
         "lift_drag_polar": polar,
         "drag_mach_curve": drag_mach_curve,
         "oswald_efficiency": oswald_efficiency,
     }
-    
+
     details = {
         "aspect_ratio": aspect_ratio,
         "sweep_quarter_chord_deg": sweep_quarter_chord_deg,
@@ -96,7 +89,7 @@ def generate_aero_envelope(
         "mach_crit": mach_crit,
         "mach_dd": mach_dd,
     }
-    
+
     return AeroEnvelopeResult(envelope_data=envelope_data, details=details)
 
 
@@ -111,30 +104,30 @@ def generate_l_d_max_envelope(
     cl_steps: int = 100,
 ) -> dict:
     from .aero_lift_slope import calculate_lift_induced_drag_factor
-    
+
     k = calculate_lift_induced_drag_factor(
         aspect_ratio=aspect_ratio,
         taper_ratio=taper_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
     )
-    
+
     cl_values = []
     cd_values = []
     l_d_values = []
-    
+
     for i in range(cl_steps):
         cl = cl_min + (cl_max - cl_min) * i / (cl_steps - 1)
         cd = cd0 + k * cl**2
         l_d = cl / cd if cd > 0 else 0.0
-        
+
         cl_values.append(cl)
         cd_values.append(cd)
         l_d_values.append(l_d)
-    
+
     l_d_max = max(l_d_values)
     l_d_max_cl = cl_values[l_d_values.index(l_d_max)]
     l_d_max_cd = cd_values[l_d_values.index(l_d_max)]
-    
+
     return {
         "cl": cl_values,
         "cd": cd_values,
@@ -160,13 +153,10 @@ def generate_mach_cd_envelope(
     mach_dd: float = 1.2,
 ) -> dict:
     from .aero_drag_buildup import generate_drag_mach_curve
-    
-    envelope = {
-        "mach": mach_range,
-        "cl_curves": {},
-        "cd_curves": {},
-    }
-    
+
+    cl_curves: dict[str, list[float]] = {}
+    cd_curves: dict[str, list[float]] = {}
+
     for cl in cl_range:
         drag_curve = generate_drag_mach_curve(
             cl=cl,
@@ -179,12 +169,16 @@ def generate_mach_cd_envelope(
             mach_dd=mach_dd,
             thickness_ratio=thickness_ratio,
         )
-        
+
         cl_key = f"cl_{cl:.2f}"
-        envelope["cl_curves"][cl_key] = drag_curve["cd_total"]
-        envelope["cd_curves"][cl_key] = drag_curve["cd_total"]
-    
-    return envelope
+        cl_curves[cl_key] = drag_curve["cd_total"]
+        cd_curves[cl_key] = drag_curve["cd_total"]
+
+    return {
+        "mach": mach_range,
+        "cl_curves": cl_curves,
+        "cd_curves": cd_curves,
+    }
 
 
 def generate_cl_alpha_mach_envelope(
@@ -201,9 +195,9 @@ def generate_cl_alpha_mach_envelope(
         calculate_lift_slope_supersonic,
         calculate_lift_slope_transonic,
     )
-    
+
     cl_alpha_values = []
-    
+
     for mach in mach_range:
         if mach < 0.9:
             result = calculate_lift_slope_subsonic(
@@ -230,9 +224,9 @@ def generate_cl_alpha_mach_envelope(
                 fuselage_diameter_m=fuselage_diameter_m,
                 wing_span_m=wing_span_m,
             )
-        
+
         cl_alpha_values.append(result.cl_alpha)
-    
+
     return {
         "mach": mach_range,
         "cl_alpha": cl_alpha_values,
@@ -268,7 +262,7 @@ def generate_comprehensive_aero_envelope(
         mach_crit=mach_crit,
         mach_dd=mach_dd,
     )
-    
+
     l_d_max = generate_l_d_max_envelope(
         cd0=cd0,
         aspect_ratio=aspect_ratio,
@@ -278,7 +272,7 @@ def generate_comprehensive_aero_envelope(
         cl_min=min(cl_range),
         cl_steps=len(cl_range),
     )
-    
+
     mach_cd_envelope = generate_mach_cd_envelope(
         cd0_subsonic=cd0,
         aspect_ratio=aspect_ratio,
@@ -290,7 +284,7 @@ def generate_comprehensive_aero_envelope(
         mach_crit=mach_crit,
         mach_dd=mach_dd,
     )
-    
+
     cl_alpha_mach_envelope = generate_cl_alpha_mach_envelope(
         aspect_ratio=aspect_ratio,
         sweep_quarter_chord_deg=sweep_quarter_chord_deg,
@@ -299,7 +293,7 @@ def generate_comprehensive_aero_envelope(
         fuselage_diameter_m=fuselage_diameter_m,
         wing_span_m=wing_span_m,
     )
-    
+
     return {
         "basic_envelope": envelope.envelope_data,
         "l_d_max_envelope": l_d_max,

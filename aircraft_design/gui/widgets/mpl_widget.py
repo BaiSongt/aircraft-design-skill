@@ -1,10 +1,8 @@
-import sys
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QStackedLayout, QSizePolicy, QApplication
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QMovie
+from PySide6.QtCore import Qt, Signal
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.animation import FuncAnimation
+
 
 class MplWidget(QWidget):
     # Signal emitted when a point/area is clicked: x, y, extra_data
@@ -21,22 +19,22 @@ class MplWidget(QWidget):
         self.plot_container = QWidget()
         plot_layout = QVBoxLayout(self.plot_container)
         plot_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.canvas = FigureCanvas(Figure(figsize=(width, height), dpi=dpi))
         # Set size policy to expanding to ensure it fills the splitter
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.updateGeometry()
-        
+
         plot_layout.addWidget(self.canvas)
         self.stack_layout.addWidget(self.plot_container)
 
         if projection_3d:
-            self.axes = self.canvas.figure.add_subplot(111, projection='3d')
+            self.axes = self.canvas.figure.add_subplot(111, projection="3d")
         else:
             self.axes = self.canvas.figure.add_subplot(111)
 
         # Connect click event
-        self.canvas.mpl_connect('button_press_event', self.on_click)
+        self.canvas.mpl_connect("button_press_event", self.on_click)
 
         # --- Layer 2: Loading Overlay ---
         self.loading_widget = QLabel("Loading...", self)
@@ -47,7 +45,9 @@ class MplWidget(QWidget):
         # --- Layer 3: Error Overlay ---
         self.error_widget = QLabel(self)
         self.error_widget.setAlignment(Qt.AlignCenter)
-        self.error_widget.setStyleSheet("background-color: rgba(255, 200, 200, 200); font-size: 14px; color: #d00; padding: 20px;")
+        self.error_widget.setStyleSheet(
+            "background-color: rgba(255, 200, 200, 200); font-size: 14px; color: #d00; padding: 20px;"
+        )
         self.error_widget.setWordWrap(True)
         self.stack_layout.addWidget(self.error_widget)
 

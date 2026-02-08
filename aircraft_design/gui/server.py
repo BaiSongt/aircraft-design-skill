@@ -1,15 +1,15 @@
 import sys
 import socket
 import threading
-import json
 import queue
 import pickle
 import struct
 from PySide6.QtWidgets import QApplication
 from .main_window import MainWindow
 
+
 class VisualizationServer:
-    def __init__(self, host='localhost', port=9999):
+    def __init__(self, host="localhost", port=9999):
         self.host = host
         self.port = port
         self.data_queue = queue.Queue()
@@ -21,16 +21,16 @@ class VisualizationServer:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Allow address reuse
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        
+
         try:
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(5)
             print(f"Visualization Server listening on {self.host}:{self.port}")
-            
+
             # Start accept thread
             accept_thread = threading.Thread(target=self.accept_clients, daemon=True)
             accept_thread.start()
-            
+
         except OSError as e:
             print(f"Failed to bind port {self.port}: {e}")
             sys.exit(1)
@@ -52,28 +52,28 @@ class VisualizationServer:
                 length_bytes = self.recv_all(client_socket, 4)
                 if not length_bytes:
                     break
-                
-                length = struct.unpack('>I', length_bytes)[0]
-                
+
+                length = struct.unpack(">I", length_bytes)[0]
+
                 # Read message body
                 data_bytes = self.recv_all(client_socket, length)
                 if not data_bytes:
                     break
-                
+
                 try:
                     msg = pickle.loads(data_bytes)
-                    
+
                     # Route message
                     if isinstance(msg, dict):
-                        msg_type = msg.get('type')
-                        if msg_type in ['save', 'export']: # Command types
+                        msg_type = msg.get("type")
+                        if msg_type in ["save", "export"]:  # Command types
                             self.command_queue.put(msg)
-                        else: # Data types (update, constraints, reset)
+                        else:  # Data types (update, constraints, reset)
                             self.data_queue.put(msg)
-                            
+
                 except Exception as e:
                     print(f"Error decoding message: {e}")
-                    
+
         except Exception as e:
             print(f"Client connection error: {e}")
         finally:
@@ -94,21 +94,23 @@ class VisualizationServer:
         if self.server_socket:
             self.server_socket.close()
 
+
 def run_server_app():
     # Setup Server
     server = VisualizationServer()
     server.start_server()
-    
+
     # Setup GUI
     app = QApplication(sys.argv)
     window = MainWindow(server.data_queue, server.command_queue)
     window.show()
-    
+
     exit_code = app.exec()
-    
+
     # Cleanup
     server.stop()
     sys.exit(exit_code)
+
 
 if __name__ == "__main__":
     run_server_app()

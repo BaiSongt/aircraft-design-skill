@@ -1,6 +1,7 @@
 import pytest
 from aircraft_design.design_loop_orchestrator import DesignRequirements, InitialGuess, SizedAircraft
 
+
 @pytest.fixture
 def standard_requirements():
     return DesignRequirements(
@@ -12,8 +13,9 @@ def standard_requirements():
         landing_distance_m=1000.0,
         max_load_factor=7.33,
         sustained_turn_g=2.0,
-        service_ceiling_m=15000.0
+        service_ceiling_m=15000.0,
     )
+
 
 @pytest.fixture
 def standard_guess():
@@ -27,8 +29,9 @@ def standard_guess():
         thickness_ratio=0.08,
         sfc_cruise_1_s=0.000222,
         cd0=0.02,
-        oswald_e=0.8
+        oswald_e=0.8,
     )
+
 
 @pytest.fixture
 def mock_sized_aircraft(standard_requirements, standard_guess):
@@ -53,28 +56,15 @@ def mock_sized_aircraft(standard_requirements, standard_guess):
                 "taper_ratio": 0.33,
                 "thickness_to_chord_root": 0.12,
             },
-            "fuselage": {
-                "length_m": 12.0,
-                "diameter_m": 1.5,
-                "wetted_area_m2": 40.0
-            },
-            "tails": {
-                "horizontal": {"area_m2": 4.0, "arm_m": 5.0},
-                "vertical": {"area_m2": 3.0, "arm_m": 5.0}
-            },
-            "num_engines": 1
+            "fuselage": {"length_m": 12.0, "diameter_m": 1.5, "wetted_area_m2": 40.0},
+            "tails": {"horizontal": {"area_m2": 4.0, "arm_m": 5.0}, "vertical": {"area_m2": 3.0, "arm_m": 5.0}},
+            "num_engines": 1,
         },
-        weight_breakdown={
-            "structure": 1500.0,
-            "propulsion": 800.0,
-            "systems": 700.0,
-            "payload": 1000.0,
-            "crew": 100.0
-        },
+        weight_breakdown={"structure": 1500.0, "propulsion": 800.0, "systems": 700.0, "payload": 1000.0, "crew": 100.0},
         actual_range_m=2100000.0,
         takeoff_distance_m=800.0,
         landing_distance_m=900.0,
-        iterations=5
+        iterations=5,
     )
     # Inject minimal objects needed for analyzers if they expect them attached
     # Note: Some analyzers might take the object itself or its components.

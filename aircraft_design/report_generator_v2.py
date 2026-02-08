@@ -1,22 +1,22 @@
-from typing import Dict, Any, List
 from datetime import datetime
 import math
 from .design_loop_orchestrator import SizedAircraft, DesignRequirements
-from .stability_dynamic import DynamicStabilityAnalyzer, DynamicStabilityResults
-from .economics import EconomicsAnalyzer, EconomicsResults
+from .stability_dynamic import DynamicStabilityAnalyzer
+from .economics import EconomicsAnalyzer
 from .weight_balance import WeightBalanceAnalyzer
+
 
 class ReportGeneratorV2:
     """
     Enhanced Report Generator complying with the 'Airplane Overall Design Report Template'.
     """
-    
+
     def __init__(self, project_name: str = "Aircraft Design Project"):
         self.project_name = project_name
         self.timestamp = datetime.now().strftime("%Y-%m-%d")
         self.stability_analyzer = DynamicStabilityAnalyzer()
         self.economics_analyzer = EconomicsAnalyzer()
-        
+
     def generate_report(self, aircraft: SizedAircraft, requirements: DesignRequirements) -> str:
         """
         Generates the full markdown report.
@@ -94,7 +94,7 @@ class ReportGeneratorV2:
 
 | 指标类别 | 参数名称 | 设计指标 | 单位 |
 |:---:|:---|:---:|:---:|
-| 性能参数 | 航程 | {req.range_m/1000:.1f} | km |
+| 性能参数 | 航程 | {req.range_m / 1000:.1f} | km |
 | 性能参数 | 商载 | {req.payload_kg:.1f} | kg |
 | 性能参数 | 巡航马赫数 | {req.cruise_mach:.2f} | - |
 | 性能参数 | 巡航高度 | {req.cruise_altitude_m:.0f} | m |
@@ -113,20 +113,20 @@ class ReportGeneratorV2:
         return f"""## 3. 总体方案设计
 
 ### 3.1 布局形式
-- **机翼布局**: {geo.get('wing_position', '常规布局')}
-- **尾翼布局**: {geo.get('tail_layout', '常规尾翼')}
+- **机翼布局**: {geo.get("wing_position", "常规布局")}
+- **尾翼布局**: {geo.get("tail_layout", "常规尾翼")}
 
 ### 3.3 主要几何参数汇总
 
 | 参数名称 | 符号 | 数值 | 单位 |
 |:---|:---:|:---:|:---:|
 | 机翼面积 | $S$ | {ac.wing_area_m2:.2f} | m² |
-| 翼展 | $b$ | {geo.get('span_m', 0):.2f} | m |
-| 展弦比 | $A$ | {geo.get('aspect_ratio', 0):.2f} | - |
-| 1/4弦线后掠角 | $\Lambda_{{1/4}}$ | {geo.get('sweep_deg', 0):.1f} | ° |
-| 机身长度 | $L_f$ | {geo.get('fuselage_length_m', 0):.2f} | m |
-| 平尾面积 | $S_{{ht}}$ | {geo.get('s_ht_m2', 0):.2f} | m² |
-| 垂尾面积 | $S_{{vt}}$ | {geo.get('s_vt_m2', 0):.2f} | m² |
+| 翼展 | $b$ | {geo.get("span_m", 0):.2f} | m |
+| 展弦比 | $A$ | {geo.get("aspect_ratio", 0):.2f} | - |
+| 1/4弦线后掠角 | $\Lambda_{{1/4}}$ | {geo.get("sweep_deg", 0):.1f} | ° |
+| 机身长度 | $L_f$ | {geo.get("fuselage_length_m", 0):.2f} | m |
+| 平尾面积 | $S_{{ht}}$ | {geo.get("s_ht_m2", 0):.2f} | m² |
+| 垂尾面积 | $S_{{vt}}$ | {geo.get("s_vt_m2", 0):.2f} | m² |
 
 ---
 """
@@ -136,9 +136,9 @@ class ReportGeneratorV2:
         return f"""## 4. 气动设计
 
 ### 4.2 机翼气动特性
-- **零升阻力系数 $C_{{D0}}$**: {ac.geometry.get('cd0', 0.02):.4f} (估计值)
-- **奥斯瓦尔德效率因子 $e$**: {ac.geometry.get('oswald_e', 0.8):.2f}
-- **最大升阻比 $(L/D)_{{max}}$**: {0.5 * math.sqrt(math.pi * ac.geometry.get('aspect_ratio', 1) * ac.geometry.get('oswald_e', 1) / ac.geometry.get('cd0', 0.01)):.2f}
+- **零升阻力系数 $C_{{D0}}$**: {ac.geometry.get("cd0", 0.02):.4f} (估计值)
+- **奥斯瓦尔德效率因子 $e$**: {ac.geometry.get("oswald_e", 0.8):.2f}
+- **最大升阻比 $(L/D)_{{max}}$**: {0.5 * math.sqrt(math.pi * ac.geometry.get("aspect_ratio", 1) * ac.geometry.get("oswald_e", 1) / ac.geometry.get("cd0", 0.01)):.2f}
 
 ---
 """
@@ -150,19 +150,21 @@ class ReportGeneratorV2:
             if isinstance(v, (int, float)):
                 rows.append(f"| {k} | {v:.1f} |")
             elif isinstance(v, dict):
-                 for sub_k, sub_v in v.items():
-                     rows.append(f"| {k} - {sub_k} | {sub_v:.1f} |")
-        
+                for sub_k, sub_v in v.items():
+                    rows.append(f"| {k} - {sub_k} | {sub_v:.1f} |")
+
         table_content = "\n".join(rows)
-        
+
         # CG Analysis
         wb_analyzer = WeightBalanceAnalyzer(ac)
         envelope = wb_analyzer.analyze()
-        
+
         cg_rows = []
         for s in envelope.scenarios:
-            cg_rows.append(f"| {s.name} | {s.total_weight_kg:.1f} | {s.cg_x_m:.2f} | {(s.cg_x_m - envelope.mac_le_m)/envelope.mac_m*100:.1f}% |")
-        
+            cg_rows.append(
+                f"| {s.name} | {s.total_weight_kg:.1f} | {s.cg_x_m:.2f} | {(s.cg_x_m - envelope.mac_le_m) / envelope.mac_m * 100:.1f}% |"
+            )
+
         cg_table = "\n".join(cg_rows)
 
         return f"""## 5. 重量与重心分析
@@ -196,7 +198,7 @@ class ReportGeneratorV2:
     def _chapter_6_performance(self, ac: SizedAircraft, req: DesignRequirements) -> str:
         t_w = ac.thrust_sl_n / (ac.mtow_kg * 9.81)
         w_s = ac.mtow_kg / ac.wing_area_m2
-        
+
         return f"""## 6. 飞行性能分析
 
 ### 6.1 推重比与翼载
@@ -225,7 +227,7 @@ class ReportGeneratorV2:
         return f"""## 8. 动力系统设计
 ### 8.1 发动机参数
 - **海平面静态推力**: {ac.thrust_sl_n:.1f} N
-- **发动机数量**: {ac.geometry.get('num_engines', 1)}
+- **发动机数量**: {ac.geometry.get("num_engines", 1)}
 
 ---
 """
@@ -245,50 +247,50 @@ class ReportGeneratorV2:
         # Dynamic Stability Calculation
         # Estimate Moments of Inertia
         mtow = ac.mtow_kg
-        span = ac.geometry.get('span_m', 10.0)
-        length = ac.geometry.get('fuselage_length_m', 10.0)
-        
+        span = ac.geometry.get("span_m", 10.0)
+        length = ac.geometry.get("fuselage_length_m", 10.0)
+
         # Radii of gyration approx
         rx = 0.3 * span
         ry = 0.38 * length
         rz = 0.42 * length
-        
+
         ixx = mtow * rx**2
         iyy = mtow * ry**2
         izz = mtow * rz**2
-        
+
         # Estimate derivatives (Very rough approximations for Class I)
         # Cla ~ 2*pi*A / (A+2)
-        ar = ac.geometry.get('aspect_ratio', 8.0)
+        ar = ac.geometry.get("aspect_ratio", 8.0)
         cla = 2 * math.pi * ar / (ar + 2.0)
-        
+
         # Cma (Pitch stability) ~ -SM * Cla. Assume SM = 0.1
         cma = -0.1 * cla
-        
+
         # Cmq (Pitch damping) ~ -10 (typical)
         cmq = -10.0
-        
+
         # Cnb (Directional stability) ~ 0.1 (typical)
         cnb = 0.1
-        
+
         # Clb (Dihedral effect) ~ -0.1 (typical)
         clb = -0.1
-        
+
         # Clp (Roll damping) ~ -0.4 (typical)
         clp = -0.4
-        
+
         # Cnr (Yaw damping) ~ -0.15 (typical)
         cnr = -0.15
-        
+
         # Flight condition (Cruise)
-        v_cruise = req.cruise_mach * 295.0 # Approx speed of sound at cruise alt
-        rho = 0.4 # Approx density at cruise
-        
+        v_cruise = req.cruise_mach * 295.0  # Approx speed of sound at cruise alt
+        rho = 0.4  # Approx density at cruise
+
         res = self.stability_analyzer.analyze(
             velocity_tas=v_cruise,
             density=rho,
             wing_span=span,
-            wing_chord=ac.geometry.get('mean_chord_m', 1.0),
+            wing_chord=ac.geometry.get("mean_chord_m", 1.0),
             wing_area=ac.wing_area_m2,
             mass=mtow,
             ixx=ixx,
@@ -300,9 +302,9 @@ class ReportGeneratorV2:
             cnb=cnb,
             clb=clb,
             clp=clp,
-            cnr=cnr
+            cnr=cnr,
         )
-        
+
         return f"""## 10. 操稳特性分析
 
 ### 10.1 纵向稳定性
@@ -336,19 +338,19 @@ class ReportGeneratorV2:
     def _chapter_13_economics(self, ac: SizedAircraft, req: DesignRequirements) -> str:
         # Economics Analysis
         # Estimate inputs
-        price_est = ac.mtow_kg * 1000.0 # Approx $1000/kg
-        num_engines = ac.geometry.get('num_engines', 1)
+        price_est = ac.mtow_kg * 1000.0  # Approx $1000/kg
+        num_engines = ac.geometry.get("num_engines", 1)
         engine_price = price_est * 0.2 / num_engines
-        
+
         # Fuel burned per flight
-        fuel_burned = ac.fuel_weight_kg # Using total fuel capacity as mission fuel for conservative est
-        
+        fuel_burned = ac.fuel_weight_kg  # Using total fuel capacity as mission fuel for conservative est
+
         # Flight time
-        block_time = req.range_m / (req.cruise_mach * 295.0 * 3.6) # h (approx)
-        
+        block_time = req.range_m / (req.cruise_mach * 295.0 * 3.6)  # h (approx)
+
         # Seats
-        seats = int(req.payload_kg / 100.0) # Approx 100kg per pax
-        
+        seats = int(req.payload_kg / 100.0)  # Approx 100kg per pax
+
         res = self.economics_analyzer.calculate_doc(
             block_time_hr=block_time,
             flight_range_nm=req.range_m / 1852.0,
@@ -357,9 +359,9 @@ class ReportGeneratorV2:
             engine_price_usd=engine_price,
             num_engines=num_engines,
             num_seats=seats,
-            mtow_kg=ac.mtow_kg
+            mtow_kg=ac.mtow_kg,
         )
-        
+
         return f"""## 13. 经济性分析
 
 ### 13.1 直接运营成本 (DOC)
@@ -368,10 +370,10 @@ class ReportGeneratorV2:
 - **每座公里DOC**: ${res.doc_per_seat_mile / 1.609:.4f}/km
 
 ### 13.2 成本构成
-- 燃油成本: ${res.breakdown['Fuel']:.2f}
-- 机组成本: ${res.breakdown['Crew']:.2f}
-- 维修成本: ${res.breakdown['Maintenance']:.2f}
-- 折旧与保险: ${res.breakdown['Depreciation'] + res.breakdown['Insurance']:.2f}
+- 燃油成本: ${res.breakdown["Fuel"]:.2f}
+- 机组成本: ${res.breakdown["Crew"]:.2f}
+- 维修成本: ${res.breakdown["Maintenance"]:.2f}
+- 折旧与保险: ${res.breakdown["Depreciation"] + res.breakdown["Insurance"]:.2f}
 
 ---
 """

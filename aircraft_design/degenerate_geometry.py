@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import pi, sqrt
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -130,15 +130,12 @@ def degenerate_wing_to_plate(
     dz_dw = np.gradient(z, axis=1)
 
     dx = np.zeros_like(x)
-    dy = np.zeros_like(y)
-    dz = np.zeros_like(z)
-
     for i in range(x.shape[0] - 1):
         for j in range(x.shape[1] - 1):
             p1 = np.array([x[i, j], y[i, j], z[i, j]])
-            p2 = np.array([x[i+1, j], y[i+1, j], z[i+1, j]])
-            p3 = np.array([x[i+1, j+1], y[i+1, j+1], z[i+1, j+1]])
-            p4 = np.array([x[i, j+1], y[i, j+1], z[i, j+1]])
+            p2 = np.array([x[i + 1, j], y[i + 1, j], z[i + 1, j]])
+            p3 = np.array([x[i + 1, j + 1], y[i + 1, j + 1], z[i + 1, j + 1]])
+            p4 = np.array([x[i, j + 1], y[i, j + 1], z[i, j + 1]])
 
             v1 = p2 - p1
             v2 = p3 - p1
@@ -160,11 +157,13 @@ def degenerate_wing_to_plate(
         ny=ny,
         nz=nz,
         area=dx,
-        centroid=np.array([
-            np.mean(x),
-            np.mean(y),
-            np.mean(z),
-        ]),
+        centroid=np.array(
+            [
+                np.mean(x),
+                np.mean(y),
+                np.mean(z),
+            ]
+        ),
     )
 
 
@@ -333,15 +332,12 @@ def degenerate_fuselage_to_cylinder(
     nz = nz / norm
 
     dx = np.zeros_like(x)
-    dy = np.zeros_like(y)
-    dz = np.zeros_like(z)
-
     for i in range(x.shape[0] - 1):
         for j in range(x.shape[1] - 1):
             p1 = np.array([x[i, j], y[i, j], z[i, j]])
-            p2 = np.array([x[i+1, j], y[i+1, j], z[i+1, j]])
-            p3 = np.array([x[i+1, j+1], y[i+1, j+1], z[i+1, j+1]])
-            p4 = np.array([x[i, j+1], y[i, j+1], z[i, j+1]])
+            p2 = np.array([x[i + 1, j], y[i + 1, j], z[i + 1, j]])
+            p3 = np.array([x[i + 1, j + 1], y[i + 1, j + 1], z[i + 1, j + 1]])
+            p4 = np.array([x[i, j + 1], y[i, j + 1], z[i, j + 1]])
 
             v1 = p2 - p1
             v2 = p3 - p1
@@ -363,11 +359,13 @@ def degenerate_fuselage_to_cylinder(
         ny=ny,
         nz=nz,
         area=dx,
-        centroid=np.array([
-            np.mean(x),
-            np.mean(y),
-            np.mean(z),
-        ]),
+        centroid=np.array(
+            [
+                np.mean(x),
+                np.mean(y),
+                np.mean(z),
+            ]
+        ),
     )
 
 
@@ -443,14 +441,13 @@ def calculate_mass_properties(
         volume = (4.0 / 3.0) * pi * radius**3
         centroid = geometry.position
 
+        mass = density * volume
         ixx = (1.0 / 4.0) * mass * radius**2
         iyy = (1.0 / 4.0) * mass * radius**2
         izz = (1.0 / 2.0) * mass * radius**2
         ixy = 0.0
         ixz = 0.0
         iyz = 0.0
-
-        mass = density * volume
 
     else:
         raise ValueError(f"Unsupported geometry type: {type(geometry)}")

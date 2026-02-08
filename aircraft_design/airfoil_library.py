@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, pi, sin, sqrt
+from math import pi, sqrt
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from .units import CONST
+    pass
 
 
 @dataclass(frozen=True)
@@ -51,14 +51,14 @@ def generate_naca4_airfoil(
     x = 0.5 * (1 - np.cos(theta))
 
     yt_c = np.zeros_like(x)
-    yt_c = np.zeros_like(x)
+    yt = np.zeros_like(x)
 
     for i in range(len(x)):
         xi = x[i]
         if xi < x_c:
             yt_c[i] = (beta / (x_c**2)) * (2 * x_c * xi - xi**2)
         else:
-            yt_c[i] = (beta / ((1 - x_c)**2)) * ((1 - 2 * x_c) + 2 * x_c * xi - xi**2)
+            yt_c[i] = (beta / ((1 - x_c) ** 2)) * ((1 - 2 * x_c) + 2 * x_c * xi - xi**2)
 
     a0 = 0.2969
     a1 = -0.1260
@@ -127,7 +127,7 @@ def generate_naca5_airfoil(
         if xi < m:
             yt_c[i] = (p / (m**2)) * (2 * m * xi - xi**2)
         else:
-            yt_c[i] = (p / ((1 - m)**2)) * ((1 - 2 * m) + 2 * m * xi - xi**2)
+            yt_c[i] = (p / ((1 - m) ** 2)) * ((1 - 2 * m) + 2 * m * xi - xi**2)
 
     a0 = 0.2969
     a1 = -0.1260
@@ -185,22 +185,7 @@ def generate_naca6_airfoil(
     if design_lift_coeff < 0.0 or design_lift_coeff > 0.5:
         raise ValueError("design_lift_coeff must be in [0, 0.5].")
 
-    if series_char == "63":
-        a = 0.4
-        cl_des = 0.3
-    elif series_char == "64":
-        a = 0.4
-        cl_des = 0.4
-    elif series_char == "65":
-        a = 0.5
-        cl_des = 0.5
-    elif series_char == "66":
-        a = 0.5
-        cl_des = 0.6
-    elif series_char == "67":
-        a = 0.6
-        cl_des = 0.7
-    else:
+    if series_char not in {"63", "64", "65", "66", "67"}:
         raise ValueError(f"Unsupported series_char: {series_char}. Must be one of: 63, 64, 65, 66, 67.")
 
     p = design_lift_coeff * 20.0 / 3.0
@@ -216,7 +201,7 @@ def generate_naca6_airfoil(
         if xi < m:
             yt_c[i] = (p / (m**2)) * (2 * m * xi - xi**2)
         else:
-            yt_c[i] = (p / ((1 - m)**2)) * ((1 - 2 * m) + 2 * m * xi - xi**2)
+            yt_c[i] = (p / ((1 - m) ** 2)) * ((1 - 2 * m) + 2 * m * xi - xi**2)
 
     a0 = 0.2969
     a1 = -0.1260
@@ -264,10 +249,10 @@ def load_airfoil_file(
     *,
     file_path: str,
 ) -> AirfoilGeometry:
-    file_ext = file_path.split('.')[-1].lower()
+    file_ext = file_path.split(".")[-1].lower()
 
-    if file_ext == 'dat' or file_ext == 'af':
-        data = np.loadtxt(file_path, comments='#')
+    if file_ext == "dat" or file_ext == "af":
+        data = np.loadtxt(file_path, comments="#")
         if data.ndim == 1:
             x = data[:, 0]
             y_upper = data[:, 1]
@@ -311,13 +296,13 @@ def convert_airfoil_format(
     if from_format == to_format:
         return x, y
 
-    if from_format == 'selig' and to_format == 'bezier':
+    if from_format == "selig" and to_format == "bezier":
         return x, y
-    elif from_format == 'bezier' and to_format == 'selig':
+    elif from_format == "bezier" and to_format == "selig":
         return x, y
-    elif from_format == 'dat' and to_format == 'vsp':
+    elif from_format == "dat" and to_format == "vsp":
         return x, y
-    elif from_format == 'vsp' and to_format == 'dat':
+    elif from_format == "vsp" and to_format == "dat":
         return x, y
     else:
         raise ValueError(f"Unsupported format conversion: {from_format} -> {to_format}")
@@ -360,25 +345,25 @@ def generate_airfoil_library(
     if naca4_params is not None:
         for i, params in enumerate(naca4_params):
             airfoil = generate_naca4_airfoil(**params)
-            name = f"NACA4_{i+1}"
+            name = f"NACA4_{i + 1}"
             library[name] = airfoil
 
     if naca5_params is not None:
         for i, params in enumerate(naca5_params):
             airfoil = generate_naca5_airfoil(**params)
-            name = f"NACA5_{i+1}"
+            name = f"NACA5_{i + 1}"
             library[name] = airfoil
 
     if naca6_params is not None:
         for i, params in enumerate(naca6_params):
             airfoil = generate_naca6_airfoil(**params)
-            name = f"NACA6_{params.get('series_char', '63')}_{i+1}"
+            name = f"NACA6_{params.get('series_char', '63')}_{i + 1}"
             library[name] = airfoil
 
     if custom_files is not None:
         for i, file_path in enumerate(custom_files):
             airfoil = load_airfoil_file(file_path=file_path)
-            name = f"CUSTOM_{i+1}"
+            name = f"CUSTOM_{i + 1}"
             library[name] = airfoil
 
     return library

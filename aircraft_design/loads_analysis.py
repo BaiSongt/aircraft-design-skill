@@ -8,7 +8,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from .geometry_modeling import AircraftGeometry
-    from .degenerate_geometry import DegenPlate, DegenStick
     from .atmosphere import isa_tropopause
 
 
@@ -61,16 +60,12 @@ def calculate_aerodynamic_loads(
 
     atm = isa_tropopause(altitude_m, delta_t_k=0.0)
     rho = atm.rho_kg_m3
-    a = atm.a_m_s
-
     if sref is None:
         sref = geometry.wing.area
 
     q = 0.5 * rho * velocity**2
 
     alpha_rad = alpha_deg * pi / 180.0
-    beta_rad = beta_deg * pi / 180.0
-
     cl = 2.0 * pi * alpha_rad
     cd = 0.02 + 0.05 * cl**2
     cm = -0.1 * cl
@@ -110,7 +105,7 @@ def calculate_inertial_loads(
         raise ValueError("mass must be positive.")
 
     if inertia is None:
-        inertia = np.eye(3) * mass * (geometry.wing.span**2) / 12.0
+        inertia = np.eye(3) * mass
 
     force = mass * acceleration
 
@@ -155,7 +150,7 @@ def calculate_structural_loads(
         if i == 0:
             shear_force[i] = lift_distribution[i]
         else:
-            shear_force[i] = shear_force[i-1] - lift_distribution[i]
+            shear_force[i] = shear_force[i - 1] - lift_distribution[i]
 
     torque = aerodynamic_loads.moment_pitch
 
@@ -163,16 +158,15 @@ def calculate_structural_loads(
     max_shear_force = np.max(np.abs(shear_force))
 
     wing_chord = geometry.wing.chord_root
-    section_modulus = (wing_chord**2) * (geometry.wing.thickness_ratio**2) / 6.0
+    thickness_ratio = float(getattr(geometry.wing, "thickness_to_chord_root", 0.12))
+    section_modulus = (wing_chord**2) * (thickness_ratio**2) / 6.0
 
     bending_stress = max_bending_moment / section_modulus
-    shear_stress = max_shear_force / (wing_chord * geometry.wing.thickness_ratio)
+    shear_stress = max_shear_force / (wing_chord * thickness_ratio)
 
     torsional_stress = torque / (section_modulus * 2.0)
 
-    von_mises_stress = sqrt(
-        bending_stress**2 + 3.0 * shear_stress**2 + torsional_stress**2
-    )
+    von_mises_stress = sqrt(bending_stress**2 + 3.0 * shear_stress**2 + torsional_stress**2)
 
     actual_safety_factor = material_yield_strength / von_mises_stress
 
@@ -194,23 +188,18 @@ def calculate_load_envelope(
     material_yield_strength: float = 270.0e6,
     safety_factor: float = 1.5,
 ) -> dict:
-    envelope = {
-        'velocity': velocity_range,
-        'altitude_m': altitude_range,
-        'alpha': alpha_range,
-        'lift': [],
-        'drag': [],
-        'moment_pitch': [],
-        'von_mises_stress': [],
-        'safety_factor': [],
-    }
+    lift_grid: list[list[float]] = []
+    drag_grid: list[list[float]] = []
+    moment_pitch_grid: list[list[float]] = []
+    von_mises_grid: list[list[float]] = []
+    safety_grid: list[list[float]] = []
 
     for velocity in velocity_range:
-        lift_row = []
-        drag_row = []
-        moment_pitch_row = []
-        von_mises_row = []
-        safety_row = []
+        lift_row: list[float] = []
+        drag_row: list[float] = []
+        moment_pitch_row: list[float] = []
+        von_mises_row: list[float] = []
+        safety_row: list[float] = []
 
         for altitude in altitude_range:
             for alpha in alpha_range:
@@ -241,13 +230,22 @@ def calculate_load_envelope(
                 von_mises_row.append(struct_loads.von_mises_stress)
                 safety_row.append(struct_loads.safety_factor)
 
-        envelope['lift'].append(lift_row)
-        envelope['drag'].append(drag_row)
-        envelope['moment_pitch'].append(moment_pitch_row)
-        envelope['von_mises_stress'].append(von_mises_row)
-        envelope['safety_factor'].append(safety_row)
+        lift_grid.append(lift_row)
+        drag_grid.append(drag_row)
+        moment_pitch_grid.append(moment_pitch_row)
+        von_mises_grid.append(von_mises_row)
+        safety_grid.append(safety_row)
 
-    return envelope
+    return {
+        "velocity": velocity_range,
+        "altitude_m": altitude_range,
+        "alpha": alpha_range,
+        "lift": lift_grid,
+        "drag": drag_grid,
+        "moment_pitch": moment_pitch_grid,
+        "von_mises_stress": von_mises_grid,
+        "safety_factor": safety_grid,
+    }
 
 
 def calculate_flutter_analysis(
@@ -258,15 +256,11 @@ def calculate_flutter_analysis(
 ) -> dict:
     atm = isa_tropopause(altitude_m, delta_t_k=0.0)
     rho = atm.rho_kg_m3
-    a = atm.a_m_s
-
     sref = geometry.wing.area
     b = geometry.wing.span
     c_bar = sref / b
 
     mass = geometry.fuselage.length * 1000.0
-    iyy = mass * b**2 / 12.0
-
     q = 0.5 * rho * velocity**2
 
     omega_flutter = sqrt((q * sref * c_bar) / (mass * (c_bar**2 / 4.0)))
@@ -275,7 +269,7 @@ def calculate_flutter_analysis(
     velocity_flutter = f_flutter * b
 
     return {
-        'flutter_frequency_hz': f_flutter,
-        'flutter_velocity_m_s': velocity_flutter,
-        'flutter_angular_velocity_rad_s': omega_flutter,
+        "flutter_frequency_hz": f_flutter,
+        "flutter_velocity_m_s": velocity_flutter,
+        "flutter_angular_velocity_rad_s": omega_flutter,
     }
