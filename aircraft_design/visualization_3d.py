@@ -38,7 +38,7 @@ def _three_js_loader_script(resource_config: dict | None, *, include_orbit: bool
     cdn_base = (
         cdn_base_url.rstrip("/")
         if isinstance(cdn_base_url, str) and cdn_base_url
-        else "https://unpkg.com/three@0.160.0"
+        else "https://unpkg.com/three@0.147.0"
     )
     
     # Check for unminified option
@@ -682,7 +682,15 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
         if not root_af:
             from .geometry_detailed import naca4_coordinates
 
-            af_obj = naca4_coordinates(code="0012")
+            # Try to get code from definition (root_airfoil or airfoil)
+            af_def = wing.get("root_airfoil")
+            if not af_def:
+                af_def = wing.get("airfoil", {})
+            
+            code = af_def.get("code", "0012") if isinstance(af_def, dict) else "0012"
+            print(f"[Visualizer] Generating wing root airfoil with code={code}")
+
+            af_obj = naca4_coordinates(code=code)
             if hasattr(af_obj, "coordinates"):
                 xs = af_obj.coordinates.x
                 ys = af_obj.coordinates.y
@@ -722,7 +730,12 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
         if not root_af_t:
             from .geometry_detailed import naca4_coordinates
 
-            af_obj = naca4_coordinates(code="0012")
+            # Try to get code from definition
+            af_def = src_def.get("root_airfoil", {})
+            code = af_def.get("code", "0012") if isinstance(af_def, dict) else "0012"
+            print(f"[Visualizer] Generating tail ({source}) root airfoil with code={code}")
+
+            af_obj = naca4_coordinates(code=code)
             if hasattr(af_obj, "coordinates"):
                 xs = af_obj.coordinates.x
                 ys = af_obj.coordinates.y
@@ -1936,6 +1949,8 @@ def render_geometry_viewer_html(
     #hud .box{{background:rgba(7,20,38,0.55);padding:10px 12px;border:1px solid rgba(255,255,255,0.18);border-radius:12px;backdrop-filter:blur(10px);}}
     #hud code{{background:rgba(255,255,255,0.18);padding:2px 6px;border-radius:6px;}}
     #status{{margin-top:6px;opacity:0.9;}}
+    #log-console{{margin-top:10px;max-height:200px;overflow-y:auto;font-family:monospace;font-size:10px;background:rgba(0,0,0,0.5);padding:4px;border-radius:4px;display:none;pointer-events:auto;user-select:text;}}
+    #log-console div{{border-bottom:1px solid rgba(255,255,255,0.1);padding:1px 0;}}
   </style>
 </head>
 <body>
@@ -1950,6 +1965,7 @@ def render_geometry_viewer_html(
     <div>操作：三视图<code>拖动</code>平移/缩放；轴测<code>左键</code>旋转、<code>右键</code>平移、<code>滚轮</code>缩放</div>
     <div id="info"></div>
     <div id="status">加载中…</div>
+    <div id="log-console"></div>
   </div></div>
   <noscript>
     <div style="position:fixed;inset:12px;color:#fff;background:#000;padding:12px;border-radius:10px;max-width:560px;">
@@ -1958,6 +1974,28 @@ def render_geometry_viewer_html(
   </noscript>
   {loader_script}
   <script>
+    (function(){{
+        var logEl = document.getElementById('log-console');
+        var oldLog = console.log;
+        var oldWarn = console.warn;
+        var oldError = console.error;
+        function appendLog(msg, color) {{
+            if(!logEl) logEl = document.getElementById('log-console');
+            if(logEl) {{
+                logEl.style.display = 'block';
+                var d = document.createElement('div');
+                d.textContent = "> " + String(msg);
+                d.style.color = color || '#ccc';
+                logEl.appendChild(d);
+                logEl.scrollTop = logEl.scrollHeight;
+            }}
+        }}
+        window.log = function(msg) {{ appendLog(msg, '#fff'); }};
+        console.log = function(msg) {{ oldLog.apply(console, arguments); appendLog(msg, '#fff'); }};
+        console.warn = function(msg) {{ oldWarn.apply(console, arguments); appendLog(msg, '#fc0'); }};
+        console.error = function(msg) {{ oldError.apply(console, arguments); appendLog(msg, '#f44'); }};
+    }})();
+
     const parts = {mesh_json};
     const layout = {layout_json};
     const statusEl = document.getElementById('status');
@@ -2005,6 +2043,10 @@ def render_geometry_viewer_html(
     }}
 
     function startThree() {{
+      console.log("Starting Three.js initialization...");
+      if (!parts || parts.length === 0) console.warn("No parts to render!");
+      else console.log("Rendering " + parts.length + " parts.");
+
       const scene = new THREE.Scene();
       scene.background = null;
 
@@ -2377,13 +2419,17 @@ def render_geometry_viewer_html(
     }}
 
     window.addEventListener('load', () => {{
+      console.log("Page loaded. Checking dependencies...");
       try {{
         if (window.THREE && window.THREE.WebGLRenderer) {{
+          console.log("Three.js found. Version: " + THREE.REVISION);
           startThree();
         }} else {{
+          console.error("Three.js missing!");
           startFallback("THREE 未加载（可能网络/CDN被拦截，或在受限环境中打开）");
         }}
       }} catch (e) {{
+        console.error("Exception in load: " + e);
         startFallback(e && e.message ? e.message : String(e));
       }}
     }});
