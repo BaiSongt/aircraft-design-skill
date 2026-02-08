@@ -122,53 +122,43 @@ python -c "import PySide6, numpy, scipy, pyvista, pyvistaqt; import PySide6.QtWe
 
 使用 `Write` 工具创建 `sizing_input.json` 文件。
 
-### 2. 启动 PySide6 可视化服务与窗口（默认必须）
+### 2. 启动可视化服务器（可选，推荐）
 
-可视化服务需先启动，Sizing Loop 仅负责连接已有服务并推送数据。
+如果需要实时查看迭代曲线和 3D 模型，请在**另一个独立的终端**中启动可视化服务器。
 
-**同时启动服务与窗口（默认，必须使用）**：
-在单独终端中执行以下命令（会同时启动服务与 GUI 窗口）：
-
-启动 GUI（必要，除非显示错误）：
+**注意：** 如果之前已经启动了 `aircraft_design.gui.server`，请先关闭它（Ctrl+C），或者在新终端中使用不同的端口，以确保加载最新的代码逻辑。
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
+# 方法 A：启动默认服务器（推荐先关闭旧窗口）
 python -m aircraft_design.gui.server
+
+# 方法 B：指定端口启动（避免端口冲突）
+python -m aircraft_design.gui.server --port 10001
 ```
 
-**仅启动服务（禁止单独使用）**：
-此模式只启动后端服务，不会显示 GUI。除非明确需要无界面服务，否则不要使用。
+等待服务器启动并显示 "Visualization Server listening on localhost:..." 后，保持该窗口开启。
+
+### 3. 执行设计闭环
+
+在主终端中运行 `run_sizing.py`。
+
+**基本运行**（自动尝试连接默认端口 9999）：
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 -m aircraft_design.gui.server --server-only
+python -m aircraft_design.run_sizing sizing_input.json --project-name "ProjectName"
 ```
 
-**仅启动窗口（服务已在运行时使用）**：
-在新终端中执行以下命令（只启动 GUI 窗口）：
+**指定端口运行**（如果服务器使用了非默认端口）：
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 -m aircraft_design.gui.server --gui-only
+python -m aircraft_design.run_sizing sizing_input.json --project-name "ProjectName" --viz-port 10001
 ```
 
-**如果提示端口已被占用**：
-说明服务已在运行。此时只需执行“仅启动窗口”命令即可。
-
-保持可视化窗口运行，然后再执行设计流程。
-
-### 3. 执行 Sizing Loop（连接可视化）
-
-**基本用法**：
-使用 `RunCommand` 工具执行以下命令：
+**无可视化运行**（纯计算模式）：
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 -m aircraft_design.run_sizing sizing_input.json --project-name MyDesign
+python -m aircraft_design.run_sizing sizing_input.json --no-viz
 ```
-
-**可选参数**：
-*   `--no-viz`: 仅在 GUI 显示错误或不可用时使用，默认必须启用可视化。
 
 **可视化交互说明**：
 *   **先启动服务**：未先启动 `aircraft_design.gui.server` 会导致可视化连接失败，脚本会退出。

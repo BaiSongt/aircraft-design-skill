@@ -54,16 +54,26 @@ cp ./sizing_input.json ./sizing_input_advanced.json
 
 3. 启动 GUI（必要，除非显示错误）：
 
+**注意：** 建议先关闭旧的服务器窗口，或指定新端口以确保加载最新代码。
+
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
+# 方法 A：启动默认服务器
 python -m aircraft_design.gui.server
+
+# 方法 B：指定端口启动
+python -m aircraft_design.gui.server --port 10001
 ```
 
 4. 运行（默认 Class 1 收敛后自动进入 Class 2）：
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
+# 连接默认端口 9999
 python -m aircraft_design.run_sizing sizing_input_advanced.json --project-name AdvancedRun
+
+# 或连接指定端口
+python -m aircraft_design.run_sizing sizing_input_advanced.json --project-name AdvancedRun --viz-port 10001
 ```
 
 ## 输出检查
