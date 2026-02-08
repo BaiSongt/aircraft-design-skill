@@ -1,8 +1,7 @@
 import argparse
-import json
 import sys
 import socket
-import pickle
+import json
 import struct
 from dataclasses import asdict
 from pathlib import Path
@@ -38,8 +37,8 @@ def send_report_path_to_gui(path: Path):
         client.settimeout(1.0)  # Short timeout
         client.connect(("localhost", 9999))
 
-        msg = {"type": "report_generated", "path": str(path)}
-        data = pickle.dumps(msg)
+        msg = {"type": "report_generated", "path": str(path), "__protocol__": "json", "__version__": 1}
+        data = json.dumps(msg, ensure_ascii=False).encode("utf-8")
         length = struct.pack(">I", len(data))
 
         client.sendall(length + data)
@@ -202,6 +201,16 @@ def main():
             thrust_data = chart_gen.generate_thrust_curves()
             envelope_data = chart_gen.generate_flight_envelope()
             vn_data = chart_gen.generate_vn_diagram()
+            plot_data_path = run_dir / "report_plot_data.json"
+            plot_data = {
+                "aero_cl_alpha": lift_data,
+                "aero_drag_polar": drag_data,
+                "perf_thrust_curves": thrust_data,
+                "perf_flight_envelope": envelope_data,
+                "struct_vn_diagram": vn_data,
+            }
+            with open(plot_data_path, "w", encoding="utf-8") as f:
+                json.dump(plot_data, f, ensure_ascii=False)
 
             # 3. Static Visualization
             static_plotter = StaticPlotter(run_dir)

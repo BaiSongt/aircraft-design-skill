@@ -168,7 +168,10 @@ class MainWindow(QMainWindow):
         while not self.data_queue.empty():
             try:
                 msg = self.data_queue.get_nowait()
-                self.process_message(msg)
+                try:
+                    self.process_message(msg)
+                except Exception as e:
+                    self.status_label.setText(f"UI Error: {e}")
             except queue.Empty:
                 break
 
@@ -254,7 +257,6 @@ class MainWindow(QMainWindow):
             name = "Payload-Range Plot"
 
         self.status_label.setText(f"Clicked {name} at ({x:.2f}, {y:.2f})")
-        # In a future update, this could highlight specific results in the Report Gallery
 
     @Slot()
     def save_image(self):

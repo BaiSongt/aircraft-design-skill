@@ -6,7 +6,7 @@ description: 调用终端的时候
 
 ## terminal
 - **Terminal**: `trae terminal`
-- **Run**: `conda activate base`
+- **Run**: `source venv/bin/activate`
 
 ## Lint Commands
 - **Check**: `ruff check .`

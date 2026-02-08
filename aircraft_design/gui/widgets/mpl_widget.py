@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QStackedLayout, QSizePolicy, QApplication
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSize
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
 from matplotlib.figure import Figure
 
 
@@ -8,7 +9,7 @@ class MplWidget(QWidget):
     # Signal emitted when a point/area is clicked: x, y, extra_data
     clicked = Signal(float, float, object)
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100, projection_3d=False):
+    def __init__(self, parent=None, width=5, height=4, dpi=100, projection_3d=False, with_toolbar=True):
         super().__init__(parent)
 
         # Main Layout (Stacked to show Loading/Error overlays)
@@ -25,6 +26,16 @@ class MplWidget(QWidget):
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.updateGeometry()
 
+        if with_toolbar:
+            self.toolbar = NavigationToolbar2QT(self.canvas, self)
+            self.toolbar.setIconSize(QSize(16, 16))
+            self.toolbar.setToolButtonStyle(Qt.ToolButtonIconOnly)
+            self.toolbar.setStyleSheet("QToolBar { spacing: 2px; padding: 2px; } QToolButton { padding: 2px; }")
+            self.toolbar.setFixedHeight(28)
+            plot_layout.addWidget(self.toolbar)
+        else:
+            self.toolbar = None
+
         plot_layout.addWidget(self.canvas)
         self.stack_layout.addWidget(self.plot_container)
 
@@ -32,6 +43,8 @@ class MplWidget(QWidget):
             self.axes = self.canvas.figure.add_subplot(111, projection="3d")
         else:
             self.axes = self.canvas.figure.add_subplot(111)
+        self._default_facecolor = self.axes.get_facecolor()
+        self._highlighted = False
 
         # Connect click event
         self.canvas.mpl_connect("button_press_event", self.on_click)
@@ -85,4 +98,12 @@ class MplWidget(QWidget):
     def clear(self):
         """Clear axes and refresh."""
         self.axes.clear()
+        self.draw()
+
+    def set_highlighted(self, highlighted: bool):
+        self._highlighted = highlighted
+        if highlighted:
+            self.axes.set_facecolor("#fff4d6")
+        else:
+            self.axes.set_facecolor(self._default_facecolor)
         self.draw()

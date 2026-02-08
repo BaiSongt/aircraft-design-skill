@@ -3,6 +3,7 @@ import socket
 import threading
 import queue
 import pickle
+import json
 import struct
 import argparse
 import time
@@ -66,7 +67,7 @@ class VisualizationServer:
                     break
 
                 try:
-                    msg = pickle.loads(data_bytes)
+                    msg = self.decode_message(data_bytes)
 
                     # Route message
                     if isinstance(msg, dict):
@@ -107,7 +108,7 @@ class VisualizationServer:
             self.server_socket.close()
 
     def broadcast(self, msg):
-        payload = pickle.dumps(msg)
+        payload = self.encode_message(msg)
         length_prefix = struct.pack(">I", len(payload))
         stale = []
         with self.subscribers_lock:
@@ -118,6 +119,31 @@ class VisualizationServer:
                     stale.append(sock)
             for sock in stale:
                 self.subscribers.discard(sock)
+
+    def encode_message(self, msg):
+        if isinstance(msg, dict):
+            payload = dict(msg)
+        else:
+            payload = {"data": msg}
+        payload.setdefault("__protocol__", "json")
+        payload.setdefault("__version__", 1)
+        return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    def decode_message(self, data_bytes):
+        try:
+            text = data_bytes.decode("utf-8")
+            msg = json.loads(text)
+            if isinstance(msg, dict):
+                return msg
+        except Exception:
+            pass
+        try:
+            msg = pickle.loads(data_bytes)
+            if isinstance(msg, dict):
+                return msg
+        except Exception:
+            pass
+        return None
 
 
 class VisualizationClient:
@@ -131,7 +157,7 @@ class VisualizationClient:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.host, self.port))
         subscribe_msg = {"type": "__subscribe__"}
-        payload = pickle.dumps(subscribe_msg)
+        payload = self.encode_message(subscribe_msg)
         length_prefix = struct.pack(">I", len(payload))
         self.sock.sendall(length_prefix + payload)
 
@@ -154,7 +180,7 @@ class VisualizationClient:
                 data_bytes = self.recv_all(length)
                 if not data_bytes:
                     break
-                msg = pickle.loads(data_bytes)
+                msg = self.decode_message(data_bytes)
                 if isinstance(msg, dict):
                     data_queue.put(msg)
         except Exception as e:
@@ -166,6 +192,31 @@ class VisualizationClient:
         self.running = False
         if self.sock:
             self.sock.close()
+
+    def encode_message(self, msg):
+        if isinstance(msg, dict):
+            payload = dict(msg)
+        else:
+            payload = {"data": msg}
+        payload.setdefault("__protocol__", "json")
+        payload.setdefault("__version__", 1)
+        return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    def decode_message(self, data_bytes):
+        try:
+            text = data_bytes.decode("utf-8")
+            msg = json.loads(text)
+            if isinstance(msg, dict):
+                return msg
+        except Exception:
+            pass
+        try:
+            msg = pickle.loads(data_bytes)
+            if isinstance(msg, dict):
+                return msg
+        except Exception:
+            pass
+        return None
 
 
 def run_server_app(host="localhost", port=9999, start_server=True, start_gui=True):

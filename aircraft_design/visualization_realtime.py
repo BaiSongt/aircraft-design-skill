@@ -1,5 +1,5 @@
 import socket
-import pickle
+import json
 import struct
 from typing import Dict, Optional
 
@@ -31,7 +31,10 @@ class RealTimeVisualizer:
     def _send_message(self, msg: Dict):
         if self.client_socket:
             try:
-                data = pickle.dumps(msg)
+                payload = dict(msg)
+                payload.setdefault("__protocol__", "json")
+                payload.setdefault("__version__", 1)
+                data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 length = struct.pack(">I", len(data))
                 self.client_socket.sendall(length + data)
             except (BrokenPipeError, ConnectionResetError):
