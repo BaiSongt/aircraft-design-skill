@@ -1,16 +1,16 @@
 ---
 name: "fixed_wing_overall_sizing_runbook"
-description: "执行固定翼总体设计闭环计算并输出 results.json/report.md 以及交互式图表。当需要从输入需求一键得到可计算方案、详细报告与可视化结果时调用。"
+description: "执行固定翼总体设计闭环计算并输出 results.json/report.md 以及 PySide6 可视化 App 数据。当需要从输入需求一键得到可计算方案、详细报告与可视化结果时调用。"
 ---
 
 # Fixed Wing Overall Sizing Runbook
 
-此技能用于执行固定翼飞机 Class I 总体设计闭环流程。它将调用 `aircraft_design/run_sizing.py` 脚本，基于输入需求进行迭代计算，直到 MTOW 收敛，并生成符合标准模板的报告及交互式图表。
+此技能用于执行固定翼飞机 Class I 总体设计闭环流程。它将调用 `aircraft_design/run_sizing.py` 脚本，基于输入需求进行迭代计算，直到 MTOW 收敛，并生成符合标准模板的报告及 PySide6 可视化 App 需要的实时数据。
 
 ## 适用场景
 *   用户提供了一组设计需求（如航程、载荷、速度），希望快速得到飞机总体参数。
 *   用户希望验证当前设计代码是否能针对特定需求收敛。
-*   需要生成总体设计报告 (`report.md`) 和可视化分析 (`interactive_charts.html`)。
+*   需要生成总体设计报告 (`report.md`) 并在 PySide6 可视化 App 中查看实时迭代过程。
 
 ## 执行步骤
 
@@ -49,9 +49,21 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 
 使用 `Write` 工具创建 `sizing_input.json` 文件。
 
-### 2. 执行 Sizing Loop（带可视化）
+### 2. 启动 PySide6 可视化服务（必须在设计前启动）
 
-Sizing Loop 内置了自动可视化功能。默认情况下，它会自动检测并启动可视化服务器，在独立窗口中显示收敛曲线、约束图和飞机几何预览。
+可视化服务必须先启动，Sizing Loop 仅负责连接已有服务并推送数据。
+
+**启动服务**：
+在单独终端中执行以下命令：
+
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+python3 -m aircraft_design.gui.server
+```
+
+保持可视化窗口运行，然后再执行设计流程。
+
+### 3. 执行 Sizing Loop（连接可视化）
 
 **基本用法**：
 使用 `RunCommand` 工具执行以下命令：
@@ -65,11 +77,20 @@ python3 -m aircraft_design.run_sizing sizing_input.json --project-name MyDesign
 *   `--no-viz`: 如果不需要实时可视化（例如在纯后台模式运行），可添加此参数关闭图形界面。
 
 **可视化交互说明**：
-*   **自动启动**：脚本运行时会自动弹出一个 3D 可视化窗口（无需手动开启服务器）。
+*   **先启动服务**：未先启动 `aircraft_design.gui.server` 会导致可视化连接失败，脚本会退出。
 *   **监控**：用户可以实时观察 MTOW 收敛情况、约束分析图以及飞机的 3D 几何变化。
-*   **结束**：脚本执行完成后会自动退出，但可视化窗口会**保持打开**状态，以便用户继续查看结果。用户可随时手动关闭窗口。
+*   **结束**：脚本执行完成后可视化窗口仍保持打开，用户可手动关闭。
 
-### 3. 检查结果
+### 4. 未收敛时的处理指引（必须给出）
+
+1.  **固定迭代上限输出**：读取 `output/<project>_*/design_data.json`，使用最后一次迭代的 MTOW、Wf、We 作为“当前可行估计”反馈。
+2.  **调整初猜并重跑**：
+    *   提高 `thrust_to_weight` 或降低 `wing_loading_pa`，优先保证推力余度为正。
+    *   如果燃油分数过高，降低 `cruise_mach` 或调整 `sfc_cruise_1_s` 到合理范围。
+    *   收敛不稳时，先缩短 `range_m` 做可行性验证，再逐步拉高。
+3.  **保存诊断**：提示用户查看 `design_report.md` 和 `design_data.json` 的迭代曲线与重量分解，定位发散来源（推进、结构或燃油）。
+
+### 5. 检查结果
 
 
 1.  **检查退出码**：
@@ -84,4 +105,4 @@ python3 -m aircraft_design.run_sizing sizing_input.json --project-name MyDesign
     使用 `Read` 工具读取生成的 `design_report.md` 文件内容。
 
 4.  **反馈用户**：
-    将 `design_report.md` 的核心内容（MTOW、T/W、W/S、关键重量分解、操稳特性摘要）总结给用户，并提示用户可以在输出目录查看交互式图表 `interactive_charts.html`。
+    将 `design_report.md` 的核心内容（MTOW、T/W、W/S、关键重量分解、操稳特性摘要）总结给用户，并提示用户在可视化 App 中查看迭代与约束。

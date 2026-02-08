@@ -1,10 +1,6 @@
 import socket
 import pickle
 import struct
-import time
-import subprocess
-import os
-import sys
 from typing import Dict, Optional
 
 
@@ -14,21 +10,13 @@ class RealTimeVisualizer:
         self.port = port
         self.client_socket = None
 
-    def start(self):
-        """
-        Connect to the visualization server.
-        If connection fails, attempt to start the server in a separate process.
-        """
-        if not self._connect():
-            print("Visualization Server not running. Starting new instance...")
-            self._start_server_process()
-            # Wait for server to initialize
-            for _ in range(20):  # Try for 2 seconds
-                time.sleep(0.1)
-                if self._connect():
-                    break
-            else:
-                print("Failed to connect to Visualization Server.")
+    def start(self, *, require_server: bool = True) -> bool:
+        if self._connect():
+            return True
+        if require_server:
+            print("Visualization Server not running. Start it first: python -m aircraft_design.gui.server")
+            return False
+        return False
 
     def _connect(self) -> bool:
         try:
@@ -39,24 +27,6 @@ class RealTimeVisualizer:
         except ConnectionRefusedError:
             self.client_socket = None
             return False
-
-    def _start_server_process(self):
-        # Start as module to handle imports correctly
-        # We assume the CWD is the project root (where run_sizing.py usually runs)
-        # If not, we might need to adjust env or cwd
-
-        # Get project root (assuming this file is in aircraft_design/)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-
-        # Start as independent process
-        # Use Popen with start_new_session to detach (on POSIX)
-        cmd = [sys.executable, "-m", "aircraft_design.gui.server"]
-
-        if sys.platform != "win32":
-            subprocess.Popen(cmd, cwd=project_root, start_new_session=True)
-        else:
-            subprocess.Popen(cmd, cwd=project_root, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
     def _send_message(self, msg: Dict):
         if self.client_socket:

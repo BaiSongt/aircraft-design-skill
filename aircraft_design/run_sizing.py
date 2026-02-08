@@ -84,7 +84,10 @@ def main():
     if not args.no_viz:
         print("  Initializing Visualization Environment...")
         viz = RealTimeVisualizer()
-        viz.start()
+        if not viz.start(require_server=True):
+            print("  > Visualization server is not running.")
+            print("  > Start it first in another terminal: python -m aircraft_design.gui.server")
+            sys.exit(1)
         print("  > 3D Visualization Server is running.")
         print("  > Real-time updates will be shown in the popup window.")
     else:
