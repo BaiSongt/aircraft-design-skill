@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QSplitter,
     QComboBox,
-    QCheckBox,
     QDoubleSpinBox,
 )
 from PySide6.QtCore import QTimer, Slot, Qt, QUrl
@@ -154,7 +153,7 @@ class MainWindow(QMainWindow):
         self.label_layout = QLabel("布局")
         controls_layout.addWidget(self.label_layout)
         self.web_layout = QComboBox()
-        self.web_layout.addItems(["2x2 均分", "左大右小", "上大下小"])
+        self.web_layout.addItems(["2x2 均分", "Top置顶", "Side置顶", "Front置顶", "Iso置顶"])
         self.web_layout.currentIndexChanged.connect(self.on_web_layout_changed)
         controls_layout.addWidget(self.web_layout)
 
@@ -167,11 +166,6 @@ class MainWindow(QMainWindow):
         self.web_zoom.setValue(1.0)
         self.web_zoom.valueChanged.connect(self.on_web_zoom_changed)
         controls_layout.addWidget(self.web_zoom)
-
-        self.web_grid = QCheckBox("网格")
-        self.web_grid.setChecked(True)
-        self.web_grid.toggled.connect(self.on_web_grid_toggled)
-        controls_layout.addWidget(self.web_grid)
 
         self.label_sky = QLabel("天空")
         controls_layout.addWidget(self.label_sky)
@@ -227,7 +221,7 @@ class MainWindow(QMainWindow):
         self.design_point = {}
         self.geometry_data = {}
         self.web_config = {
-            "layout": {"columns": [1, 1], "rows": [1, 1]},
+            "layout": {"type": "2x2"},
             "grid_enabled": True,
             "default_zoom": 1.0,
             "sky": SKY_PRESETS["天蓝"],
@@ -277,21 +271,19 @@ class MainWindow(QMainWindow):
         self.web_view.update_config(self.web_config)
 
     def on_web_layout_changed(self, index: int):
-        if index == 1:
-            layout = {"columns": [2, 1], "rows": [1, 1]}
-        elif index == 2:
-            layout = {"columns": [1, 1], "rows": [2, 1]}
-        else:
-            layout = {"columns": [1, 1], "rows": [1, 1]}
-        self.web_config["layout"] = layout
+        mapping = {
+            0: "2x2",
+            1: "top_first",
+            2: "side_first",
+            3: "front_first",
+            4: "iso_first",
+        }
+        layout_type = mapping.get(index, "2x2")
+        self.web_config["layout"] = {"type": layout_type}
         self.apply_web_config()
 
     def on_web_zoom_changed(self, value: float):
         self.web_config["default_zoom"] = float(value)
-        self.apply_web_config()
-
-    def on_web_grid_toggled(self, checked: bool):
-        self.web_config["grid_enabled"] = bool(checked)
         self.apply_web_config()
 
     def on_web_sky_changed(self, index: int):

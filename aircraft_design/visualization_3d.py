@@ -712,10 +712,9 @@ def _normalize_web_config(web_config: dict | None) -> dict:
     base: dict = web_config if isinstance(web_config, dict) else {}
     layout_value = base.get("layout")
     layout = layout_value if isinstance(layout_value, dict) else {}
-    columns_value = layout.get("columns")
-    rows_value = layout.get("rows")
-    columns = columns_value if isinstance(columns_value, list) else [1, 1]
-    rows = rows_value if isinstance(rows_value, list) else [1, 1]
+    layout_type = layout.get("type")
+    if not isinstance(layout_type, str) or not layout_type:
+        layout_type = "2x2"
     grid_enabled = base.get("grid_enabled")
     if grid_enabled is None:
         grid_enabled = True
@@ -726,7 +725,7 @@ def _normalize_web_config(web_config: dict | None) -> dict:
     if not isinstance(sky, str) or not sky.strip():
         sky = "linear-gradient(180deg, #7cc6ff 0%, #cbe9ff 45%, #f6fbff 100%)"
     return {
-        "layout": {"columns": columns, "rows": rows},
+        "layout": {"type": layout_type},
         "grid_enabled": bool(grid_enabled),
         "default_zoom": float(default_zoom),
         "sky": sky,
@@ -851,13 +850,58 @@ def render_three_view_html_from_parts(
     const parts = PARAMS_PLACEHOLDER;
     const config = CONFIG_PLACEHOLDER || {};
     const workspaceEl = document.getElementById('workspace');
-    const layoutCfg = config.layout || { columns: [1, 1], rows: [1, 1] };
+    const layoutCfg = config.layout || { type: "2x2" };
     function applyLayout() {
-        const cols = Array.isArray(layoutCfg.columns) && layoutCfg.columns.length ? layoutCfg.columns : [1, 1];
-        const rows = Array.isArray(layoutCfg.rows) && layoutCfg.rows.length ? layoutCfg.rows : [1, 1];
-        if (workspaceEl) {
-            workspaceEl.style.gridTemplateColumns = cols.map(v => `${v}fr`).join(' ');
-            workspaceEl.style.gridTemplateRows = rows.map(v => `${v}fr`).join(' ');
+        const type = (layoutCfg.type || "2x2").toLowerCase();
+        const items = [
+          { id: "cv_top", el: document.getElementById("cv_top")?.parentElement },
+          { id: "cv_side", el: document.getElementById("cv_side")?.parentElement },
+          { id: "cv_front", el: document.getElementById("cv_front")?.parentElement },
+          { id: "cv_iso", el: document.getElementById("cv_iso")?.parentElement },
+        ];
+        function setGrid(cols, rows) {
+            if (workspaceEl) {
+                workspaceEl.style.gridTemplateColumns = cols.map(v => `${v}fr`).join(' ');
+                workspaceEl.style.gridTemplateRows = rows.map(v => `${v}fr`).join(' ');
+            }
+        }
+        function place(el, colStart, colSpan, rowStart, rowSpan) {
+            if (!el) return;
+            el.style.gridColumn = `${colStart} / span ${colSpan}`;
+            el.style.gridRow = `${rowStart} / span ${rowSpan}`;
+        }
+        items.forEach(it => { if (it.el) { it.el.style.gridColumn = ""; it.el.style.gridRow = ""; } });
+        if (type === "2x2") {
+            setGrid([1,1], [1,1]);
+            place(items[0].el, 1, 1, 1, 1);
+            place(items[1].el, 2, 1, 1, 1);
+            place(items[2].el, 1, 1, 2, 1);
+            place(items[3].el, 2, 1, 2, 1);
+        } else {
+            setGrid([1,1,1], [1,1]);
+            if (type === "top_first") {
+                place(items[0].el, 1, 3, 1, 1);
+                place(items[1].el, 1, 1, 2, 1);
+                place(items[2].el, 2, 1, 2, 1);
+                place(items[3].el, 3, 1, 2, 1);
+            } else if (type === "side_first") {
+                place(items[1].el, 1, 3, 1, 1);
+                place(items[0].el, 1, 1, 2, 1);
+                place(items[2].el, 2, 1, 2, 1);
+                place(items[3].el, 3, 1, 2, 1);
+            } else if (type === "front_first") {
+                place(items[2].el, 1, 3, 1, 1);
+                place(items[0].el, 1, 1, 2, 1);
+                place(items[1].el, 2, 1, 2, 1);
+                place(items[3].el, 3, 1, 2, 1);
+            } else if (type === "iso_first") {
+                place(items[3].el, 1, 3, 1, 1);
+                place(items[0].el, 1, 1, 2, 1);
+                place(items[1].el, 2, 1, 2, 1);
+                place(items[2].el, 3, 1, 2, 1);
+            } else {
+                setGrid([1,1], [1,1]);
+            }
         }
     }
     applyLayout();
@@ -1057,6 +1101,7 @@ def render_three_view_html_from_parts(
         // Edges for better definition
         const edges = new THREE.EdgesGeometry(geo, 30);
         const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
+        line.name = "mesh-edge";
         mesh.add(line);
         edgeLines.push(line);
 
@@ -1089,33 +1134,35 @@ def render_three_view_html_from_parts(
     }
 
     // Helpers (Grids/Axes)
-    const helpers = new THREE.Group();
+    const helpersOrtho = new THREE.Group();
     const gridColor = 0x333333;
     const axisSize = Math.max(size.x, size.y, size.z) * 1.5;
 
     // Top Grid (XY)
     const gridXY = new THREE.GridHelper(axisSize, 20, 0x555555, gridColor);
     gridXY.rotation.x = Math.PI/2;
-    helpers.add(gridXY);
+    helpersOrtho.add(gridXY);
 
     // Axes
-    helpers.add(new THREE.AxesHelper(axisSize * 0.1));
+    helpersOrtho.add(new THREE.AxesHelper(axisSize * 0.1));
 
-    scenes.ortho.add(helpers);
-    scenes.iso.add(helpers.clone());
+    scenes.ortho.add(helpersOrtho);
+    const helpersIso = helpersOrtho.clone();
+    scenes.iso.add(helpersIso);
 
     // Cameras & Renderers
     const viewRadius = Math.max(size.x, size.y, size.z, 1.0) * 0.9;
     const baseZoom = Math.max(0.2, Number(config.default_zoom || 1.0));
 
     const views = [
-        { id: 'cv_top',   type: 'ortho', axis: 'z', up: [0,1,0], pos: [0,0,viewRadius*2.2] },
-        { id: 'cv_side',  type: 'ortho', axis: 'y', up: [0,0,1], pos: [0,-viewRadius*2.2,0] },
-        { id: 'cv_front', type: 'ortho', axis: 'x', up: [0,0,1], pos: [viewRadius*2.2,0,0] },
+        { id: 'cv_top',   type: 'ortho', axis: [0, 0, 1], up: [0,1,0], pos: [0,0,viewRadius*2.2] },
+        { id: 'cv_side',  type: 'ortho', axis: [0, -1, 0], up: [0,0,1], pos: [0,-viewRadius*2.2,0] },
+        { id: 'cv_front', type: 'ortho', axis: [1, 0, 0], up: [0,0,1], pos: [viewRadius*2.2,0,0] },
         { id: 'cv_iso',   type: 'persp', pos: [viewRadius*1.6, -viewRadius*1.6, viewRadius*1.2] }
     ];
 
     const renderMap = {};
+    const syncState = { syncing: false, orthoZoom: baseZoom };
 
     views.forEach(v => {
         const cv = document.getElementById(v.id);
@@ -1135,32 +1182,114 @@ def render_three_view_html_from_parts(
         camera.position.set(...v.pos);
         camera.lookAt(0,0,0);
 
-        // Controls
-        const controls = new THREE.OrbitControls(camera, cv);
-        if (v.type === 'ortho') {
-            controls.enableRotate = false;
-            controls.enablePan = true;
-            controls.enableZoom = true;
-            controls.screenSpacePanning = true;
-            controls.mouseButtons = {
-                LEFT: THREE.MOUSE.PAN,
-                MIDDLE: THREE.MOUSE.DOLLY,
-                RIGHT: THREE.MOUSE.PAN
-            };
-        } else {
-            controls.enableDamping = true;
-            controls.enablePan = true;
-            controls.enableZoom = true;
-            controls.enableRotate = true;
-            controls.mouseButtons = {
-                LEFT: THREE.MOUSE.ROTATE,
-                MIDDLE: THREE.MOUSE.DOLLY,
-                RIGHT: THREE.MOUSE.PAN
-            };
-        }
+        const controls = { target: new THREE.Vector3(0,0,0) };
 
-        renderMap[v.id] = { renderer, camera, controls, scene: v.type==='persp'?scenes.iso:scenes.ortho };
+        renderMap[v.id] = {
+            renderer,
+            camera,
+            controls,
+            scene: v.type === 'persp' ? scenes.iso : scenes.ortho,
+            axis: v.axis || null,
+            up: v.up || [0,0,1]
+        };
     });
+
+    function attachManualControls(id) {
+        const item = renderMap[id];
+        const cv = item.renderer.domElement;
+        let dragging = false;
+        let lastX = 0, lastY = 0, btn = 0;
+        cv.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; btn = e.button; e.preventDefault(); });
+        window.addEventListener('mouseup', () => { dragging = false; });
+        cv.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+            lastX = e.clientX; lastY = e.clientY;
+            if (btn === 0) {
+                if (item.camera.isOrthographicCamera) {
+                    const axisVec = item.axis ? new THREE.Vector3(item.axis[0], item.axis[1], item.axis[2]).normalize() : new THREE.Vector3(0,0,1);
+                    const angle = dx * 0.005;
+                    const q = new THREE.Quaternion().setFromAxisAngle(axisVec, angle);
+                    const pos = item.camera.position.clone().sub(item.controls.target);
+                    pos.applyQuaternion(q);
+                    item.camera.position.copy(pos.add(item.controls.target));
+                    item.camera.lookAt(item.controls.target);
+                } else {
+                    const target = item.controls.target;
+                    const offset = item.camera.position.clone().sub(target);
+                    const sph = new THREE.Spherical().setFromVector3(offset);
+                    sph.theta -= dx * 0.005;
+                    sph.phi = Math.max(0.01, Math.min(Math.PI - 0.01, sph.phi - dy * 0.005));
+                    offset.setFromSpherical(sph);
+                    item.camera.position.copy(target.clone().add(offset));
+                    item.camera.lookAt(target);
+                }
+            } else if (btn === 2) {
+                const dir = item.camera.getWorldDirection(new THREE.Vector3());
+                const right = new THREE.Vector3().crossVectors(dir, item.camera.up).normalize();
+                const upv = item.camera.up.clone().normalize();
+                const scale = 0.001 * Math.max(viewRadius, 1.0);
+                const pan = right.multiplyScalar(-dx * scale).add(upv.multiplyScalar(dy * scale));
+                item.controls.target.add(pan);
+                item.camera.position.add(pan);
+            }
+            item.camera.updateProjectionMatrix();
+            syncViews(id);
+        });
+        cv.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (item.camera.isOrthographicCamera) {
+                const factor = e.deltaY > 0 ? 0.92 : 1.08;
+                item.camera.zoom = Math.max(0.2, Math.min(10.0, item.camera.zoom * factor));
+            } else {
+                const target = item.controls.target;
+                const offset = item.camera.position.clone().sub(target);
+                const dolly = e.deltaY > 0 ? 1.08 : 0.92;
+                offset.multiplyScalar(dolly);
+                item.camera.position.copy(target.clone().add(offset));
+            }
+            item.camera.updateProjectionMatrix();
+            syncViews(id);
+        }, { passive: false });
+        cv.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
+    function syncViews(sourceId) {
+        if (syncState.syncing) return;
+        const source = renderMap[sourceId];
+        if (!source) return;
+        const target = source.controls.target.clone();
+        if (source.camera.isOrthographicCamera) {
+            syncState.orthoZoom = source.camera.zoom;
+        }
+        syncState.syncing = true;
+        const sourceDistance = source.camera.position.distanceTo(target);
+        Object.entries(renderMap).forEach(([id, item]) => {
+            if (id === sourceId) return;
+            item.controls.target.copy(target);
+            if (item.camera.isOrthographicCamera) {
+                item.camera.zoom = syncState.orthoZoom;
+                if (item.axis) {
+                    const axisVec = new THREE.Vector3(item.axis[0], item.axis[1], item.axis[2]).normalize();
+                    item.camera.position.copy(axisVec.multiplyScalar(sourceDistance).add(target));
+                    item.camera.up.set(item.up[0], item.up[1], item.up[2]);
+                    item.camera.lookAt(target);
+                }
+            } else {
+                if (source.camera.isPerspectiveCamera) {
+                    item.camera.position.copy(source.camera.position);
+                    item.camera.quaternion.copy(source.camera.quaternion);
+                } else {
+                    const offset = item.camera.position.clone().sub(item.controls.target);
+                    item.camera.position.copy(target.clone().add(offset));
+                    item.camera.lookAt(target);
+                }
+            }
+            item.camera.updateProjectionMatrix();
+        });
+        syncState.syncing = false;
+    }
 
     // Resize Handling
     function handleResize() {
@@ -1194,7 +1323,6 @@ def render_three_view_html_from_parts(
     function animate() {
         requestAnimationFrame(animate);
         Object.values(renderMap).forEach(item => {
-            item.controls.update();
             item.renderer.render(item.scene, item.camera);
         });
     }
@@ -1212,7 +1340,9 @@ def render_three_view_html_from_parts(
             m.transparent = false;
             m.opacity = 1.0;
         });
-        edgeLines.forEach(l => l.visible = isWire);
+        function setEdgesVisible(scene, v) { scene.traverse(obj => { if (obj.isLineSegments && obj.name === "mesh-edge") obj.visible = v; }); }
+        setEdgesVisible(scenes.iso, isWire);
+        setEdgesVisible(scenes.ortho, isWire);
         document.getElementById('btn-mode-solid').classList.toggle('active', mode === "solid");
         document.getElementById('btn-mode-wire').classList.toggle('active', mode === "wire");
     }
@@ -1220,11 +1350,13 @@ def render_three_view_html_from_parts(
     document.getElementById('btn-mode-wire').onclick = () => setDisplayMode("wire");
 
     // Grid Toggle
-    helpers.visible = state.showGrid;
+    helpersOrtho.visible = state.showGrid;
+    helpersIso.visible = state.showGrid;
     document.getElementById('btn-grid').classList.toggle('active', state.showGrid);
     function toggleGrid() {
         state.showGrid = !state.showGrid;
-        helpers.visible = state.showGrid;
+        helpersOrtho.visible = state.showGrid;
+        helpersIso.visible = state.showGrid;
         document.getElementById('btn-grid').classList.toggle('active', state.showGrid);
     }
     document.getElementById('btn-grid').onclick = toggleGrid;
@@ -1233,13 +1365,14 @@ def render_three_view_html_from_parts(
     document.getElementById('btn-reset').onclick = () => {
         views.forEach(v => {
             const item = renderMap[v.id];
-            item.controls.reset();
+            item.controls.target.set(0,0,0);
             item.camera.position.set(...v.pos);
             item.camera.lookAt(0,0,0);
-            if(item.camera.isOrthographicCamera) item.camera.zoom = baseZoom;
+            if (item.camera.isOrthographicCamera) item.camera.zoom = baseZoom;
             item.camera.updateProjectionMatrix();
         });
-        handleResize(); // re-fit
+        syncViews('cv_iso');
+        handleResize();
     };
 
     // Keyboard Shortcuts
@@ -1248,6 +1381,9 @@ def render_three_view_html_from_parts(
         if (e.key.toLowerCase() === 'g') toggleGrid();
         if (e.key.toLowerCase() === 'r') document.getElementById('btn-reset').click();
     });
+
+    Object.keys(renderMap).forEach(id => attachManualControls(id));
+    Object.values(renderMap).forEach(item => { item.controls.target.set(0,0,0); });
 
     setDisplayMode("solid");
     })();
