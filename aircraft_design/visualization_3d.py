@@ -591,8 +591,56 @@ def build_wing_airfoil_loft_mesh(
     return parts
 
 
+def build_system_box(name: str, x: float, y: float, z: float, size: float = 0.2, color: str = "#ef4444") -> MeshPart:
+    hs = size * 0.5
+    local_verts = [
+        [-hs, -hs, -hs], [hs, -hs, -hs], [hs, hs, -hs], [-hs, hs, -hs],
+        [-hs, -hs, hs], [hs, -hs, hs], [hs, hs, hs], [-hs, hs, hs]
+    ]
+    verts = [[v[0] + x, v[1] + y, v[2] + z] for v in local_verts]
+    indices = [
+        0, 1, 2, 0, 2, 3,
+        4, 5, 6, 4, 6, 7,
+        0, 1, 5, 0, 5, 4,
+        1, 2, 6, 1, 6, 5,
+        2, 3, 7, 2, 7, 6,
+        3, 0, 4, 3, 4, 7
+    ]
+    flat_verts = []
+    for v in verts:
+        flat_verts.extend(v)
+    return MeshPart(name=name, color=color, vertices=flat_verts, indices=indices)
+
+
 def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
     mesh_parts: list[MeshPart] = []
+    
+    # Systems visualization
+    systems = geometry.get("systems", {})
+    if isinstance(systems, dict):
+        groups = systems.get("groups", {})
+        for g_name, grp in groups.items():
+            comps = grp.get("components", [])
+            for c in comps:
+                c_name = c.get("name", "Unknown")
+                # Determine color based on group
+                color = "#94a3b8" # Default gray
+                if "Propulsion" in g_name: color = "#ef4444" # Red
+                elif "Systems" in g_name: color = "#f59e0b" # Amber
+                elif "Structure" in g_name: color = "#3b82f6" # Blue
+                elif "Payload" in g_name: color = "#10b981" # Green
+                
+                mesh_parts.append(
+                    build_system_box(
+                        name=f"{g_name}: {c_name}",
+                        x=float(c.get("cg_x_m", 0.0)),
+                        y=float(c.get("cg_y_m", 0.0)),
+                        z=float(c.get("cg_z_m", 0.0)),
+                        size=0.15,
+                        color=color
+                    )
+                )
+
     components = ["fuselage", "wing", "htail", "vtail", "horizontal_tail", "vertical_tail"]
     for name in components:
         comp = geometry.get(name)

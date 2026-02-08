@@ -16,7 +16,12 @@ from .performance import climb_rate_m_s, required_thrust_newton
 from .propulsion import build_propulsion_model, thrust_available_n
 from .sizing import wing_geometry_from_loading
 from .stability_control import estimate_static_margin_and_trim, estimate_static_margin_and_trim_envelope
-from .structures_loads import estimate_structural_weight_feedback, estimate_wing_root_loads
+from .structures_loads import (
+    WingRootLoads,
+    estimate_wing_root_loads,
+    estimate_structural_weight_feedback,
+)
+from .system_architecture import estimate_system_weights, AircraftSystems
 from .tail_sizing import tail_areas_from_volume_coefficients
 from .units import CONST
 from .weights_class1 import (
@@ -92,22 +97,45 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
     interference_wing = float(aero_in.get("interference_factor_wing", 1.0))
     interference_tail = float(aero_in.get("interference_factor_tail", 1.0))
 
-    # Helper to calculate fuselage wetted area
+    # Helper to calculate wetted areas and MACs from detailed geometry
     fus_wet = None
-    if isinstance(geometry_detailed, dict):
-        fuselage = geometry_detailed.get("fuselage", {})
-        if isinstance(fuselage, dict) and fuselage.get("stations"):
-            stations = fuselage["stations"]
-            area = 0.0
-            for i in range(len(stations) - 1):
-                s1 = stations[i]
-                s2 = stations[i + 1]
-                dx = float(s2["x_m"]) - float(s1["x_m"])
-                r1 = float(s1.get("radius_m", (float(s1.get("radius_y_m", 0)) + float(s1.get("radius_z_m", 0))) / 2))
-                r2 = float(s2.get("radius_m", (float(s2.get("radius_y_m", 0)) + float(s2.get("radius_z_m", 0))) / 2))
-                area += pi * (r1 + r2) * sqrt(dx**2 + (r2 - r1) ** 2)
-            if area > 0:
-                fus_wet = area
+    wing_wet = None
+    ht_wet = None
+    vt_wet = None
+    ht_mac = None
+    vt_mac = None
+    ht_sweep_rad = None
+    vt_sweep_rad = None
+
+    if geometry_detailed:
+        if hasattr(geometry_detailed, "fuselage") and hasattr(geometry_detailed.fuselage, "wetted_area"):
+             fus_wet = geometry_detailed.fuselage.wetted_area()
+        elif isinstance(geometry_detailed, dict):
+            fuselage = geometry_detailed.get("fuselage", {})
+            if isinstance(fuselage, dict) and fuselage.get("stations"):
+                stations = fuselage["stations"]
+                area = 0.0
+                for i in range(len(stations) - 1):
+                    s1 = stations[i]
+                    s2 = stations[i + 1]
+                    dx = float(s2["x_m"]) - float(s1["x_m"])
+                    r1 = float(s1.get("radius_m", (float(s1.get("radius_y_m", 0)) + float(s1.get("radius_z_m", 0))) / 2))
+                    r2 = float(s2.get("radius_m", (float(s2.get("radius_y_m", 0)) + float(s2.get("radius_z_m", 0))) / 2))
+                    area += pi * (r1 + r2) * sqrt(dx**2 + (r2 - r1) ** 2)
+                if area > 0:
+                    fus_wet = area
+        
+        if hasattr(geometry_detailed, "wing") and hasattr(geometry_detailed.wing, "wetted_area"):
+             wing_wet = geometry_detailed.wing.wetted_area()
+        
+        if hasattr(geometry_detailed, "tail"):
+             tail = geometry_detailed.tail
+             if hasattr(tail, "ht_wetted_area"): ht_wet = tail.ht_wetted_area()
+             if hasattr(tail, "vt_wetted_area"): vt_wet = tail.vt_wetted_area()
+             if hasattr(tail, "ht_mean_aerodynamic_chord"): ht_mac = tail.ht_mean_aerodynamic_chord
+             if hasattr(tail, "vt_mean_aerodynamic_chord"): vt_mac = tail.vt_mean_aerodynamic_chord
+             if hasattr(tail, "ht_sweep"): ht_sweep_rad = tail.ht_sweep * (pi/180.0)
+             if hasattr(tail, "vt_sweep"): vt_sweep_rad = tail.vt_sweep * (pi/180.0)
 
     # Helper to extract tail details
     ht_ratio = None
@@ -146,6 +174,9 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             wing_t_c=float(_get_optional(geom_in, "wing_t_c", 0.12)),
             tail_area_ratio=float(_get_optional(geom_in, "tail_area_ratio", 0.22)),
             fuselage_wetted_area_m2=fus_wet,
+            wing_wetted_area_m2=wing_wet,
+            htail_wetted_area_m2=ht_wet,
+            vtail_wetted_area_m2=vt_wet,
             interference_factor_fuselage=interference_fuse,
             interference_factor_wing=interference_wing,
             interference_factor_tail=interference_tail,
@@ -153,6 +184,10 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             vtail_area_ratio=vt_ratio,
             htail_t_c=ht_tc,
             vtail_t_c=vt_tc,
+            htail_mac_m=ht_mac,
+            vtail_mac_m=vt_mac,
+            htail_sweep_rad=ht_sweep_rad,
+            vtail_sweep_rad=vt_sweep_rad,
         )
     else:
         assumptions = None
@@ -165,6 +200,9 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
                 wing_t_c=0.12,
                 tail_area_ratio=0.22,
                 fuselage_wetted_area_m2=fus_wet,
+                wing_wetted_area_m2=wing_wet,
+                htail_wetted_area_m2=ht_wet,
+                vtail_wetted_area_m2=vt_wet,
                 interference_factor_fuselage=interference_fuse,
                 interference_factor_wing=interference_wing,
                 interference_factor_tail=interference_tail,
@@ -172,6 +210,10 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
                 vtail_area_ratio=vt_ratio,
                 htail_t_c=ht_tc,
                 vtail_t_c=vt_tc,
+                htail_mac_m=ht_mac,
+                vtail_mac_m=vt_mac,
+                htail_sweep_rad=ht_sweep_rad,
+                vtail_sweep_rad=vt_sweep_rad,
             )
 
     geom_param = geometry_from_inputs(inputs)
@@ -187,6 +229,9 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             wing_t_c=base_asm.wing_t_c,
             tail_area_ratio=base_asm.tail_area_ratio,
             fuselage_wetted_area_m2=fus_wet,
+            wing_wetted_area_m2=wing_wet,
+            htail_wetted_area_m2=ht_wet,
+            vtail_wetted_area_m2=vt_wet,
             interference_factor_fuselage=interference_fuse,
             interference_factor_wing=interference_wing,
             interference_factor_tail=interference_tail,
@@ -194,6 +239,10 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             vtail_area_ratio=vt_ratio,
             htail_t_c=ht_tc,
             vtail_t_c=vt_tc,
+            htail_mac_m=ht_mac,
+            vtail_mac_m=vt_mac,
+            htail_sweep_rad=ht_sweep_rad,
+            vtail_sweep_rad=vt_sweep_rad,
         )
 
     cd0: float
@@ -202,14 +251,17 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         geom_temp = wing_geometry_from_loading(
             w0_kg=w0_temp_kg, wing_loading_pa=wing_loading_pa, aspect_ratio=aspect_ratio
         )
+        atm_state = isa_tropopause(cruise_altitude_m, delta_t_k=isa_delta_c)
+        mach_calc = cruise_speed_m_s / atm_state.a_m_s
+        
         bu = estimate_cd0_drag_buildup(
-            cruise_altitude_m=cruise_altitude_m,
-            cruise_speed_m_s=cruise_speed_m_s,
+            altitude_m=cruise_altitude_m,
+            mach=mach_calc,
             s_ref_m2=geom_temp.s_m2,
-            b_m=geom_temp.b_m,
-            cbar_m=geom_temp.cbar_m,
-            assumptions=assumptions,
-            isa_delta_c=isa_delta_c,
+            geometry=assumptions,
+            l_char_fuselage_m=assumptions.fuselage_length_m if assumptions.fuselage_length_m else 10.0,
+            l_char_wing_m=geom_temp.cbar_m,
+            l_char_tail_m=geom_temp.cbar_m, # approximation
         )
         cd0 = float(cd0_in) if isinstance(cd0_in, (int, float)) else float(bu.cd0)
         aero_buildup_out = {"cd0_buildup": bu.cd0, "breakdown": bu.breakdown}
@@ -243,14 +295,16 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         )
 
         if assumptions is not None:
+            atm_state = isa_tropopause(cruise_altitude_m, delta_t_k=isa_delta_c)
+            mach_calc = cruise_speed_m_s / atm_state.a_m_s
             bu = estimate_cd0_drag_buildup(
-                cruise_altitude_m=cruise_altitude_m,
-                cruise_speed_m_s=cruise_speed_m_s,
+                altitude_m=cruise_altitude_m,
+                mach=mach_calc,
                 s_ref_m2=geom_temp.s_m2,
-                b_m=geom_temp.b_m,
-                cbar_m=geom_temp.cbar_m,
-                assumptions=assumptions,
-                isa_delta_c=isa_delta_c,
+                geometry=assumptions,
+                l_char_fuselage_m=assumptions.fuselage_length_m if assumptions.fuselage_length_m else 10.0,
+                l_char_wing_m=geom_temp.cbar_m,
+                l_char_tail_m=geom_temp.cbar_m, # approximation
             )
             cd0 = float(_get_optional(aero_in, "cd0", bu.cd0))
             polar = AeroPolar(cd0=cd0, e=e, ar=aspect_ratio)
@@ -827,8 +881,48 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
     validation_snapshot = inputs.get("_validation_snapshot", None)
     validation_warnings = inputs.get("_validation_warnings", None)
     report_config = inputs.get("report", {}) if isinstance(inputs.get("report", {}), dict) else {}
+
+    systems_out: dict = {}
+    if geom_param is not None:
+        engine_dry = float(propulsion_in.get("engine_dry_weight_kg", 0.0)) if isinstance(propulsion_in, dict) else None
+        # Try to find avionics in weights input or systems input (not defined yet, assume weights)
+        avionics_weight = float(weights_in.get("avionics_kg", 0.0)) if isinstance(weights_in, dict) else None
+        wf_kg_est = w0_kg * float(mission_breakdown.get("fuel_fraction_total", 0.0))
+        
+        # Extract systems configuration from input
+        systems_config = inputs.get("systems", {}) if isinstance(inputs.get("systems", {}), dict) else {}
+
+        sys_obj = estimate_system_weights(
+            mtow_kg=w0_kg,
+            n_limit=n_limit_feedback, # Use structure n_limit
+            geometry=geom_param,
+            v_dive_m_s=cruise_speed_m_s * 1.25, # Rough estimate
+            payload_kg=payload_kg,
+            crew_kg=crew_kg,
+            fuel_kg=wf_kg_est,
+            engine_dry_kg=engine_dry if engine_dry and engine_dry > 0 else None,
+            avionics_kg=avionics_weight if avionics_weight and avionics_weight > 0 else None,
+            systems_config=systems_config,
+            s_ref_m2=geom.s_m2,
+            sh_m2=tail_out.get("sh_m2"),
+            sv_m2=tail_out.get("sv_m2")
+        )
+        
+        systems_out = sys_obj.to_dict()
+
+        # Inject systems into geometry_detailed for visualization
+        if isinstance(geometry_detailed, dict):
+            geometry_detailed["systems"] = systems_out
+        elif geometry_detailed is not None:
+            # Assume it's an object we can attach attributes to
+            try:
+                geometry_detailed.systems = systems_out
+            except Exception:
+                pass  # Ignore if immutable
+
     return {
         "summary": {"aircraft_role": aircraft_role, "propulsion_type": propulsion_type},
+        "systems": systems_out,
         "inputs_config": validation_snapshot
         if isinstance(validation_snapshot, dict)
         else {"atmosphere": atmosphere_in, "report": report_config},

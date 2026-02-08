@@ -5,6 +5,11 @@ from dataclasses import dataclass, field
 from math import acos, cos, pi, sin, sqrt
 
 
+from .airfoil_library import generate_naca4_airfoil
+
+# Alias for compatibility if needed
+naca4_coordinates = generate_naca4_airfoil
+
 @dataclass(frozen=True)
 class AirfoilSpec:
     type: str
@@ -29,6 +34,17 @@ class DetailedWing:
     airfoil_root: str = "naca2412"
     airfoil_tip: str = "naca0012"
 
+    @property
+    def mean_aerodynamic_chord(self) -> float:
+        t = self.taper_ratio
+        c_root = 2 * self.area / (self.span * (1 + t))
+        return (2/3) * c_root * (1 + t + t**2) / (1 + t)
+
+    def wetted_area(self) -> float:
+        # Estimate: S_wet = 2 * S_ref * (1 + 0.2 * t/c)
+        return 2.0 * self.area * (1.0 + 0.2 * self.thickness_to_chord_root)
+
+
 
 @dataclass
 class FuselageStation:
@@ -43,6 +59,51 @@ class DetailedFuselage:
     stations: list[FuselageStation] = field(default_factory=list)
     control_points: list[dict] = field(default_factory=list)  # x_rel, radius_rel
 
+    def ensure_stations(self, n_axial: int = 20):
+        """Generates stations from control points or default shape if stations are missing."""
+        if self.stations:
+            return
+
+        L = self.length
+        D = self.diameter
+
+        # Generate stations from control points if stations are empty but control points exist
+        if self.control_points:
+            # Basic linear interpolation for now
+            # Sort control points by x_rel
+            cps = sorted(self.control_points, key=lambda p: p["x_rel"])
+            xs_rel = [p["x_rel"] for p in cps]
+            rs_rel = [p["radius_rel"] for p in cps]
+
+            import numpy as np
+
+            x_eval = np.linspace(0, 1, n_axial)
+            r_eval = np.interp(x_eval, xs_rel, rs_rel)
+
+            self.stations = [FuselageStation(x_m=x * L, radius_m=r * D / 2.0) for x, r in zip(x_eval, r_eval)]
+            return
+
+        # If still no stations, use default cigar shape
+        import numpy as np
+
+        x_eval = np.linspace(0, 1, n_axial)
+        # Cigar shape: r = R * sin(acos(abs(2x-1))) -> r = R * sqrt(1 - (2x-1)^2)
+        r_eval = (D / 2.0) * np.sqrt(1 - (2 * x_eval - 1) ** 2)
+        self.stations = [FuselageStation(x_m=x * L, radius_m=r) for x, r in zip(x_eval, r_eval)]
+
+    def wetted_area(self) -> float:
+        self.ensure_stations()
+        area = 0.0
+        for i in range(len(self.stations) - 1):
+            s1 = self.stations[i]
+            s2 = self.stations[i + 1]
+            dx = s2.x_m - s1.x_m
+            r1 = s1.radius_m
+            r2 = s2.radius_m
+            area += pi * (r1 + r2) * sqrt(dx**2 + (r2 - r1) ** 2)
+        return area
+
+
 
 @dataclass
 class DetailedTail:
@@ -56,6 +117,37 @@ class DetailedTail:
     ht_sweep: float = 20.0
     vt_taper: float = 0.6
     vt_sweep: float = 30.0
+    ht_thickness_ratio: float = 0.12
+    vt_thickness_ratio: float = 0.12
+    ht_airfoil: str = "naca0012"
+    vt_airfoil: str = "naca0012"
+    ht_x_le: float | None = None
+    vt_x_le: float | None = None
+    ht_z_le: float | None = None
+    vt_z_le: float | None = None
+
+    @property
+    def ht_mean_aerodynamic_chord(self) -> float:
+        if self.ht_area <= 0: return 0.0
+        b = sqrt(self.ht_area * self.ht_aspect_ratio)
+        t = self.ht_taper
+        c_root = 2 * self.ht_area / (b * (1 + t))
+        return (2/3) * c_root * (1 + t + t**2) / (1 + t)
+
+    @property
+    def vt_mean_aerodynamic_chord(self) -> float:
+        if self.vt_area <= 0: return 0.0
+        b = sqrt(self.vt_area * self.vt_aspect_ratio)
+        t = self.vt_taper
+        c_root = 2 * self.vt_area / (b * (1 + t))
+        return (2/3) * c_root * (1 + t + t**2) / (1 + t)
+
+    def ht_wetted_area(self) -> float:
+        return 2.0 * self.ht_area * (1.0 + 0.2 * self.ht_thickness_ratio)
+
+    def vt_wetted_area(self) -> float:
+        return 2.0 * self.vt_area * (1.0 + 0.2 * self.vt_thickness_ratio)
+
 
 
 @dataclass
@@ -78,33 +170,8 @@ class ParametricGeometry:
         return mesh_data
 
     def _mesh_fuselage(self, n_radial: int = 16, n_axial: int = 20) -> dict:
-        L = self.fuselage.length
-        D = self.fuselage.diameter
+        self.fuselage.ensure_stations(n_axial)
         stations = self.fuselage.stations
-
-        # Generate stations from control points if stations are empty but control points exist
-        if not stations and self.fuselage.control_points:
-            # Basic linear interpolation for now
-            # Sort control points by x_rel
-            cps = sorted(self.fuselage.control_points, key=lambda p: p["x_rel"])
-            xs_rel = [p["x_rel"] for p in cps]
-            rs_rel = [p["radius_rel"] for p in cps]
-
-            import numpy as np
-
-            x_eval = np.linspace(0, 1, n_axial)
-            r_eval = np.interp(x_eval, xs_rel, rs_rel)
-
-            stations = [FuselageStation(x_m=x * L, radius_m=r * D / 2.0) for x, r in zip(x_eval, r_eval)]
-
-        # If still no stations, use default cigar shape
-        if not stations:
-            import numpy as np
-
-            x_eval = np.linspace(0, 1, n_axial)
-            # Cigar shape: r = R * sin(acos(abs(2x-1))) -> r = R * sqrt(1 - (2x-1)^2)
-            r_eval = (D / 2.0) * np.sqrt(1 - (2 * x_eval - 1) ** 2)
-            stations = [FuselageStation(x_m=x * L, radius_m=r) for x, r in zip(x_eval, r_eval)]
 
         vertices = []
         faces = []
@@ -144,6 +211,8 @@ class ParametricGeometry:
             z_offset=0.0,
             dihedral=self.wing.dihedral,
             color="#42A5F5",
+            airfoil_root=self.wing.airfoil_root,
+            airfoil_tip=self.wing.airfoil_tip,
         )
 
     def _mesh_htail(self) -> dict:
@@ -154,7 +223,8 @@ class ParametricGeometry:
             # S_ht ~ 0.2 S_w (if only ratio provided, we assume ~75% of total tail area ratio is HT)
             s_ht = self.wing.area * self.tail.area_ratio_to_wing * 0.75
 
-        x_ht = self.fuselage.length * 0.90
+        x_ht = self.tail.ht_x_le if self.tail.ht_x_le is not None else self.fuselage.length * 0.90
+        z_ht = self.tail.ht_z_le if self.tail.ht_z_le is not None else 0.5
 
         return self._mesh_lifting_surface(
             area=s_ht,
@@ -162,9 +232,240 @@ class ParametricGeometry:
             taper=self.tail.ht_taper,
             sweep=self.tail.ht_sweep,
             x_offset=x_ht,  # LE approx
-            z_offset=0.5,  # T-tail or conventional
+            z_offset=z_ht,  # T-tail or conventional
             dihedral=0.0,
             color="#FFCA28",
+            airfoil_root=self.tail.ht_airfoil,
+            airfoil_tip=self.tail.ht_airfoil,
+        )
+
+    def _mesh_vtail(self) -> dict:
+        if self.tail.vt_area > 0:
+            s_vt = self.tail.vt_area
+        else:
+            s_vt = self.wing.area * self.tail.area_ratio_to_wing * 0.25
+
+        x_vt = self.tail.vt_x_le if self.tail.vt_x_le is not None else self.fuselage.length * 0.85
+        z_vt = self.tail.vt_z_le if self.tail.vt_z_le is not None else 0.0
+
+        # Generate as a right semi-span wing
+        # To simulate a vertical tail of height b_vt and area S_vt using a "full wing" generator:
+        # We need "Right Wing" dimensions to match VT.
+        # "Right Wing" has span b_semi = b_gen / 2. We want b_semi = b_vt.
+        # So b_gen = 2 * b_vt.
+        # "Right Wing" has area S_semi = S_gen / 2. We want S_semi = S_vt.
+        # So S_gen = 2 * S_vt.
+        # We pass area = 2 * S_vt.
+        # AR_gen = b_gen^2 / S_gen = (2*b_vt)^2 / (2*S_vt) = 4*b_vt^2 / 2*S_vt = 2 * (b_vt^2 / S_vt).
+        # Standard AR definition for VT is AR_vt = b_vt^2 / S_vt.
+        # So AR_gen = 2 * AR_vt.
+        
+        ar_gen = self.tail.vt_aspect_ratio * 2
+        area_gen = s_vt * 2
+        
+        # Use _mesh_lifting_surface with symmetric=False
+        # x_offset=0, z_offset=0 because we will rotate/translate manually
+        mesh = self._mesh_lifting_surface(
+            area=area_gen,
+            ar=ar_gen,
+            taper=self.tail.vt_taper,
+            sweep=self.tail.vt_sweep,
+            x_offset=0.0,
+            z_offset=0.0,
+            dihedral=0.0,
+            color="#EF5350",
+            airfoil_root=self.tail.vt_airfoil,
+            airfoil_tip=self.tail.vt_airfoil,
+            symmetric=False
+        )
+        
+        # Rotate vertices: +Y (Right) -> +Z (Up)
+        # +Z (Thickness) -> -Y (Left/Right Thickness)
+        # +X (Chord) -> +X
+        
+        vertices = mesh["vertices"]
+        new_vertices = []
+        for v in vertices:
+            x, y, z = v
+            new_x = x + x_vt
+            new_y = -z # Thickness becomes Y
+            new_z = y + z_vt # Span becomes Z
+            new_vertices.append([new_x, new_y, new_z])
+            
+        mesh["vertices"] = new_vertices
+        return mesh
+
+    def _mesh_lifting_surface(
+        self,
+        area: float,
+        ar: float,
+        taper: float,
+        sweep: float,
+        x_offset: float,
+        z_offset: float,
+        dihedral: float,
+        color: str,
+        airfoil_root: str = "naca2412",
+        airfoil_tip: str = "naca0012",
+        twist: float = 0.0,
+        incidence: float = 0.0,
+        symmetric: bool = True,
+    ) -> dict:
+        import numpy as np
+
+        b = sqrt(area * ar)
+        c_root = 2 * area / (b * (1 + taper))
+        c_tip = c_root * taper
+
+        sweep_rad = np.radians(sweep)
+        dihedral_rad = np.radians(dihedral)
+        twist_rad = np.radians(twist)
+        incidence_rad = np.radians(incidence)
+
+        dx_tip = (b / 2) * np.tan(sweep_rad)
+        dy_tip = (b / 2) * cos(dihedral_rad)
+        dz_tip = (b / 2) * sin(dihedral_rad)
+
+        def get_airfoil_coords(code: str) -> tuple[np.ndarray, np.ndarray]:
+            try:
+                # Extract 4 digits if string looks like "naca2412"
+                digits = "".join(filter(str.isdigit, code))
+                if len(digits) != 4:
+                    digits = "0012"  # Fallback
+                
+                # Parse digits
+                m = int(digits[0]) / 100.0
+                p = int(digits[1]) / 10.0
+                t = int(digits[2:]) / 100.0
+                
+                geom = generate_naca4_airfoil(
+                    max_camber=m,
+                    max_camber_location=p if p > 0 else 0.4, # avoid 0.0 for p
+                    max_thickness=t,
+                    num_points=40 # Reduced points for performance in 3D view
+                )
+                return geom.coordinates.x, geom.coordinates.y
+            except Exception:
+                # Fallback to 0012
+                geom = generate_naca4_airfoil(max_thickness=0.12, num_points=40)
+                return geom.coordinates.x, geom.coordinates.y
+
+        x_root_norm, y_root_norm = get_airfoil_coords(airfoil_root)
+        x_tip_norm, y_tip_norm = get_airfoil_coords(airfoil_tip)
+
+        # Helper to transform section to global 3D
+        def transform_section(x_norm, y_norm, c, x_le, y_le, z_le, rot_x_deg, rot_y_deg, rot_z_deg):
+            # 1. Scale
+            xs = x_norm * c
+            ys = y_norm * c  # Airfoil Y is actually Z in aircraft frame usually, but let's keep local first
+            zs = np.zeros_like(xs)
+
+            # Local airfoil frame: X is chordwise, Y is thickness-wise (up).
+            # In aircraft frame: X is longitudinal, Z is vertical (up), Y is spanwise.
+            # So Airfoil Y -> Aircraft Z. Airfoil X -> Aircraft X.
+            
+            # Apply incidence/twist (Rotation about Y axis - pitch)
+            # Actually, standard aircraft coordinates: X back, Y right, Z up? 
+            # Or X back, Y right, Z down? 
+            # Let's assume standard visualization: X+ back/right?, Z+ up.
+            # Usually X is longitudinal axis.
+            
+            # Let's map:
+            # Local X (chord) -> Global X
+            # Local Y (thickness) -> Global Z
+            
+            # Rotation matrix for incidence (about Y axis)
+            theta = np.radians(rot_y_deg) # Pitch
+            
+            x_rot = xs * cos(theta) - ys * sin(theta)
+            z_rot = xs * sin(theta) + ys * cos(theta)
+            y_rot = np.zeros_like(xs) # No spanwise thickness
+            
+            # Translate
+            x_global = x_rot + x_le
+            y_global = y_rot + y_le
+            z_global = z_rot + z_le
+            
+            return x_global, y_global, z_global
+
+        # Root Section
+        xr, yr, zr = transform_section(x_root_norm, y_root_norm, c_root, x_offset, 0, z_offset, 0, incidence, 0)
+        
+        # Right Tip Section
+        xt_r, yt_r, zt_r = transform_section(x_tip_norm, y_tip_norm, c_tip, x_offset + dx_tip, dy_tip, z_offset + dz_tip, 0, incidence + twist, 0)
+        
+        # Left Tip Section
+        if symmetric:
+            xt_l, yt_l, zt_l = transform_section(x_tip_norm, y_tip_norm, c_tip, x_offset + dx_tip, -dy_tip, z_offset + dz_tip, 0, incidence + twist, 0)
+
+        vertices = []
+        faces = []
+        
+        n_points = len(xr)
+        
+        # Add vertices
+        # 0 to n-1: Root
+        for i in range(n_points):
+            vertices.append([xr[i], yr[i], zr[i]])
+            
+        # n to 2n-1: Right Tip
+        for i in range(n_points):
+            vertices.append([xt_r[i], yt_r[i], zt_r[i]])
+            
+        # 2n to 3n-1: Left Tip
+        if symmetric:
+            for i in range(n_points):
+                vertices.append([xt_l[i], yt_l[i], zt_l[i]])
+            
+        # Triangulate Root to Right Tip
+        for i in range(n_points - 1):
+            # Quad: R[i], R[i+1], T[i+1], T[i]
+            p1 = i
+            p2 = i + 1
+            p3 = n_points + i + 1
+            p4 = n_points + i
+            
+            faces.append([p1, p2, p3])
+            faces.append([p1, p3, p4])
+            
+        # Triangulate Root to Left Tip
+        if symmetric:
+            for i in range(n_points - 1):
+                # Quad: R[i], R[i+1], T[i+1], T[i]
+                p1 = i
+                p2 = i + 1
+                p3 = 2 * n_points + i + 1
+                p4 = 2 * n_points + i
+                
+                # Check normals? For left wing, we are extruding in -Y. 
+                # If we keep same order, normal might be inverted.
+                # But usually double-sided rendering handles it.
+                # Let's keep consistent winding.
+                faces.append([p1, p3, p2]) # Swap to flip normal?
+                faces.append([p1, p4, p3])
+            
+        return {"vertices": vertices, "faces": faces, "color": color}
+
+    def _mesh_htail(self) -> dict:
+        # Estimate tail arm and area
+        if self.tail.ht_area > 0:
+            s_ht = self.tail.ht_area
+        else:
+            s_ht = self.wing.area * self.tail.area_ratio_to_wing * 0.75
+
+        x_ht = self.fuselage.length * 0.90
+
+        return self._mesh_lifting_surface(
+            area=s_ht,
+            ar=self.tail.ht_aspect_ratio,
+            taper=self.tail.ht_taper,
+            sweep=self.tail.ht_sweep,
+            x_offset=x_ht,
+            z_offset=0.5,
+            dihedral=0.0,
+            color="#FFCA28",
+            airfoil_root="naca0012",
+            airfoil_tip="naca0009"
         )
 
     def _mesh_vtail(self) -> dict:
@@ -175,177 +476,60 @@ class ParametricGeometry:
 
         x_vt = self.fuselage.length * 0.85
 
-        # Vertical tail is symmetric but mounted vertically.
-        # We can reuse lifting surface logic but need rotation.
-        # Simplified: Generate flat plate in XZ
-
         b = sqrt(s_vt * self.tail.vt_aspect_ratio)
         c_root = 2 * s_vt / (b * (1 + self.tail.vt_taper))
         c_tip = c_root * self.tail.vt_taper
 
         import numpy as np
-
         sweep_rad = np.radians(self.tail.vt_sweep)
         dx_tip = b * np.tan(sweep_rad)
 
-        # Vertices (1 side)
-        # Root LE, Root TE, Tip TE, Tip LE
-        v = [[x_vt, 0, 0], [x_vt + c_root, 0, 0], [x_vt + dx_tip + c_tip, 0, b], [x_vt + dx_tip, 0, b]]
+        # Generate airfoil coordinates
+        geom = generate_naca4_airfoil(max_thickness=0.12, num_points=30)
+        x_norm = geom.coordinates.x
+        y_norm = geom.coordinates.y
+        n_points = len(x_norm)
 
-        # Double side for thickness visual
-        width = 0.05
-        vertices = []
-        for p in v:
-            vertices.append([p[0], width, p[2]])
-        for p in v:
-            vertices.append([p[0], -width, p[2]])
+        # Transform function for V-Tail (Vertical)
+        def transform_vtail(c, x_le, y_le, z_le, z_offset_val):
+            # Local X -> Global X
+            # Local Y (thickness) -> Global Y
+            # Span -> Global Z
+            
+            xs = x_norm * c
+            ts = y_norm * c # Thickness
+            
+            x_glob = xs + x_le
+            y_glob = ts + y_le
+            z_glob = np.full_like(xs, z_offset_val) + z_le
+            
+            return x_glob, y_glob, z_glob
 
-        # Simple box faces
-        faces = [
-            [0, 1, 2],
-            [0, 2, 3],  # Right
-            [4, 7, 6],
-            [4, 6, 5],  # Left
-            [0, 3, 7],
-            [0, 7, 4],  # Leading Edge
-            [1, 5, 6],
-            [1, 6, 2],  # Trailing Edge
-            [3, 2, 6],
-            [3, 6, 7],  # Tip
-        ]
-
-        return {"vertices": vertices, "faces": faces, "color": "#EF5350"}
-
-    def _mesh_lifting_surface(self, area, ar, taper, sweep, x_offset, z_offset, dihedral, color) -> dict:
-        import numpy as np
-
-        b = sqrt(area * ar)
-        c_root = 2 * area / (b * (1 + taper))
-        c_tip = c_root * taper
-
-        sweep_rad = np.radians(sweep)
-        dihedral_rad = np.radians(dihedral)
-
-        dx_tip = (b / 2) * np.tan(sweep_rad)
-        dy_tip = (b / 2) * cos(dihedral_rad)
-        dz_tip = (b / 2) * sin(dihedral_rad)
-
-        # Generate airfoil sections (simplified as flat hexagonal or diamond for now, or just thick plate)
-        # To look "perfected", we should use NACA coordinates, but for 3D view speed, a thick plate is better.
-        # Let's use a simple diamond airfoil shape.
-
-        def section_coords(c, x_le, y, z):
-            # 5 points: LE, Top, TE, Bottom, LE (loop)
-            # Thickness 12%
-            tc = 0.12
-            h = c * tc * 0.5
-            return [
-                [x_le, y, z],
-                [x_le + c * 0.3, y, z + h],  # Max thickness at 30%
-                [x_le + c, y, z],
-                [x_le + c * 0.3, y, z - h],
-            ]
-
-        root_sect = section_coords(c_root, x_offset, 0, z_offset)
-
-        # Right Tip
-        right_tip_sect = section_coords(c_tip, x_offset + dx_tip, dy_tip, z_offset + dz_tip)
-
-        # Left Tip
-        left_tip_sect = section_coords(c_tip, x_offset + dx_tip, -dy_tip, z_offset + dz_tip)
+        # Root
+        xr, yr, zr = transform_vtail(c_root, x_vt, 0, 0, 0)
+        # Tip
+        xt, yt, zt = transform_vtail(c_tip, x_vt + dx_tip, 0, 0, b)
 
         vertices = []
         faces = []
 
-        # Add vertices
-        # 0-3: Root
-        vertices.extend(root_sect)
-        # 4-7: Right Tip
-        vertices.extend(right_tip_sect)
-        # 8-11: Left Tip
-        vertices.extend(left_tip_sect)
+        for i in range(n_points):
+            vertices.append([xr[i], yr[i], zr[i]])
+        for i in range(n_points):
+            vertices.append([xt[i], yt[i], zt[i]])
 
-        # Faces (Root to Right Tip)
-        # 4 quads -> 8 triangles
-        # LE to Top
-        faces.append([0, 4, 5])
-        faces.append([0, 5, 1])
-        # Top to TE
-        faces.append([1, 5, 6])
-        faces.append([1, 6, 2])
-        # TE to Bottom
-        faces.append([2, 6, 7])
-        faces.append([2, 7, 3])
-        # Bottom to LE
-        faces.append([3, 7, 4])
-        faces.append([3, 4, 0])
+        for i in range(n_points - 1):
+            p1 = i
+            p2 = i + 1
+            p3 = n_points + i + 1
+            p4 = n_points + i
+            
+            faces.append([p1, p2, p3])
+            faces.append([p1, p3, p4])
 
-        # Faces (Root to Left Tip) - slightly tricky with ordering to keep normals out?
-        # Just standard triangulation
-        faces.append([0, 1, 9])
-        faces.append([0, 9, 8])
-        faces.append([1, 2, 10])
-        faces.append([1, 10, 9])
-        faces.append([2, 3, 11])
-        faces.append([2, 11, 10])
-        faces.append([3, 0, 8])
-        faces.append([3, 8, 11])
-
-        # Close tips? (Optional)
-
-        return {"vertices": vertices, "faces": faces, "color": color}
+        return {"vertices": vertices, "faces": faces, "color": "#EF5350"}
 
 
-def naca4_coordinates(*, code: str, n: int = 161, finite_te: bool = True) -> list[list[float]]:
-    c = str(code).strip()
-    if len(c) != 4 or not c.isdigit():
-        raise ValueError("NACA 4-digit code must be 4 digits, e.g., '2412'.")
-    m = int(c[0]) / 100.0
-    p = int(c[1]) / 10.0
-    t = int(c[2:]) / 100.0
-    if n < 21:
-        raise ValueError("n must be >= 21.")
-
-    a0 = 0.2969
-    a1 = -0.1260
-    a2 = -0.3516
-    a3 = 0.2843
-    a4 = -0.1015 if finite_te else -0.1036
-
-    xs = []
-    for i in range(n):
-        beta = pi * i / (n - 1)
-        x = 0.5 * (1.0 - cos(beta))
-        xs.append(x)
-
-    def yc_dyc(x: float) -> tuple[float, float]:
-        if p <= 0.0 or m <= 0.0:
-            return 0.0, 0.0
-        if x < p:
-            yc = m / (p * p) * (2.0 * p * x - x * x)
-            dyc = 2.0 * m / (p * p) * (p - x)
-            return yc, dyc
-        yc = m / ((1.0 - p) * (1.0 - p)) * ((1.0 - 2.0 * p) + 2.0 * p * x - x * x)
-        dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - x)
-        return yc, dyc
-
-    upper = []
-    lower = []
-    for x in xs:
-        yt = 5.0 * t * (a0 * sqrt(max(0.0, x)) + a1 * x + a2 * x * x + a3 * x * x * x + a4 * x * x * x * x)
-        yc, dyc = yc_dyc(x)
-        th = acos(1.0 / sqrt(1.0 + dyc * dyc))
-        if dyc < 0:
-            th = -th
-        xu = x - yt * sin(th)
-        yu = yc + yt * cos(th)
-        xl = x + yt * sin(th)
-        yl = yc - yt * cos(th)
-        upper.append([xu, yu])
-        lower.append([xl, yl])
-
-    pts = [*upper[::-1], *lower[1:]]
-    return pts
 
 
 def estimate_wing_fuel_volume(
@@ -409,15 +593,51 @@ def geometry_detailed_from_inputs(inputs: dict, sizing_result: Any = None) -> Pa
     )
 
     # Fuselage
-    # Simple sizing rule if not provided: L ~ 0.8 * Span (Glider/Transport) or 1.0*Span (Fighter)
-    # Let's use simple estimate: L = 1.0 * Span for fighter/UAV
-    fus_len = span * 0.8
-    fus_dia = fus_len / 8.0  # Fineness ratio 8
+    # Check for detailed fuselage inputs
+    fus_len = guess.get("fuselage_length", span * 0.8)
+    fus_dia = guess.get("fuselage_diameter", fus_len / 8.0)
+    
+    fus_cps = guess.get("fuselage_control_points", [])
+    if not fus_cps:
+        # Default control points if none provided (Basic cigar shape)
+        fus_cps = [
+            {"x_rel": 0.0, "radius_rel": 0.0},
+            {"x_rel": 0.05, "radius_rel": 0.3},
+            {"x_rel": 0.2, "radius_rel": 0.8},
+            {"x_rel": 0.4, "radius_rel": 1.0},
+            {"x_rel": 0.7, "radius_rel": 0.8},
+            {"x_rel": 1.0, "radius_rel": 0.0},
+        ]
 
-    fuselage = DetailedFuselage(length=fus_len, diameter=fus_dia)
+    fuselage = DetailedFuselage(
+        length=fus_len, 
+        diameter=fus_dia,
+        control_points=fus_cps
+    )
 
     # Tail
     # Area ratio: HT ~ 0.2 Wing, VT ~ 0.1 Wing => Total ~ 0.3
-    tail = DetailedTail(area_ratio_to_wing=0.3)
+    ht_area = guess.get("ht_area", 0.0)
+    vt_area = guess.get("vt_area", 0.0)
+    
+    tail = DetailedTail(
+        area_ratio_to_wing=0.3,
+        ht_area=ht_area,
+        vt_area=vt_area,
+        ht_aspect_ratio=guess.get("ht_aspect_ratio", 4.0),
+        vt_aspect_ratio=guess.get("vt_aspect_ratio", 1.5),
+        ht_taper=guess.get("ht_taper", 0.5),
+        vt_taper=guess.get("vt_taper", 0.6),
+        ht_sweep=guess.get("ht_sweep", 20.0),
+        vt_sweep=guess.get("vt_sweep", 30.0),
+        ht_thickness_ratio=guess.get("ht_thickness_ratio", 0.12),
+        vt_thickness_ratio=guess.get("vt_thickness_ratio", 0.12),
+        ht_airfoil=guess.get("ht_airfoil", "naca0012"),
+        vt_airfoil=guess.get("vt_airfoil", "naca0012"),
+        ht_x_le=guess.get("ht_x_le", None),
+        vt_x_le=guess.get("vt_x_le", None),
+        ht_z_le=guess.get("ht_z_le", None),
+        vt_z_le=guess.get("vt_z_le", None),
+    )
 
     return ParametricGeometry(wing=wing, fuselage=fuselage, tail=tail)

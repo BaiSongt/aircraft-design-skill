@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from math import log10, pi, cos
+from dataclasses import dataclass, field
+from math import log10, pi, cos, sqrt, pow
 
-from .atmosphere import isa_tropopause
+from .atmosphere import isa_tropopause, AtmosphereState
 from .aero_lift_slope import (
     calculate_lift_induced_drag_factor,
     calculate_lift_slope_subsonic,
@@ -37,18 +37,6 @@ def calculate_lift_slope(
         cla = res.cl_alpha
     else:
         # For supersonic, we use the simple approximation from aero_lift_slope
-        # But wait, aero_lift_slope_supersonic signature is different.
-        # calculate_lift_slope_supersonic(aspect_ratio, sweep_leading_edge_deg, taper_ratio, mach, exposed_area_ratio)
-
-        # We don't have taper_ratio or sweep_LE passed in easily here?
-        # Let's approximate sweep_LE from sweep_max_t.
-        # tan(L_le) = tan(L_max_t) + ...
-        # For now, pass sweep_max_thickness_deg as sweep_leading_edge_deg approximation or 0.0
-
-        # Actually, let's keep the simple logic for supersonic here if the other module is too complex or different.
-        # But better to use the module.
-
-        # Let's assume taper=1.0 for approximation if unknown.
         res = calculate_lift_slope_supersonic(
             aspect_ratio=aspect_ratio,
             sweep_leading_edge_deg=sweep_max_thickness_deg,  # Approx
@@ -58,10 +46,6 @@ def calculate_lift_slope(
         )
         cla = res.cl_alpha
 
-    # Area correction (Se/Sref) is usually handled inside the specialized functions or here.
-    # calculate_lift_slope_subsonic returns 3D lift slope * fuselage factor.
-    # It doesn't explicitly multiply by Se/Sref.
-    # So we apply it here.
     cla = cla * (s_exposed_m2 / s_ref_m2)
 
     return cla
@@ -78,7 +62,8 @@ class GeometryAssumptions:
     # Advanced / Detailed overrides
     fuselage_wetted_area_m2: float | None = None
     wing_wetted_area_m2: float | None = None
-    tail_wetted_area_m2: float | None = None
+    htail_wetted_area_m2: float | None = None
+    vtail_wetted_area_m2: float | None = None
 
     fuselage_form_factor: float | None = None
     wing_form_factor: float | None = None
@@ -86,7 +71,7 @@ class GeometryAssumptions:
 
     interference_factor_fuselage: float = 1.0
     interference_factor_wing: float = 1.0
-    interference_factor_tail: float = 1.0
+    interference_factor_tail: float = 1.05
 
     # Detailed tail breakdown
     htail_area_ratio: float | None = None
@@ -94,310 +79,199 @@ class GeometryAssumptions:
     htail_t_c: float | None = None
     vtail_t_c: float | None = None
 
+    # Detailed MAC/Sweep for buildup
+    htail_mac_m: float | None = None
+    vtail_mac_m: float | None = None
+    htail_sweep_rad: float | None = None
+    vtail_sweep_rad: float | None = None
+
+
+@dataclass(frozen=True)
+class DragComponent:
+    name: str
+    swet_m2: float
+    cf: float
+    form_factor: float
+    interference_factor: float
+    f_area_m2: float  # Equivalent parasite area f = Cf * FF * Q * Swet
+    cd0_component: float  # f / Sref
+
 
 @dataclass(frozen=True)
 class DragBuildUpResult:
     cd0: float
-    breakdown: dict
+    breakdown: list[DragComponent] = field(default_factory=list)
+    reynolds_number_fuselage: float = 0.0
+    reynolds_number_wing: float = 0.0
+    skin_friction_wing: float = 0.0
 
 
-def _mu_sutherland_pa_s(t_k: float) -> float:
-    mu0 = 1.716e-5
-    t0 = 273.15
-    s = 110.4
-    return mu0 * (t_k / t0) ** 1.5 * (t0 + s) / (t_k + s)
-
-
-def _cf_turbulent(re: float, mach: float) -> float:
-    if re <= 1e3:
+def calculate_cf_turbulent(re: float, mach: float) -> float:
+    """
+    Calculate turbulent skin friction coefficient for a flat plate.
+    Using Prandtl-Schlichting formula with compressibility correction.
+    """
+    if re <= 0:
         return 0.0
-    cf = 0.455 / ((log10(re) ** 2.58) * ((1.0 + 0.144 * mach * mach) ** 0.65))
-    return cf
+    
+    # Prandtl-Schlichting
+    cf_incomp = 0.455 / (log10(re) ** 2.58)
+    
+    # Compressibility correction (approximate)
+    factor = pow(1.0 + 0.144 * mach * mach, 0.65)
+    
+    return cf_incomp / factor
 
 
-def estimate_cd0_drag_buildup(
+def calculate_form_factor_fuselage(l_d_ratio: float) -> float:
+    """
+    Raymer Eq 12.31 for fuselage form factor.
+    FF = 1 + 60/(f^3) + f/400  where f = L/d
+    """
+    f = l_d_ratio
+    return 1.0 + 60.0 / (f * f * f) + f / 400.0
+
+
+def calculate_form_factor_wing(t_c: float, sweep_max_t_rad: float, lift_coeff: float = 0.0) -> float:
+    """
+    Raymer Eq 12.30 for wing/tail form factor.
+    FF = [1 + L(t/c) + 100(t/c)^4] * R_LS
+    """
+    # Simple version for thickness only
+    # Assuming sweep of max thickness line.
+    cos_sweep = cos(sweep_max_t_rad)
+    return 1.0 + 1.2 * t_c / cos_sweep + 100.0 * pow(t_c / cos_sweep, 4)
+
+
+def calculate_parasite_drag_buildup(
     *,
-    cruise_altitude_m: float,
-    cruise_speed_m_s: float,
+    geometry: GeometryAssumptions,
     s_ref_m2: float,
-    b_m: float,
-    cbar_m: float,
-    assumptions: GeometryAssumptions,
-    isa_delta_c: float = 0.0,
+    mach: float,
+    altitude_m: float,
+    l_char_fuselage_m: float,
+    l_char_wing_m: float,
+    l_char_tail_m: float,
 ) -> DragBuildUpResult:
-    if s_ref_m2 <= 0.0 or cruise_speed_m_s <= 0.0:
-        raise ValueError("Invalid reference area or speed.")
-    if assumptions.fuselage_length_m <= 0.0 or assumptions.fuselage_diameter_m <= 0.0:
-        raise ValueError("Invalid fuselage geometry.")
-
-    atm = isa_tropopause(cruise_altitude_m, delta_t_k=float(isa_delta_c))
-    mu = _mu_sutherland_pa_s(atm.t_k)
-    mach = cruise_speed_m_s / atm.a_m_s
-
-    s_wet_fuse = (
-        float(assumptions.fuselage_wetted_area_m2)
-        if assumptions.fuselage_wetted_area_m2 is not None
-        else (assumptions.wetted_area_factor * assumptions.fuselage_length_m * assumptions.fuselage_diameter_m)
-    )
-    re_fuse = atm.rho_kg_m3 * cruise_speed_m_s * assumptions.fuselage_length_m / mu
-    cf_fuse = _cf_turbulent(re_fuse, mach)
-
-    ff_fuse = (
-        float(assumptions.fuselage_form_factor)
-        if assumptions.fuselage_form_factor is not None
-        else (
-            1.0
-            + 60.0 / (assumptions.fuselage_length_m / assumptions.fuselage_diameter_m) ** 3
-            + (assumptions.fuselage_length_m / assumptions.fuselage_diameter_m) / 400.0
-        )
-    )
-    cd0_fuse = cf_fuse * ff_fuse * float(assumptions.interference_factor_fuselage) * (s_wet_fuse / s_ref_m2)
-
-    s_wet_wing = (
-        float(assumptions.wing_wetted_area_m2)
-        if assumptions.wing_wetted_area_m2 is not None
-        else (2.0 * s_ref_m2 * (1.0 + 0.25 * assumptions.wing_t_c))
-    )
-    re_wing = atm.rho_kg_m3 * cruise_speed_m_s * cbar_m / mu
-    cf_wing = _cf_turbulent(re_wing, mach)
-
-    ff_wing = (
-        float(assumptions.wing_form_factor)
-        if assumptions.wing_form_factor is not None
-        else (
-            (1.0 + 0.6 / cbar_m * assumptions.wing_t_c + 100.0 * (assumptions.wing_t_c**4))
-            * (1.34 * (mach**0.18) if mach > 0.0 else 1.0)
-        )
-    )
-    cd0_wing = cf_wing * ff_wing * float(assumptions.interference_factor_wing) * (s_wet_wing / s_ref_m2)
-
-    cd0_tail = 0.0
-    s_wet_tail_total = 0.0
-
-    if assumptions.htail_area_ratio is not None or assumptions.vtail_area_ratio is not None:
-        # Detailed tail calculation
-        # HT
-        if assumptions.htail_area_ratio:
-            s_ht = float(assumptions.htail_area_ratio) * s_ref_m2
-            tc_ht = float(assumptions.htail_t_c) if assumptions.htail_t_c is not None else assumptions.wing_t_c
-            sw_ht = 2.0 * s_ht * (1.0 + 0.25 * tc_ht)
-            s_wet_tail_total += sw_ht
-            re_ht = atm.rho_kg_m3 * cruise_speed_m_s * (cbar_m * 0.6) / mu  # approx chord
-            cf_ht = _cf_turbulent(re_ht, mach)
-            ff_ht = (
-                float(assumptions.tail_form_factor)
-                if assumptions.tail_form_factor is not None
-                else (
-                    (1.0 + 0.6 / (cbar_m * 0.6) * tc_ht + 100.0 * (tc_ht**4))
-                    * (1.34 * (mach**0.18) if mach > 0.0 else 1.0)
-                )
-            )
-            cd0_tail += cf_ht * ff_ht * float(assumptions.interference_factor_tail) * (sw_ht / s_ref_m2)
-
-        # VT
-        if assumptions.vtail_area_ratio:
-            s_vt = float(assumptions.vtail_area_ratio) * s_ref_m2
-            tc_vt = float(assumptions.vtail_t_c) if assumptions.vtail_t_c is not None else assumptions.wing_t_c
-            sw_vt = 2.0 * s_vt * (1.0 + 0.25 * tc_vt)
-            s_wet_tail_total += sw_vt
-            re_vt = atm.rho_kg_m3 * cruise_speed_m_s * (cbar_m * 0.6) / mu
-            cf_vt = _cf_turbulent(re_vt, mach)
-            ff_vt = (
-                float(assumptions.tail_form_factor)
-                if assumptions.tail_form_factor is not None
-                else (
-                    (1.0 + 0.6 / (cbar_m * 0.6) * tc_vt + 100.0 * (tc_vt**4))
-                    * (1.34 * (mach**0.18) if mach > 0.0 else 1.0)
-                )
-            )
-            cd0_tail += cf_vt * ff_vt * float(assumptions.interference_factor_tail) * (sw_vt / s_ref_m2)
-    else:
-        # Fallback to generic tail ratio
-        s_tail_ref = float(assumptions.tail_area_ratio) * s_ref_m2
-        s_wet_tail = (
-            float(assumptions.tail_wetted_area_m2)
-            if assumptions.tail_wetted_area_m2 is not None
-            else (2.0 * s_tail_ref * (1.0 + 0.25 * assumptions.wing_t_c))
-        )
-        s_wet_tail_total = s_wet_tail
-        re_tail = atm.rho_kg_m3 * cruise_speed_m_s * max(0.5, 0.5 * cbar_m) / mu
-        cf_tail = _cf_turbulent(re_tail, mach)
-        ff_tail = float(assumptions.tail_form_factor) if assumptions.tail_form_factor is not None else ff_wing
-        cd0_tail = cf_tail * ff_tail * float(assumptions.interference_factor_tail) * (s_wet_tail / s_ref_m2)
-
-    cd0_misc = 0.002
-    cd0 = cd0_fuse + cd0_wing + cd0_tail + cd0_misc
-
-    breakdown = {
-        "cd0_fuselage": cd0_fuse,
-        "cd0_wing": cd0_wing,
-        "cd0_tail": cd0_tail,
-        "cd0_misc": cd0_misc,
-        "mach": mach,
-        "re_fuselage": re_fuse,
-        "re_wing": re_wing,
-    }
-
-    return DragBuildUpResult(cd0=cd0, breakdown=breakdown)
-
-
-def calculate_wave_drag(
-    *,
-    mach: float,
-    sweep_quarter_chord_deg: float,
-    thickness_ratio: float,
-    aspect_ratio: float,
-) -> float:
-    if mach <= 1.0:
-        return 0.0
-
-    sweep_rad = sweep_quarter_chord_deg * pi / 180.0
-
-    mach_normal = mach * cos(sweep_rad)
-
-    if mach_normal <= 1.0:
-        return 0.0
-
-    cd_wave = 0.002 * (thickness_ratio**2) * (aspect_ratio / 10.0) * ((mach_normal - 1.0) / (mach_normal)) ** 3
-
-    return cd_wave
-
-
-def calculate_compressibility_drag(
-    *,
-    mach: float,
-    mach_crit: float = 0.8,
-    mach_dd: float = 1.2,
-    cd0_subsonic: float = 0.02,
-    cd0_supersonic: float = 0.04,
-) -> float:
-    if mach <= mach_crit:
-        return 0.0
-    elif mach >= mach_dd:
-        return cd0_supersonic - cd0_subsonic
-    else:
-        t = (mach - mach_crit) / (mach_dd - mach_crit)
-        cd_comp = (cd0_supersonic - cd0_subsonic) * t
-        return cd_comp
-
-
-def calculate_induced_drag(
-    *,
-    cl: float,
-    aspect_ratio: float,
-    taper_ratio: float,
-    sweep_quarter_chord_deg: float,
-) -> float:
-    k = calculate_lift_induced_drag_factor(
-        aspect_ratio=aspect_ratio,
-        taper_ratio=taper_ratio,
-        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
+    """
+    Calculates CD0 using component buildup method (Raymer).
+    """
+    
+    atm = isa_tropopause(altitude_m)
+    rho = atm.rho_kg_m3
+    mu = atm.mu_kg_ms
+    v = mach * atm.a_m_s
+    
+    if v <= 0:
+        return DragBuildUpResult(cd0=0.0)
+    
+    breakdown = []
+    
+    # 1. Fuselage
+    re_fus = (rho * v * l_char_fuselage_m) / mu
+    cf_fus = calculate_cf_turbulent(re_fus, mach)
+    
+    ff_fus = geometry.fuselage_form_factor
+    if ff_fus is None:
+        f_ratio = geometry.fuselage_length_m / geometry.fuselage_diameter_m if geometry.fuselage_diameter_m > 0 else 10.0
+        ff_fus = calculate_form_factor_fuselage(f_ratio)
+        
+    swet_fus = geometry.fuselage_wetted_area_m2
+    if swet_fus is None:
+        # Simple approximation
+        swet_fus = pi * geometry.fuselage_diameter_m * geometry.fuselage_length_m * 0.8 # approx
+        
+    q_fus = geometry.interference_factor_fuselage
+    
+    f_fus = cf_fus * ff_fus * q_fus * swet_fus
+    cd0_fus = f_fus / s_ref_m2
+    breakdown.append(DragComponent("Fuselage", swet_fus, cf_fus, ff_fus, q_fus, f_fus, cd0_fus))
+    
+    # 2. Wing
+    re_wing = (rho * v * l_char_wing_m) / mu
+    cf_wing = calculate_cf_turbulent(re_wing, mach)
+    
+    ff_wing = geometry.wing_form_factor
+    if ff_wing is None:
+        ff_wing = calculate_form_factor_wing(geometry.wing_t_c, 0.0) # Assume 0 sweep for form factor if unknown
+        
+    swet_wing = geometry.wing_wetted_area_m2
+    if swet_wing is None:
+        swet_wing = s_ref_m2 * 2.0 * 1.02 # Exposed * 2 * curvature
+        
+    q_wing = geometry.interference_factor_wing
+    
+    f_wing = cf_wing * ff_wing * q_wing * swet_wing
+    cd0_wing = f_wing / s_ref_m2
+    breakdown.append(DragComponent("Wing", swet_wing, cf_wing, ff_wing, q_wing, f_wing, cd0_wing))
+    
+    # 3. Tails
+    # Horizontal
+    # Use htail_area_ratio if wetted area not provided
+    swet_ht = geometry.htail_wetted_area_m2
+    if swet_ht is None and geometry.htail_area_ratio:
+        swet_ht = s_ref_m2 * geometry.htail_area_ratio * 2.0 * 1.02
+    elif swet_ht is None:
+        swet_ht = 0.0
+        
+    if swet_ht > 0:
+        re_ht = re_wing # Approximation if mac not given
+        if geometry.htail_mac_m:
+            re_ht = (rho * v * geometry.htail_mac_m) / mu
+            
+        cf_ht = calculate_cf_turbulent(re_ht, mach)
+        
+        ff_ht = geometry.tail_form_factor
+        if ff_ht is None:
+             # Use specific t/c if available, else wing t/c or default 0.12
+            tc = geometry.htail_t_c if geometry.htail_t_c else 0.12
+            swp = geometry.htail_sweep_rad if geometry.htail_sweep_rad else 0.0
+            ff_ht = calculate_form_factor_wing(tc, swp)
+            
+        q_ht = geometry.interference_factor_tail
+        f_ht = cf_ht * ff_ht * q_ht * swet_ht
+        cd0_ht = f_ht / s_ref_m2
+        breakdown.append(DragComponent("Horizontal Tail", swet_ht, cf_ht, ff_ht, q_ht, f_ht, cd0_ht))
+        
+    # Vertical
+    swet_vt = geometry.vtail_wetted_area_m2
+    if swet_vt is None and geometry.vtail_area_ratio:
+        swet_vt = s_ref_m2 * geometry.vtail_area_ratio * 2.0 * 1.02
+    elif swet_vt is None:
+        swet_vt = 0.0
+        
+    if swet_vt > 0:
+        re_vt = re_wing
+        if geometry.vtail_mac_m:
+            re_vt = (rho * v * geometry.vtail_mac_m) / mu
+            
+        cf_vt = calculate_cf_turbulent(re_vt, mach)
+        
+        ff_vt = geometry.tail_form_factor
+        if ff_vt is None:
+            tc = geometry.vtail_t_c if geometry.vtail_t_c else 0.12
+            swp = geometry.vtail_sweep_rad if geometry.vtail_sweep_rad else 0.0
+            ff_vt = calculate_form_factor_wing(tc, swp)
+            
+        q_vt = geometry.interference_factor_tail
+        f_vt = cf_vt * ff_vt * q_vt * swet_vt
+        cd0_vt = f_vt / s_ref_m2
+        breakdown.append(DragComponent("Vertical Tail", swet_vt, cf_vt, ff_vt, q_vt, f_vt, cd0_vt))
+        
+    # Sum
+    cd0_total = sum(c.cd0_component for c in breakdown)
+    
+    # Leakage and Protuberance (Raymer suggest 5-10%)
+    cd0_misc = cd0_total * 0.10
+    breakdown.append(DragComponent("Misc/Leakage", 0.0, 0.0, 0.0, 0.0, 0.0, cd0_misc))
+    
+    return DragBuildUpResult(
+        cd0=cd0_total + cd0_misc,
+        breakdown=breakdown,
+        reynolds_number_fuselage=re_fus,
+        reynolds_number_wing=re_wing,
+        skin_friction_wing=cf_wing
     )
 
-    cd_i = k * cl**2
-
-    return cd_i
-
-
-def calculate_total_drag(
-    *,
-    cl: float,
-    cd0: float,
-    aspect_ratio: float,
-    taper_ratio: float,
-    sweep_quarter_chord_deg: float,
-    mach: float,
-    mach_crit: float = 0.8,
-    mach_dd: float = 1.2,
-    thickness_ratio: float = 0.12,
-) -> dict:
-    cd_i = calculate_induced_drag(
-        cl=cl,
-        aspect_ratio=aspect_ratio,
-        taper_ratio=taper_ratio,
-        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
-    )
-
-    cd_wave = calculate_wave_drag(
-        mach=mach,
-        sweep_quarter_chord_deg=sweep_quarter_chord_deg,
-        thickness_ratio=thickness_ratio,
-        aspect_ratio=aspect_ratio,
-    )
-
-    cd_comp = calculate_compressibility_drag(
-        mach=mach,
-        mach_crit=mach_crit,
-        mach_dd=mach_dd,
-        cd0_subsonic=cd0,
-        cd0_supersonic=cd0 + cd_wave,
-    )
-
-    cd_total = cd0 + cd_i + cd_wave + cd_comp
-
-    return {
-        "cd0": cd0,
-        "cd_i": cd_i,
-        "cd_wave": cd_wave,
-        "cd_comp": cd_comp,
-        "cd_total": cd_total,
-        "cl": cl,
-        "mach": mach,
-    }
-
-
-def generate_drag_mach_curve(
-    *,
-    cl: float,
-    cd0_subsonic: float,
-    aspect_ratio: float,
-    taper_ratio: float,
-    sweep_quarter_chord_deg: float,
-    mach_range: list[float],
-    mach_crit: float = 0.8,
-    mach_dd: float = 1.2,
-    thickness_ratio: float = 0.12,
-) -> dict:
-    cd0: list[float] = []
-    cd_i: list[float] = []
-    cd_wave: list[float] = []
-    cd_comp: list[float] = []
-    cd_total: list[float] = []
-    regimes: list[str] = []
-
-    for mach in mach_range:
-        drag_result = calculate_total_drag(
-            cl=cl,
-            cd0=cd0_subsonic,
-            aspect_ratio=aspect_ratio,
-            taper_ratio=taper_ratio,
-            sweep_quarter_chord_deg=sweep_quarter_chord_deg,
-            mach=mach,
-            mach_crit=mach_crit,
-            mach_dd=mach_dd,
-            thickness_ratio=thickness_ratio,
-        )
-
-        cd0.append(drag_result["cd0"])
-        cd_i.append(drag_result["cd_i"])
-        cd_wave.append(drag_result["cd_wave"])
-        cd_comp.append(drag_result["cd_comp"])
-        cd_total.append(drag_result["cd_total"])
-
-        if mach < mach_crit:
-            regime = "subsonic"
-        elif mach < mach_dd:
-            regime = "transonic"
-        else:
-            regime = "supersonic"
-        regimes.append(regime)
-
-    return {
-        "mach": mach_range,
-        "cd0": cd0,
-        "cd_i": cd_i,
-        "cd_wave": cd_wave,
-        "cd_comp": cd_comp,
-        "cd_total": cd_total,
-        "regime": regimes,
-    }
+# Alias for compatibility if needed, or update caller
+estimate_cd0_drag_buildup = calculate_parasite_drag_buildup
