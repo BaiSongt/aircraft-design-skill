@@ -7,8 +7,34 @@ from math import acos, cos, pi, sin, sqrt
 
 from .airfoil_library import generate_naca4_airfoil
 
+def naca4_coordinates_wrapper(*, code: str | None = None, n: int = 100, num_points: int | None = None, **kwargs) -> Any:
+    if num_points is not None:
+        n = num_points
+        
+    if code is not None:
+        # Parse code mode
+        s_code = str(code).strip()
+        if len(s_code) != 4 or not s_code.isdigit():
+            s_code = "0012"
+        m = int(s_code[0]) / 100.0
+        p = int(s_code[1]) / 10.0
+        t = int(s_code[2:]) / 100.0
+        if p <= 0.0: p = 0.4
+        
+        return generate_naca4_airfoil(
+            max_camber=m, 
+            max_camber_location=p, 
+            max_thickness=t, 
+            num_points=n
+        )
+    else:
+        # Pass through mode
+        if 'num_points' not in kwargs:
+            kwargs['num_points'] = n
+        return generate_naca4_airfoil(**kwargs)
+
 # Alias for compatibility if needed
-naca4_coordinates = generate_naca4_airfoil
+naca4_coordinates = naca4_coordinates_wrapper
 
 @dataclass(frozen=True)
 class AirfoilSpec:

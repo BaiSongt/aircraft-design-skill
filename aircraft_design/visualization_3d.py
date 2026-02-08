@@ -682,7 +682,13 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
         if not root_af:
             from .geometry_detailed import naca4_coordinates
 
-            root_af = naca4_coordinates(code="0012")
+            af_obj = naca4_coordinates(code="0012")
+            if hasattr(af_obj, "coordinates"):
+                xs = af_obj.coordinates.x
+                ys = af_obj.coordinates.y
+                root_af = [[float(x), float(y)] for x, y in zip(xs, ys)]
+            else:
+                root_af = af_obj
 
         mesh_parts.extend(
             build_wing_airfoil_loft_mesh(
@@ -716,7 +722,13 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
         if not root_af_t:
             from .geometry_detailed import naca4_coordinates
 
-            root_af_t = naca4_coordinates(code="0012")
+            af_obj = naca4_coordinates(code="0012")
+            if hasattr(af_obj, "coordinates"):
+                xs = af_obj.coordinates.x
+                ys = af_obj.coordinates.y
+                root_af_t = [[float(x), float(y)] for x, y in zip(xs, ys)]
+            else:
+                root_af_t = af_obj
 
         builder = surf.get("builder", "wing_loft")
 
