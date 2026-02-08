@@ -40,11 +40,11 @@ def _three_js_loader_script(resource_config: dict | None, *, include_orbit: bool
         if isinstance(cdn_base_url, str) and cdn_base_url
         else "https://unpkg.com/three@0.147.0"
     )
-    
+
     # Check for unminified option
     use_unminified = bool(cfg.get("use_unminified", False))
     three_filename = "three.js" if use_unminified else "three.min.js"
-    
+
     local_three = f"{local_base}/{three_filename}" if local_base else ""
     local_orbit = f"{local_base}/OrbitControls.js" if local_base else ""
     cdn_three = f"{cdn_base}/build/{three_filename}"
@@ -594,17 +594,53 @@ def build_wing_airfoil_loft_mesh(
 def build_system_box(name: str, x: float, y: float, z: float, size: float = 0.2, color: str = "#ef4444") -> MeshPart:
     hs = size * 0.5
     local_verts = [
-        [-hs, -hs, -hs], [hs, -hs, -hs], [hs, hs, -hs], [-hs, hs, -hs],
-        [-hs, -hs, hs], [hs, -hs, hs], [hs, hs, hs], [-hs, hs, hs]
+        [-hs, -hs, -hs],
+        [hs, -hs, -hs],
+        [hs, hs, -hs],
+        [-hs, hs, -hs],
+        [-hs, -hs, hs],
+        [hs, -hs, hs],
+        [hs, hs, hs],
+        [-hs, hs, hs],
     ]
     verts = [[v[0] + x, v[1] + y, v[2] + z] for v in local_verts]
     indices = [
-        0, 1, 2, 0, 2, 3,
-        4, 5, 6, 4, 6, 7,
-        0, 1, 5, 0, 5, 4,
-        1, 2, 6, 1, 6, 5,
-        2, 3, 7, 2, 7, 6,
-        3, 0, 4, 3, 4, 7
+        0,
+        1,
+        2,
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        4,
+        6,
+        7,
+        0,
+        1,
+        5,
+        0,
+        5,
+        4,
+        1,
+        2,
+        6,
+        1,
+        6,
+        5,
+        2,
+        3,
+        7,
+        2,
+        7,
+        6,
+        3,
+        0,
+        4,
+        3,
+        4,
+        7,
     ]
     flat_verts = []
     for v in verts:
@@ -614,7 +650,7 @@ def build_system_box(name: str, x: float, y: float, z: float, size: float = 0.2,
 
 def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
     mesh_parts: list[MeshPart] = []
-    
+
     # Systems visualization
     systems = geometry.get("systems", {})
     if isinstance(systems, dict):
@@ -640,7 +676,7 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
                         y=float(c.get("cg_y_m", 0.0)),
                         z=float(c.get("cg_z_m", 0.0)),
                         size=0.15,
-                        color=color
+                        color=color,
                     )
                 )
 
@@ -689,7 +725,7 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
             af_def = wing.get("root_airfoil")
             if not af_def:
                 af_def = wing.get("airfoil", {})
-            
+
             code = af_def.get("code", "0012") if isinstance(af_def, dict) else "0012"
             print(f"[Visualizer] Generating wing root airfoil with code={code}")
 
@@ -1871,10 +1907,10 @@ def parse_obj_to_parts(path: str) -> list[MeshPart]:
                     else:
                         v_idx = (len(global_verts) // 3) + v_idx_raw
                     poly_verts.append(v_idx)
-                
+
                 if len(poly_verts) >= 3:
                     for i in range(1, len(poly_verts) - 1):
-                        current_faces.extend([poly_verts[0], poly_verts[i], poly_verts[i+1]])
+                        current_faces.extend([poly_verts[0], poly_verts[i], poly_verts[i + 1]])
             except Exception:
                 pass
 
@@ -1883,21 +1919,21 @@ def parse_obj_to_parts(path: str) -> list[MeshPart]:
     for name, faces in objects:
         if not faces:
             continue
-        
+
         used_indices = sorted(list(set(faces)))
         if not used_indices:
             continue
-            
+
         idx_map = {global_idx: local_idx for local_idx, global_idx in enumerate(used_indices)}
-        
+
         local_verts = []
         for global_idx in used_indices:
             base = global_idx * 3
             if base + 2 < len(global_verts):
-                local_verts.extend(global_verts[base:base+3])
+                local_verts.extend(global_verts[base : base + 3])
             else:
                 local_verts.extend([0.0, 0.0, 0.0])
-                
+
         local_indices = [idx_map[idx] for idx in faces]
         parts.append(MeshPart(name=name, color="#c7d2fe", vertices=local_verts, indices=local_indices))
 
@@ -1905,16 +1941,22 @@ def parse_obj_to_parts(path: str) -> list[MeshPart]:
 
 
 def render_geometry_viewer_html(
-    *, parts: list[MeshPart], title: str = "Geometry Viewer", layout: dict | None = None, resource_config: dict | None = None
+    *,
+    parts: list[MeshPart],
+    title: str = "Geometry Viewer",
+    layout: dict | None = None,
+    resource_config: dict | None = None,
 ) -> str:
     payload = [{"name": p.name, "color": p.color, "vertices": p.vertices, "indices": p.indices} for p in parts]
     mesh_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     layout_json = json.dumps(
         layout or {"views": ["top", "side", "front", "iso"], "grid": {"rows": 2, "cols": 2}}, ensure_ascii=False
     )
-    rc = resource_config if isinstance(resource_config, dict) else {
-        "prefer_local": True, "local_base_url": "assets", "cdn_base_url": "https://unpkg.com/three@0.147.0"
-    }
+    rc = (
+        resource_config
+        if isinstance(resource_config, dict)
+        else {"prefer_local": True, "local_base_url": "assets", "cdn_base_url": "https://unpkg.com/three@0.147.0"}
+    )
     loader_script = _three_js_loader_script(rc, include_orbit=True)
     return f"""<!doctype html>
 <html lang="zh-CN">

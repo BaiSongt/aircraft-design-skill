@@ -89,11 +89,11 @@ def mission_fuel_breakdown(
 
     if propulsion.type == "jet":
         ff = fuel_flow_n_s(
-            propulsion, 
-            thrust_n=thrust_climb_total, 
-            altitude_m=avg_climb_alt, 
+            propulsion,
+            thrust_n=thrust_climb_total,
+            altitude_m=avg_climb_alt,
             speed_m_s=climb_v,
-            isa_delta_c=isa_delta_c
+            isa_delta_c=isa_delta_c,
         )
         climb_fuel_fraction = _fuel_fraction_from_weight_flow(
             w_initial_n=w_n, fuel_weight_flow_n_s=ff, duration_s=climb_time
@@ -142,11 +142,7 @@ def mission_fuel_breakdown(
     cruise_time = max(0.0, cruise_range / cruise_v)
     if propulsion.type == "jet":
         ff = fuel_flow_n_s(
-            propulsion, 
-            thrust_n=d_cruise, 
-            altitude_m=cruise_alt, 
-            speed_m_s=cruise_v,
-            isa_delta_c=isa_delta_c
+            propulsion, thrust_n=d_cruise, altitude_m=cruise_alt, speed_m_s=cruise_v, isa_delta_c=isa_delta_c
         )
         cruise_fuel_fraction = _fuel_fraction_from_weight_flow(
             w_initial_n=w_n, fuel_weight_flow_n_s=ff, duration_s=cruise_time
@@ -189,11 +185,11 @@ def mission_fuel_breakdown(
         )
         if propulsion.type == "jet":
             ff = fuel_flow_n_s(
-                propulsion, 
-                thrust_n=d_loiter, 
-                altitude_m=cruise_alt, 
+                propulsion,
+                thrust_n=d_loiter,
+                altitude_m=cruise_alt,
                 speed_m_s=loiter_speed_m_s,
-                isa_delta_c=isa_delta_c
+                isa_delta_c=isa_delta_c,
             )
             loiter_fuel_fraction = _fuel_fraction_from_weight_flow(
                 w_initial_n=w_n, fuel_weight_flow_n_s=ff, duration_s=loiter_time_s

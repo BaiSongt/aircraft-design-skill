@@ -80,15 +80,15 @@ def generate_naca4_airfoil(
 
     # Create closed loop coordinates: TE -> Upper -> LE -> Lower -> TE
     # x goes from 0 to 1 (LE to TE)
-    
+
     # Upper surface (TE to LE): Reverse arrays
     x_u = x[::-1]
     y_u = y_upper[::-1]
-    
+
     # Lower surface (LE to TE): Skip first point (LE) to avoid duplicate
     x_l = x[1:]
     y_l = y_lower[1:]
-    
+
     x_final = np.concatenate((x_u, x_l))
     y_final = np.concatenate((y_u, y_l))
 

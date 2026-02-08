@@ -482,35 +482,35 @@ def geometry_shape_from_inputs(inputs: dict) -> dict | None:
         code = str(af.get("code", "")).strip()
         if aft != "naca4":
             raise ValueError(f"Unsupported airfoil type: {aft}")
-        
+
         # Parse NACA 4 digit code
         if len(code) != 4 or not code.isdigit():
-             # Default to 0012 if invalid
-             code = "0012"
-             
+            # Default to 0012 if invalid
+            code = "0012"
+
         m_code = int(code[0])
         p_code = int(code[1])
         t_code = int(code[2:])
-        
+
         max_camber = m_code / 100.0
         max_camber_location = p_code / 10.0
         max_thickness = t_code / 100.0
-        
+
         # Handle symmetric airfoils where p=0
         if max_camber_location <= 0.0:
-            max_camber_location = 0.4 
-            
+            max_camber_location = 0.4
+
         coords_obj = naca4_coordinates(
             max_camber=max_camber,
             max_camber_location=max_camber_location,
             max_thickness=max_thickness,
-            num_points=airfoil_n
+            num_points=airfoil_n,
         )
-        
+
         xs = coords_obj.coordinates.x
         ys = coords_obj.coordinates.y
         coords = [[float(x), float(y)] for x, y in zip(xs, ys)]
-        
+
         return {"type": "naca4", "code": code, "n": airfoil_n, "coords": coords}
 
     def parse_controls(ctrl: dict, path: str) -> dict | None:

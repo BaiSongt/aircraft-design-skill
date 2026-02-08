@@ -46,7 +46,7 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     cd0_misc = bd.get("Misc/Leakage", 0.0)
     cd0_wave = bd.get("Wave Drag", 0.0)
     cd0_total = stage2["cd0"]
-    
+
     # Avoid division by zero
     safe_cd0_total = cd0_total if cd0_total > 1e-9 else 1.0
 
@@ -65,9 +65,9 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     cd_comp = stage2["compressibility_drag"]
     cd_i = stage2["induced_drag"]
     cd_total = stage2["cd_total"]
-    
+
     safe_cd_total = cd_total if cd_total > 1e-9 else 1.0
-    
+
     report.append("| 阻力类型 | 数值 | 占比 |")
     report.append("|:---|:---:|:---:|")
     report.append(f"| 零升阻力 (CD0) | {cd0_total:.6f} | {cd0_total / safe_cd_total * 100:.1f}% |")
@@ -89,30 +89,30 @@ def generate_advanced_design_report(result_file: str, output_file: str):
 
     report.append("### 2.4 分析结论")
     report.append("")
-    
+
     # Dynamic conclusions for Stage 2
     cd0_frac = cd0_total / safe_cd_total
     wave_frac = cd_wave / safe_cd_total
     indi_frac = cd_i / safe_cd_total
-    
+
     # CD0 components
     fuse_frac = cd0_fuse / safe_cd0_total
     wing_frac = cd0_wing / safe_cd0_total
-    
-    report.append(f"- **零升阻力**: 机翼占比 {wing_frac*100:.1f}%，机身占比 {fuse_frac*100:.1f}%")
-    
+
+    report.append(f"- **零升阻力**: 机翼占比 {wing_frac * 100:.1f}%，机身占比 {fuse_frac * 100:.1f}%")
+
     if wave_frac < 0.1:
-         report.append(f"- **波阻力**: 占比 {wave_frac*100:.1f}%，波阻设计优秀")
+        report.append(f"- **波阻力**: 占比 {wave_frac * 100:.1f}%，波阻设计优秀")
     elif wave_frac > 0.4:
-         report.append(f"- **波阻力**: 占比 {wave_frac*100:.1f}%，建议增加后掠角或减小厚度比")
+        report.append(f"- **波阻力**: 占比 {wave_frac * 100:.1f}%，建议增加后掠角或减小厚度比")
     else:
-         report.append(f"- **波阻力**: 占比 {wave_frac*100:.1f}%，在正常范围内")
+        report.append(f"- **波阻力**: 占比 {wave_frac * 100:.1f}%，在正常范围内")
 
     if indi_frac > 0.5:
-        report.append(f"- **诱导阻力**: 占比 {indi_frac*100:.1f}%，是主要阻力来源，建议优化展弦比")
+        report.append(f"- **诱导阻力**: 占比 {indi_frac * 100:.1f}%，是主要阻力来源，建议优化展弦比")
     else:
-        report.append(f"- **诱导阻力**: 占比 {indi_frac*100:.1f}%，处于较低水平")
-        
+        report.append(f"- **诱导阻力**: 占比 {indi_frac * 100:.1f}%，处于较低水平")
+
     report.append(f"- **总阻力系数**: CD = {cd_total:.4f}")
     report.append("")
     report.append("---")
@@ -128,8 +128,8 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     thrust_climb = stage3["thrust_available_climb"]
     margin_cruise = stage3["thrust_margin_cruise"]
     margin_climb = stage3["thrust_margin_climb"]
-    mach = stage2['mach']
-    
+    mach = stage2["mach"]
+
     report.append("| 飞行状态 | 可用推力 (N) | 推力余度 |")
     report.append("|:---|:---:|:---:|")
     report.append(f"| 巡航 (M={mach:.1f}) | {int(thrust_cruise)} | {margin_cruise * 100:.1f}% |")
@@ -150,13 +150,17 @@ def generate_advanced_design_report(result_file: str, output_file: str):
 
     report.append("### 3.3 分析结论")
     report.append("")
-    
+
     if margin_cruise < 0 or margin_climb < 0:
-        report.append(f"- **推力不足**: 巡航 ({margin_cruise*100:.1f}%) 或爬升 ({margin_climb*100:.1f}%) 推力余度不足")
+        report.append(
+            f"- **推力不足**: 巡航 ({margin_cruise * 100:.1f}%) 或爬升 ({margin_climb * 100:.1f}%) 推力余度不足"
+        )
         report.append("- **建议**: 需要增加发动机推力 (T/W) 或减小阻力")
     else:
-        report.append(f"- **推力充足**: 巡航 ({margin_cruise*100:.1f}%) 和爬升 ({margin_climb*100:.1f}%) 状态推力满足需求")
-    
+        report.append(
+            f"- **推力充足**: 巡航 ({margin_cruise * 100:.1f}%) 和爬升 ({margin_climb * 100:.1f}%) 状态推力满足需求"
+        )
+
     report.append(f"- **耗油率**: SFC = {sfc_cruise:.2e} 1/s")
     report.append("")
     report.append("---")
@@ -184,19 +188,19 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     report.append("")
     report.append("| 任务段 | 燃油分数 | 燃油重量 (kg) | 时间 (s) | 距离 (km) |")
     report.append("|:---|:---:|:---:|:---:|:---:|")
-    
+
     cruise_fuel_kg = 0.0
-    
+
     for segment in stage4["segment_breakdown"]:
         name = segment["name"]
         fraction = segment["fuel_fraction"]
         fuel_kg = segment["details"].get("fuel_kg", 0)
         time_s = segment["details"].get("time_s", 0)
         distance_m = segment["details"].get("distance_m", 0)
-        
+
         if name == "cruise":
             cruise_fuel_kg = fuel_kg
-            
+
         report.append(
             f"| {name} | {fraction * 100:5.2f}% | {fuel_kg:6.1f} | {time_s:6.0f} | {distance_m / 1000:6.1f} |"
         )
@@ -204,17 +208,17 @@ def generate_advanced_design_report(result_file: str, output_file: str):
 
     report.append("### 4.3 分析结论")
     report.append("")
-    
+
     fuel_fractions = {s["name"]: s["details"].get("fuel_kg", 0) for s in stage4["segment_breakdown"]}
-    max_fuel_segment = max(fuel_fractions, key=fuel_fractions.get) if fuel_fractions else "N/A"
+    max_fuel_segment = max(fuel_fractions.items(), key=lambda item: float(item[1]))[0] if fuel_fractions else "N/A"
     max_fuel_val = fuel_fractions.get(max_fuel_segment, 0)
-    
+
     report.append(f"- **主要耗油段**: {max_fuel_segment} ({max_fuel_val:.1f} kg)")
-    
+
     if cruise_fuel_kg < 1.0 and mission_distance > 10000:
-         report.append(f"- **巡航耗油异常**: {cruise_fuel_kg:.1f} kg，可能推力不足导致无法维持巡航")
+        report.append(f"- **巡航耗油异常**: {cruise_fuel_kg:.1f} kg，可能推力不足导致无法维持巡航")
     else:
-         report.append(f"- **巡航耗油**: {cruise_fuel_kg:.1f} kg，正常")
+        report.append(f"- **巡航耗油**: {cruise_fuel_kg:.1f} kg，正常")
 
     report.append(f"- **总耗油**: {total_fuel_kg:.1f} kg")
 
@@ -256,19 +260,21 @@ def generate_advanced_design_report(result_file: str, output_file: str):
 
     report.append("### 5.3 分析结论")
     report.append("")
-    
+
     if sm > 0.15:
-        report.append(f"- **静稳定裕度**: {sm*100:.2f}% MAC，高于典型值（5-15%），过于稳定，建议减小尾翼面积或后移重心")
+        report.append(
+            f"- **静稳定裕度**: {sm * 100:.2f}% MAC，高于典型值（5-15%），过于稳定，建议减小尾翼面积或后移重心"
+        )
     elif sm < 0.05:
-        report.append(f"- **静稳定裕度**: {sm*100:.2f}% MAC，过低，建议前移重心或增大尾翼")
+        report.append(f"- **静稳定裕度**: {sm * 100:.2f}% MAC，过低，建议前移重心或增大尾翼")
     else:
-        report.append(f"- **静稳定裕度**: {sm*100:.2f}% MAC，在合理范围内 (5-15%)")
-        
+        report.append(f"- **静稳定裕度**: {sm * 100:.2f}% MAC，在合理范围内 (5-15%)")
+
     if abs(trim_cl) > 0.1:
         report.append(f"- **配平**: 尾翼升力系数 {trim_cl:.4f} 较大，配平阻力可能较高")
     else:
         report.append(f"- **配平**: 尾翼升力系数 {trim_cl:.4f} 较小，配平良好")
-        
+
     report.append("")
     report.append("---")
     report.append("")
@@ -304,7 +310,7 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     report.append("### 6.3 分析结论")
     report.append("")
     report.append(f"- **结构重量**: {struct_weight:.1f} kg")
-    report.append(f"- **翼根载荷**: 弯矩 {moment/1000:.1f} kN·m")
+    report.append(f"- **翼根载荷**: 弯矩 {moment / 1000:.1f} kN·m")
     report.append("")
     report.append("---")
     report.append("")
@@ -346,7 +352,7 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     for rec in stage7["recommendations"]:
         report.append(f"- {rec}")
     report.append("")
-    
+
     report.append("### 7.5 分析结论")
     report.append("")
     report.append(f"- **最优展弦比**: {best['aspect_ratio']:.2f}")
@@ -361,42 +367,44 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     report.append("")
     report.append("### 主要发现")
     report.append("")
-    
+
     # Thrust
     if margin_cruise < 0:
-        report.append(f"1. **推力不足**: 巡航推力不足 (余度 {margin_cruise*100:.1f}%)")
+        report.append(f"1. **推力不足**: 巡航推力不足 (余度 {margin_cruise * 100:.1f}%)")
     else:
-        report.append(f"1. **推力充足**: 巡航推力满足需求 (余度 {margin_cruise*100:.1f}%)")
-        
+        report.append(f"1. **推力充足**: 巡航推力满足需求 (余度 {margin_cruise * 100:.1f}%)")
+
     # Drag
     if indi_frac > 0.5:
-        report.append(f"2. **诱导阻力主导**: 诱导阻力占 {indi_frac*100:.1f}%，需优化展弦比")
+        report.append(f"2. **诱导阻力主导**: 诱导阻力占 {indi_frac * 100:.1f}%，需优化展弦比")
     else:
-        report.append(f"2. **阻力构成**: 零升阻力占 {cd0_frac*100:.1f}%，诱导阻力占 {indi_frac*100:.1f}%")
-        
+        report.append(f"2. **阻力构成**: 零升阻力占 {cd0_frac * 100:.1f}%，诱导阻力占 {indi_frac * 100:.1f}%")
+
     # Stability
     if sm > 0.15:
-        report.append(f"3. **静稳定裕度过大**: {sm*100:.2f}% MAC，建议优化")
+        report.append(f"3. **静稳定裕度过大**: {sm * 100:.2f}% MAC，建议优化")
     elif sm < 0.05:
-        report.append(f"3. **静稳定裕度过低**: {sm*100:.2f}% MAC，建议优化")
+        report.append(f"3. **静稳定裕度过低**: {sm * 100:.2f}% MAC，建议优化")
     else:
-        report.append(f"3. **静稳定裕度合理**: {sm*100:.2f}% MAC")
-        
+        report.append(f"3. **静稳定裕度合理**: {sm * 100:.2f}% MAC")
+
     report.append("")
     report.append("### 优化建议")
     report.append("")
-    report.append(f"1. **气动优化**: 建议展弦比接近 {best['aspect_ratio']:.2f}，后掠角接近 {best['sweep_quarter_chord_deg']:.1f}°")
-    
+    report.append(
+        f"1. **气动优化**: 建议展弦比接近 {best['aspect_ratio']:.2f}，后掠角接近 {best['sweep_quarter_chord_deg']:.1f}°"
+    )
+
     if margin_cruise < 0:
-         report.append("2. **动力系统**: 增加推力或减小阻力")
-         
+        report.append("2. **动力系统**: 增加推力或减小阻力")
+
     if sm > 0.15:
-         report.append("3. **控制系统**: 减小尾翼面积或后移重心")
-         
+        report.append("3. **控制系统**: 减小尾翼面积或后移重心")
+
     report.append("")
     report.append("---")
     report.append("")
-    
+
     report.append("## 附录")
     report.append("")
     report.append("### A. 设计参数汇总")
@@ -406,7 +414,7 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     report.append(f"| 展弦比 | - | {best['aspect_ratio']:.2f} |")
     report.append(f"| 后掠角 (°) | - | {best['sweep_quarter_chord_deg']:.1f} |")
     report.append(f"| 厚弦比 | - | {best['wing_t_c']:.3f} |")
-    report.append(f"| 静稳定裕度 (%MAC) | {sm*100:.2f} | 5-15 |")
+    report.append(f"| 静稳定裕度 (%MAC) | {sm * 100:.2f} | 5-15 |")
     report.append("")
 
     report.append("---")
@@ -423,7 +431,7 @@ def generate_advanced_design_report(result_file: str, output_file: str):
 if __name__ == "__main__":
     import sys
     import os
-    
+
     # Allow passing file paths as arguments
     if len(sys.argv) >= 3:
         result_file = sys.argv[1]
@@ -431,9 +439,9 @@ if __name__ == "__main__":
     else:
         # Default fallback (try to find latest)
         # This part is for local testing convenience
-        result_file = "output/latest/advanced_design_results.json" 
+        result_file = "output/latest/advanced_design_results.json"
         output_file = "output/latest/advanced_design_report.md"
-        
+
     if os.path.exists(result_file):
         generate_advanced_design_report(result_file, output_file)
     else:

@@ -1,4 +1,3 @@
-
 import sys
 import os
 
@@ -7,12 +6,13 @@ sys.path.insert(0, os.getcwd())
 
 try:
     from aircraft_design.geometry_detailed import naca4_coordinates
+
     print("Imported naca4_coordinates successfully")
-    
+
     # Test with code argument
     print("Testing naca4_coordinates(code='0012')...")
     af_obj = naca4_coordinates(code="0012")
-    
+
     if hasattr(af_obj, "coordinates"):
         xs = af_obj.coordinates.x
         ys = af_obj.coordinates.y
@@ -30,4 +30,5 @@ try:
 except Exception as e:
     print(f"EXCEPTION: {e}")
     import traceback
+
     traceback.print_exc()

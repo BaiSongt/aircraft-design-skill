@@ -119,7 +119,9 @@ def main():
         viz = RealTimeVisualizer(port=args.viz_port)
         if not viz.start(require_server=True):
             print("  > Visualization server is not running.")
-            print(f"  > Start it first in another terminal: python -m aircraft_design.gui.server --port {args.viz_port}")
+            print(
+                f"  > Start it first in another terminal: python -m aircraft_design.gui.server --port {args.viz_port}"
+            )
             sys.exit(1)
         print("  > 3D Visualization Server is running.")
         print("  > Real-time updates will be shown in the popup window.")
@@ -174,14 +176,14 @@ def main():
         print("Starting Sizing Loop...")
 
         solver_options = data.get("solver_options", {})
-        
+
         result = sizing_loop(
-            req, 
-            guess, 
-            enable_visualization=not args.no_viz, 
+            req,
+            guess,
+            enable_visualization=not args.no_viz,
             visualizer=viz,
             tolerance=solver_options.get("tolerance", 1e-3),
-            max_iter=solver_options.get("max_iter", 50)
+            max_iter=solver_options.get("max_iter", 50),
         )
 
         # Save JSON Data
@@ -247,7 +249,7 @@ def main():
                 mesh_json_path = run_dir / "geometry_mesh.json"
                 with open(mesh_json_path, "w", encoding="utf-8") as f:
                     json.dump(mesh_data, f, ensure_ascii=False)
-                
+
                 # Copy assets for local viewing
                 source_assets = Path(__file__).parent.parent / "assets"
                 dest_assets = run_dir / "assets"
@@ -255,12 +257,12 @@ def main():
                     if dest_assets.exists():
                         shutil.rmtree(dest_assets)
                     shutil.copytree(source_assets, dest_assets)
-                
+
                 resource_config = {
                     "prefer_local": True,
                     "local_base_url": "assets",
                     "cdn_base_url": "https://unpkg.com/three@0.147.0",
-                    "use_unminified": True
+                    "use_unminified": True,
                 }
 
                 html_path = run_dir / "geometry_3d.html"
@@ -404,14 +406,14 @@ def main():
             try:
                 atm_cruise = isa_tropopause(req.cruise_altitude_m)
                 v_cruise = req.cruise_mach * atm_cruise.a_m_s
-                
+
                 # Calculate actual CL at cruise (Start of cruise, W ~= MTOW)
                 # q = 0.5 * rho * V^2
                 q_cruise = 0.5 * atm_cruise.rho_kg_m3 * v_cruise**2
                 # CL = W / (q * S)
                 w_cruise_n = result.mtow_kg * CONST.g0_m_s2
                 cl_cruise_calc = w_cruise_n / max(q_cruise * result.wing_area_m2, 1e-6)
-                
+
                 design_input = {
                     "cruise_altitude_m": req.cruise_altitude_m,
                     "cruise_speed_m_s": v_cruise,
@@ -427,7 +429,9 @@ def main():
                     "cruise_altitude_m": req.cruise_altitude_m,
                     "cruise_speed_m_s": v_cruise,
                     "v_stall_m_s": v_stall_m_s,
-                    "assumed_climb_rate_m_s": req.assumed_climb_rate_m_s if hasattr(req, "assumed_climb_rate_m_s") else 50.0,
+                    "assumed_climb_rate_m_s": req.assumed_climb_rate_m_s
+                    if hasattr(req, "assumed_climb_rate_m_s")
+                    else 50.0,
                     "reserve_fraction": 0.06,
                     "segments": [
                         {"type": "taxi", "time_s": 600},

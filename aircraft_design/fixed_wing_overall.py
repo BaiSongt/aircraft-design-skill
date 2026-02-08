@@ -17,11 +17,10 @@ from .propulsion import build_propulsion_model, thrust_available_n
 from .sizing import wing_geometry_from_loading
 from .stability_control import estimate_static_margin_and_trim, estimate_static_margin_and_trim_envelope
 from .structures_loads import (
-    WingRootLoads,
     estimate_wing_root_loads,
     estimate_structural_weight_feedback,
 )
-from .system_architecture import estimate_system_weights, AircraftSystems
+from .system_architecture import estimate_system_weights
 from .tail_sizing import tail_areas_from_volume_coefficients
 from .units import CONST
 from .weights_class1 import (
@@ -109,7 +108,7 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
 
     if geometry_detailed:
         if hasattr(geometry_detailed, "fuselage") and hasattr(geometry_detailed.fuselage, "wetted_area"):
-             fus_wet = geometry_detailed.fuselage.wetted_area()
+            fus_wet = geometry_detailed.fuselage.wetted_area()
         elif isinstance(geometry_detailed, dict):
             fuselage = geometry_detailed.get("fuselage", {})
             if isinstance(fuselage, dict) and fuselage.get("stations"):
@@ -119,12 +118,16 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
                     s1 = stations[i]
                     s2 = stations[i + 1]
                     dx = float(s2["x_m"]) - float(s1["x_m"])
-                    r1 = float(s1.get("radius_m", (float(s1.get("radius_y_m", 0)) + float(s1.get("radius_z_m", 0))) / 2))
-                    r2 = float(s2.get("radius_m", (float(s2.get("radius_y_m", 0)) + float(s2.get("radius_z_m", 0))) / 2))
+                    r1 = float(
+                        s1.get("radius_m", (float(s1.get("radius_y_m", 0)) + float(s1.get("radius_z_m", 0))) / 2)
+                    )
+                    r2 = float(
+                        s2.get("radius_m", (float(s2.get("radius_y_m", 0)) + float(s2.get("radius_z_m", 0))) / 2)
+                    )
                     area += pi * (r1 + r2) * sqrt(dx**2 + (r2 - r1) ** 2)
                 if area > 0:
                     fus_wet = area
-        
+
         if hasattr(geometry_detailed, "wing") and hasattr(geometry_detailed.wing, "wetted_area"):
             wing_wet = geometry_detailed.wing.wetted_area()
 
@@ -259,7 +262,7 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         )
         atm_state = isa_tropopause(cruise_altitude_m, delta_t_k=isa_delta_c)
         mach_calc = cruise_speed_m_s / atm_state.a_m_s
-        
+
         bu = estimate_cd0_drag_buildup(
             altitude_m=cruise_altitude_m,
             mach=mach_calc,
@@ -267,14 +270,10 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             geometry=assumptions,
             l_char_fuselage_m=assumptions.fuselage_length_m if assumptions.fuselage_length_m else 10.0,
             l_char_wing_m=geom_temp.cbar_m,
-            l_char_tail_m=geom_temp.cbar_m, # approximation
+            l_char_tail_m=geom_temp.cbar_m,  # approximation
         )
         cd0 = float(cd0_in) if isinstance(cd0_in, (int, float)) else float(bu.cd0)
-        aero_buildup_out = {
-            "cd0_buildup": bu.cd0,
-            "breakdown": bu.breakdown,
-            "wave_drag_cd": bu.wave_drag_cd
-        }
+        aero_buildup_out = {"cd0_buildup": bu.cd0, "breakdown": bu.breakdown, "wave_drag_cd": bu.wave_drag_cd}
     else:
         if not isinstance(cd0_in, (int, float)):
             raise KeyError("Missing required input key: cd0")
@@ -302,7 +301,7 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
     for _ in range(25):
         if w0_iter > 1e7 or w0_iter != w0_iter:  # Check for NaN (w0_iter != w0_iter)
             break
-            
+
         geom_temp = wing_geometry_from_loading(
             w0_kg=w0_iter, wing_loading_pa=wing_loading_pa, aspect_ratio=aspect_ratio
         )
@@ -317,15 +316,11 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
                 geometry=assumptions,
                 l_char_fuselage_m=assumptions.fuselage_length_m if assumptions.fuselage_length_m else 10.0,
                 l_char_wing_m=geom_temp.cbar_m,
-                l_char_tail_m=geom_temp.cbar_m, # approximation
+                l_char_tail_m=geom_temp.cbar_m,  # approximation
             )
             cd0 = float(_get_optional(aero_in, "cd0", bu.cd0))
             polar = AeroPolar(cd0=cd0, e=e, ar=aspect_ratio)
-            aero_buildup_out = {
-                "cd0_buildup": bu.cd0,
-                "breakdown": bu.breakdown,
-                "wave_drag_cd": bu.wave_drag_cd
-            }
+            aero_buildup_out = {"cd0_buildup": bu.cd0, "breakdown": bu.breakdown, "wave_drag_cd": bu.wave_drag_cd}
 
         w_cruise_kg = 0.97 * w0_iter
         q = 0.5 * cruise_atm.rho_kg_m3 * cruise_speed_m_s * cruise_speed_m_s
@@ -352,7 +347,7 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             isa_delta_c=isa_delta_c,
         )
         print(f"[DEBUG] Mission Fuel: Total={mission_fuel['fuel_fraction_total']:.4f}")
-        
+
         fuel_frac = float(mission_fuel["fuel_fraction_total"])
 
         empty_additional_kg = 0.0
@@ -374,8 +369,8 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         )
         w0_next = float(mtow["w0_kg"])
         if w0_next > 1e8:
-             w0_next = 1e8 # Clamp to prevent overflow
-             
+            w0_next = 1e8  # Clamp to prevent overflow
+
         rel = abs(w0_next - w0_iter) / max(1e-9, w0_next)
         # Relaxation to prevent oscillation
         w0_iter = 0.6 * w0_iter + 0.4 * w0_next
@@ -918,15 +913,15 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         # Try to find avionics in weights input or systems input (not defined yet, assume weights)
         avionics_weight = float(weights_in.get("avionics_kg", 0.0)) if isinstance(weights_in, dict) else None
         wf_kg_est = w0_kg * float(mission_breakdown.get("fuel_fraction_total", 0.0))
-        
+
         # Extract systems configuration from input
         systems_config = inputs.get("systems", {}) if isinstance(inputs.get("systems", {}), dict) else {}
 
         sys_obj = estimate_system_weights(
             mtow_kg=w0_kg,
-            n_limit=n_limit_feedback, # Use structure n_limit
+            n_limit=n_limit_feedback,  # Use structure n_limit
             geometry=geom_param,
-            v_dive_m_s=cruise_speed_m_s * 1.25, # Rough estimate
+            v_dive_m_s=cruise_speed_m_s * 1.25,  # Rough estimate
             payload_kg=payload_kg,
             crew_kg=crew_kg,
             fuel_kg=wf_kg_est,
@@ -935,9 +930,9 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             systems_config=systems_config,
             s_ref_m2=geom.s_m2,
             sh_m2=tail_out.get("sh_m2"),
-            sv_m2=tail_out.get("sv_m2")
+            sv_m2=tail_out.get("sv_m2"),
         )
-        
+
         systems_out = sys_obj.to_dict()
 
         # Inject systems into geometry_detailed for visualization
