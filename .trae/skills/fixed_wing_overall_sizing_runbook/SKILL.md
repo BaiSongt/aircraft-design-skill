@@ -12,6 +12,59 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 *   用户希望验证当前设计代码是否能针对特定需求收敛。
 *   需要生成总体设计报告 (`report.md`) 并在 PySide6 可视化 App 中查看实时迭代过程。
 
+## 入口与需求模板（必须先生成提示词）
+
+当用户给出需求时，先按模板补齐信息并生成“需求提示词”，再进入后续步骤。
+
+**需求模板**：
+
+```
+项目名称：
+任务类型：军用/民用/无人机/通航/客运/货运
+任务指标：
+  航程 range_m：
+  载荷 payload_kg：
+  巡航马赫 cruise_mach：
+  巡航高度 cruise_altitude_m：
+  起飞距离 takeoff_distance_m：
+  着陆距离 landing_distance_m：
+约束与性能：
+  最大过载 max_load_factor：
+  持续盘旋过载 sustained_turn_g：
+  实用升限 service_ceiling_m：
+推进与能耗假设：
+  推进类型：jet/prop
+  sfc_cruise_1_s：
+  cd0：
+  oswald_e：
+几何与布局偏好：
+  展弦比 aspect_ratio：
+  后掠角 sweep_deg：
+  梯形比 taper_ratio：
+  厚度比 thickness_ratio：
+  尾翼布局 tail_layout：conventional/t_tail/v_tail/twin_fin
+可视化与几何输入：
+  geometry_shape：有/无
+  mesh：有/无
+输出偏好：
+  报告：标准/扩展
+  GUI：启用/禁用
+风险与不确定性：
+  允许参数浮动：是/否
+```
+
+**提示词生成规则**：
+1. 将用户输入映射到模板字段；缺失字段用“默认值”标记并说明将采用轻型战斗机默认值。
+2. 输出“需求提示词”，必须包含以下结构化段落：
+   - 项目与任务类型
+   - 任务指标（带单位）
+   - 约束与性能指标
+   - 推进与能耗假设
+   - 几何与布局偏好
+   - 可视化与几何输入状态
+   - 输出偏好与风险声明
+3. 提示词末尾追加一句：已生成模板化需求，将进入 sizing_input.json 构建与总体设计闭环流程。
+
 ## 执行步骤
 
 ### 0. 环境检查与虚拟环境准备
@@ -73,28 +126,28 @@ python -c "import PySide6, pyvista, pyvistaqt, numpy, scipy"
 
 可视化服务需先启动，Sizing Loop 仅负责连接已有服务并推送数据。
 
-**仅启动服务（推荐分离运行）**：
-在单独终端中执行以下命令：
+**同时启动服务与窗口（默认，必须使用）**：
+在单独终端中执行以下命令（会同时启动服务与 GUI 窗口）：
+
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+python3 -m aircraft_design.gui.server
+```
+
+**仅启动服务（禁止单独使用）**：
+此模式只启动后端服务，不会显示 GUI。除非明确需要无界面服务，否则不要使用。
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 python3 -m aircraft_design.gui.server --server-only
 ```
 
-**仅启动窗口（服务已运行时使用）**：
-在新终端中执行以下命令：
+**仅启动窗口（服务已在运行时使用）**：
+在新终端中执行以下命令（只启动 GUI 窗口）：
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 python3 -m aircraft_design.gui.server --gui-only
-```
-
-**同时启动服务与窗口（默认行为）**：
-在单独终端中执行以下命令：
-
-```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 -m aircraft_design.gui.server
 ```
 
 **如果提示端口已被占用**：
