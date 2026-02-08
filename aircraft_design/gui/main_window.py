@@ -59,6 +59,14 @@ def _load_webengine_view():
         return None
 
 
+def _load_webengine_settings():
+    try:
+        module = importlib.import_module("PySide6.QtWebEngineCore")
+        return getattr(module, "QWebEngineSettings", None)
+    except Exception:
+        return None
+
+
 class Web3DView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -83,6 +91,13 @@ class Web3DView(QWidget):
             self._view = label
             return
         self._view = self._view_class(self)
+        settings_class = _load_webengine_settings()
+        if settings_class is not None:
+            settings = self._view.settings()
+            settings.setAttribute(settings_class.WebAttribute.JavascriptEnabled, True)
+            settings.setAttribute(settings_class.WebAttribute.WebGLEnabled, True)
+            settings.setAttribute(settings_class.WebAttribute.LocalContentCanAccessFileUrls, True)
+            settings.setAttribute(settings_class.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         layout.addWidget(self._view)
 
     def is_available(self):

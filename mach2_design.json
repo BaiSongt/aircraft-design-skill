@@ -1,0 +1,112 @@
+{
+  "project_name": "Mach2_Light_Fighter",
+  "requirements": {
+    "range_m": 800000.0,
+    "payload_kg": 500.0,
+    "cruise_mach": 2.0,
+    "cruise_altitude_m": 15000.0,
+    "assumed_climb_rate_m_s": 150.0,
+    "takeoff_distance_m": 800.0,
+    "landing_distance_m": 1000.0,
+    "max_load_factor": 7.5,
+    "sustained_turn_g": 3.0,
+    "service_ceiling_m": 18000.0,
+    "max_takeoff_weight_kg": 6000.0
+  },
+  "initial_guess": {
+    "thrust_to_weight": 1.1,
+    "wing_loading_pa": 4500.0,
+    "aspect_ratio": 2.5,
+    "sweep_deg": 50.0,
+    "taper_ratio": 0.2,
+    "thickness_ratio": 0.04,
+    "sfc_cruise_1_s": 0.00025,
+    "cd0": 0.025,
+    "oswald_e": 0.7
+  },
+  "geometry": {
+    "fuselage_length_m": 13.0,
+    "fuselage_diameter_m": 1.1,
+    "wing_span_m": 8.0, 
+    "wing_area_m2": 25.0, 
+    "htail_area_m2": 4.0,
+    "vtail_area_m2": 3.0
+  },
+  "geometry_shape": {
+    "layout": {
+        "views": ["top", "side", "front", "iso"],
+        "grid": {"rows": 2, "cols": 2}
+    },
+    "fuselage": {
+        "axis": {
+            "length_m": 13.0
+        },
+        "profile": {
+            "mode": "control_points",
+            "max_radius_y_m": 0.55,
+            "max_radius_z_m": 0.55,
+            "control_points": [
+                {"x_rel": 0.0, "radius_rel": 0.0, "n": 2.0},
+                {"x_rel": 0.1, "radius_rel": 0.3, "n": 2.2},
+                {"x_rel": 0.3, "radius_rel": 0.8, "n": 2.4},
+                {"x_rel": 0.5, "radius_rel": 1.0, "n": 2.5},
+                {"x_rel": 0.7, "radius_rel": 0.9, "n": 2.5},
+                {"x_rel": 0.9, "radius_rel": 0.4, "n": 2.3},
+                {"x_rel": 1.0, "radius_rel": 0.0, "n": 2.0}
+            ]
+        }
+    },
+    "wing": {
+        "planform": {
+            "s_ref_m2": 25.0,
+            "aspect_ratio": 2.5,
+            "taper_ratio": 0.2,
+            "sweep_quarter_chord_deg": 50.0,
+            "dihedral_deg": -3.0
+        },
+        "airfoil": {
+            "name": "NACA 64-204",
+            "type": "naca4",
+            "code": "0004"
+        }
+    },
+    "tail": {
+        "horizontal": {
+            "planform": {
+                "s_ref_m2": 4.0,
+                "aspect_ratio": 3.0,
+                "taper_ratio": 0.4,
+                "sweep_quarter_chord_deg": 45.0,
+                "y_offset_m": 0.0,
+                "z_offset_m": 0.0
+            },
+            "sections": {
+                "root_airfoil": {"type": "naca4", "code": "0006"}
+            }
+        },
+        "vertical": {
+            "planform": {
+                "s_ref_m2": 3.0,
+                "aspect_ratio": 1.5,
+                "taper_ratio": 0.3,
+                "sweep_quarter_chord_deg": 55.0,
+                "y_offset_m": 0.0,
+                "z_offset_m": 0.5
+            },
+            "sections": {
+                "root_airfoil": {"type": "naca4", "code": "0006"}
+            }
+        }
+    }
+  },
+  "openvsp": {
+    "enabled": true
+  },
+  "uncertainty": {
+    "enabled": true
+  },
+  "solver_options": {
+    "max_iter": 500,
+    "tolerance": 1e-4
+  }
+}
