@@ -623,13 +623,16 @@ def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
             comps = grp.get("components", [])
             for c in comps:
                 c_name = c.get("name", "Unknown")
-                # Determine color based on group
-                color = "#94a3b8" # Default gray
-                if "Propulsion" in g_name: color = "#ef4444" # Red
-                elif "Systems" in g_name: color = "#f59e0b" # Amber
-                elif "Structure" in g_name: color = "#3b82f6" # Blue
-                elif "Payload" in g_name: color = "#10b981" # Green
-                
+                color = "#94a3b8"
+                if "Propulsion" in g_name:
+                    color = "#ef4444"
+                elif "Systems" in g_name:
+                    color = "#f59e0b"
+                elif "Structure" in g_name:
+                    color = "#3b82f6"
+                elif "Payload" in g_name:
+                    color = "#10b981"
+
                 mesh_parts.append(
                     build_system_box(
                         name=f"{g_name}: {c_name}",

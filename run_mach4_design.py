@@ -1,6 +1,4 @@
 
-import json
-import math
 from aircraft_design.fixed_wing_overall import run_fixed_wing_overall_design
 from aircraft_design.atmosphere import isa_tropopause
 from aircraft_design.units import CONST

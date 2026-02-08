@@ -1,75 +1,75 @@
 {
   "requirements": {
     "range_m": 1000000.0,
-    "payload_kg": 200.0,
-    "cruise_mach": 0.85,
-    "cruise_altitude_m": 8000.0,
+    "payload_kg": 500.0,
+    "cruise_mach": 4.0,
+    "cruise_altitude_m": 20000.0,
     "takeoff_distance_m": 1500.0,
     "landing_distance_m": 1500.0,
-    "max_load_factor": 5.0,
-    "sustained_turn_g": 1.0,
-    "service_ceiling_m": 8000.0,
-    "mtow_constraint_kg": 5000.0
+    "max_load_factor": 7.0,
+    "sustained_turn_g": 2.0,
+    "service_ceiling_m": 22000.0,
+    "mtow_constraint_kg": 10000.0
   },
   "initial_guess": {
-    "thrust_to_weight": 0.35,
-    "wing_loading_pa": 2000.0,
-    "aspect_ratio": 6.0,
-    "sweep_deg": 30.0,
-    "taper_ratio": 0.4,
-    "thickness_ratio": 0.1,
-    "sfc_cruise_1_s": 0.0002,
-    "cd0": 0.022,
-    "oswald_e": 0.8
+    "thrust_to_weight": 1.4,
+    "wing_loading_pa": 9000.0,
+    "aspect_ratio": 2.2,
+    "sweep_deg": 65.0,
+    "taper_ratio": 0.2,
+    "thickness_ratio": 0.04,
+    "sfc_cruise_1_s": 0.00045,
+    "cd0": 0.03,
+    "oswald_e": 0.7
   },
   "geometry": {
-    "fuselage_length_m": 4.5,
-    "fuselage_diameter_m": 0.5,
-    "s_wing": 5.27,
-    "aspect_ratio": 6.0,
-    "sweep_deg": 30.0,
-    "taper_ratio": 0.4,
-    "thickness_ratio": 0.1
+    "fuselage_length_m": 15.0,
+    "fuselage_diameter_m": 1.4,
+    "s_wing": 24.0,
+    "aspect_ratio": 2.2,
+    "sweep_deg": 65.0,
+    "taper_ratio": 0.2,
+    "thickness_ratio": 0.04
   },
   "geometry_shape": {
     "fuselage": {
       "axis": {
-        "length_m": 4.5
+        "length_m": 15.0
       },
       "profile": {
         "type": "revolution",
         "control_points": [
-          {"x": 0.0, "radius": 0.25},
-          {"x": 0.5, "radius": 0.25},
-          {"x": 1.5, "radius": 0.25},
-          {"x": 2.5, "radius": 0.25},
-          {"x": 3.5, "radius": 0.25},
-          {"x": 4.0, "radius": 0.22},
-          {"x": 4.5, "radius": 0.15}
+          {"x": 0.0, "radius": 0.2},
+          {"x": 1.5, "radius": 0.6},
+          {"x": 4.0, "radius": 0.7},
+          {"x": 8.0, "radius": 0.7},
+          {"x": 11.0, "radius": 0.65},
+          {"x": 13.5, "radius": 0.5},
+          {"x": 15.0, "radius": 0.2}
         ]
       }
     },
     "wing": {
       "planform": {
-        "aspect_ratio": 6.0,
-        "sweep_deg": 30.0,
-        "taper_ratio": 0.4,
-        "thickness_ratio": 0.1
+        "aspect_ratio": 2.2,
+        "sweep_deg": 65.0,
+        "taper_ratio": 0.2,
+        "thickness_ratio": 0.04
       }
     }
   },
   "geometry_constraints": {
-    "min_fuselage_length": 4.0,
-    "max_fuselage_length": 6.0,
-    "min_fuselage_diameter": 0.4,
-    "max_fuselage_diameter": 0.6,
-    "min_wing_span": 4.0,
-    "max_wing_span": 7.0,
-    "min_wing_area": 4.0,
-    "max_wing_area": 7.0,
-    "wing_fuselage_clearance": 0.3,
-    "min_tail_area": 0.7,
-    "max_tail_area": 1.2
+    "min_fuselage_length": 12.0,
+    "max_fuselage_length": 18.0,
+    "min_fuselage_diameter": 1.2,
+    "max_fuselage_diameter": 1.6,
+    "min_wing_span": 7.0,
+    "max_wing_span": 12.0,
+    "min_wing_area": 18.0,
+    "max_wing_area": 30.0,
+    "wing_fuselage_clearance": 0.4,
+    "min_tail_area": 3.0,
+    "max_tail_area": 6.0
   },
   "openvsp": {
     "enabled": true,
@@ -94,5 +94,9 @@
       "aspect_ratio": {"percent": 5.0},
       "sweep_deg": {"percent": 5.0}
     }
+  },
+  "solver_options": {
+    "max_iter": 200,
+    "tolerance": 0.001
   }
 }

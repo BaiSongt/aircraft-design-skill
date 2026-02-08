@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
-from math import sqrt, pi, cos, tan, radians
-
-from .geometry_detailed import ParametricGeometry
+from math import sqrt, cos, radians
 
 @dataclass
 class SystemComponent:
@@ -79,7 +77,8 @@ class AircraftSystems:
     @property
     def cg_x_m(self) -> float:
         w_total = self.total_weight_kg
-        if w_total <= 0: return 0.0
+        if w_total <= 0:
+            return 0.0
         moment = sum(g.total_weight_kg * g.cg_x_m for g in self.groups.values())
         return moment / w_total
 
@@ -181,8 +180,6 @@ def estimate_system_weights(
         s_wet_fus_m2 = 3.14159 * fus_dia * fus_len * 0.9 # 0.9 for tapering
         
     S_wet_fus_ft2 = (s_wet_fus_m2 or 1.0) * 10.7639
-    L_fus_ft = fus_len * 3.28084
-    
     # Nicolai / Raymer hybrid for Fuselage
     # W_fus = 0.052 * S_wet^1.086 * (N*W)^0.177
     w_fus_lbs = 0.052 * (S_wet_fus_ft2**1.086) * ((n_limit * W_lbs)**0.177)
@@ -289,16 +286,17 @@ def estimate_system_weights(
 
     # 8.1 Environmental Control System (ECS)
     ecs_cfg = cfg.get("ecs", {})
-    ecs_type = ecs_cfg.get("type", "basic") # basic, bleed, cycle
+    ecs_type = ecs_cfg.get("type", "basic")
     # Weight: approx 1-2% MTOW for small aircraft
     w_ecs = 0.015 * mtow_kg
     if "weight_kg" in ecs_cfg:
         w_ecs = float(ecs_cfg["weight_kg"])
     
     # Power estimate
-    p_ecs = 500.0 # Basic vent/heat
-    if ecs_type == "cycle": p_ecs = 3000.0 # Vapor cycle A/C
-    
+    p_ecs = 500.0
+    if ecs_type == "cycle":
+        p_ecs = 3000.0
+
     sys.add_component("Systems", SystemComponent("ECS", w_ecs, cg_x_m=fus_len * 0.3, power_w=p_ecs))
 
     # 8.2 Anti-Ice System
@@ -341,11 +339,12 @@ def estimate_system_weights(
                 # Rough est: 15 W per kg of avionics? 
                 c.power_w = c.weight_kg * 15.0 if c.weight_kg > 0 else 500.0
             elif c.name == "Flight Controls":
-                c.power_w = 200.0 # Actuators/Pumps
+                c.power_w = 200.0
             elif c.name == "Main Landing Gear":
-                 if lg_type == "retractable": c.power_w = 0.0 # Peak load usually, ignore for continuous?
-            elif "Light" in c.name: # If user added lights
-                 c.power_w = 300.0
+                if lg_type == "retractable":
+                    c.power_w = 0.0
+            elif "Light" in c.name:
+                c.power_w = 300.0
 
     if "Propulsion" in sys_groups:
         for c in sys_groups["Propulsion"].components:
@@ -360,8 +359,10 @@ def estimate_system_weights(
                 x = float(val.get("location_x_m", fus_len * 0.5))
                 # Auto-categorize? Default to Systems
                 grp = "Systems"
-                if "engine" in key or "prop" in key: grp = "Propulsion"
-                elif "wing" in key or "fuse" in key: grp = "Structure"
+                if "engine" in key or "prop" in key:
+                    grp = "Propulsion"
+                elif "wing" in key or "fuse" in key:
+                    grp = "Structure"
                 
                 sys.add_component(grp, SystemComponent(key.replace("_", " ").title(), w, cg_x_m=x))
     
@@ -372,4 +373,3 @@ def estimate_system_weights(
     sys.add_component("Useful Load", SystemComponent("Fuel", fuel_kg, cg_x_m=wing_cg_x))
 
     return sys
-

@@ -1,7 +1,4 @@
-import json
-print("Imports starting...")
 from aircraft_design.fixed_wing_overall import run_fixed_wing_overall_design
-print("Imports done.")
 
 def test_systems_integration():
     inputs = {
@@ -129,10 +126,14 @@ def test_systems_integration():
             elec_found = True
             print(f"Electrical Weight: {c['weight_kg']} (Expected 60.0)")
             
-    if not avionics_found: print("FAIL: Avionics component not found")
-    if not ecs_found: print("FAIL: ECS component not found")
-    if not anti_ice_found: print("FAIL: Anti-Ice component not found")
-    if not elec_found: print("FAIL: Electrical component not found")
+    if not avionics_found:
+        print("FAIL: Avionics component not found")
+    if not ecs_found:
+        print("FAIL: ECS component not found")
+    if not anti_ice_found:
+        print("FAIL: Anti-Ice component not found")
+    if not elec_found:
+        print("FAIL: Electrical component not found")
 
     if avionics_found and ecs_found and anti_ice_found and elec_found:
         print("PASS: All new system components found")

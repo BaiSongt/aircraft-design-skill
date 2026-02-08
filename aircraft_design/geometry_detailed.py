@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 from dataclasses import dataclass, field
-from math import acos, cos, pi, sin, sqrt
+from math import cos, pi, sin, sqrt
 
 
 from .airfoil_library import generate_naca4_airfoil
@@ -19,7 +19,8 @@ def naca4_coordinates_wrapper(*, code: str | None = None, n: int = 100, num_poin
         m = int(s_code[0]) / 100.0
         p = int(s_code[1]) / 10.0
         t = int(s_code[2:]) / 100.0
-        if p <= 0.0: p = 0.4
+        if p <= 0.0:
+            p = 0.4
         
         return generate_naca4_airfoil(
             max_camber=m, 
@@ -154,7 +155,8 @@ class DetailedTail:
 
     @property
     def ht_mean_aerodynamic_chord(self) -> float:
-        if self.ht_area <= 0: return 0.0
+        if self.ht_area <= 0:
+            return 0.0
         b = sqrt(self.ht_area * self.ht_aspect_ratio)
         t = self.ht_taper
         c_root = 2 * self.ht_area / (b * (1 + t))
@@ -162,7 +164,8 @@ class DetailedTail:
 
     @property
     def vt_mean_aerodynamic_chord(self) -> float:
-        if self.vt_area <= 0: return 0.0
+        if self.vt_area <= 0:
+            return 0.0
         b = sqrt(self.vt_area * self.vt_aspect_ratio)
         t = self.vt_taper
         c_root = 2 * self.vt_area / (b * (1 + t))
@@ -345,9 +348,6 @@ class ParametricGeometry:
 
         sweep_rad = np.radians(sweep)
         dihedral_rad = np.radians(dihedral)
-        twist_rad = np.radians(twist)
-        incidence_rad = np.radians(incidence)
-
         dx_tip = (b / 2) * np.tan(sweep_rad)
         dy_tip = (b / 2) * cos(dihedral_rad)
         dz_tip = (b / 2) * sin(dihedral_rad)
@@ -384,8 +384,6 @@ class ParametricGeometry:
             # 1. Scale
             xs = x_norm * c
             ys = y_norm * c  # Airfoil Y is actually Z in aircraft frame usually, but let's keep local first
-            zs = np.zeros_like(xs)
-
             # Local airfoil frame: X is chordwise, Y is thickness-wise (up).
             # In aircraft frame: X is longitudinal, Z is vertical (up), Y is spanwise.
             # So Airfoil Y -> Aircraft Z. Airfoil X -> Aircraft X.

@@ -17,7 +17,6 @@ import csv
 import queue
 import time
 import importlib
-import os
 from pathlib import Path
 from .widgets.convergence_plot import ConvergencePlot
 from .widgets.constraint_plot import ConstraintPlot

@@ -2,7 +2,6 @@ import argparse
 import sys
 import io
 import shutil
-import os
 import socket
 import json
 import struct
@@ -32,7 +31,6 @@ from aircraft_design.units import CONST
 from aircraft_design.geometry_constraints import GeometryConstraintChecker
 from aircraft_design.geometry_modeling import parametric_to_aircraft_geometry
 from aircraft_design.vspaero_interface import run_vspaero_analysis
-import shutil
 
 
 class TeeStream(io.TextIOBase):

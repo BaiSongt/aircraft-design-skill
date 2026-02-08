@@ -172,8 +172,6 @@ def _calculate_turbo_ramjet_thrust_factor(
     # If C = 0.6, at M=3.2 -> 1 + 0.6*10 = 7.
     # This matches nicely!
     
-    mach_factor = 1.0 + 0.7 * (mach ** 2.0)
-    
     # Altitude lapse
     # Sigma (density ratio)
     # For Turbo-Ramjet, it's roughly proportional to ambient pressure (delta) or density (sigma).
@@ -215,10 +213,14 @@ def _interpolate_map(map_data: dict, mach: float, altitude_m: float) -> float:
     j = bisect.bisect_right(h_points, h) - 1
     
     # Handle edges/clamping logic of bisect
-    if i < 0: i = 0
-    if j < 0: j = 0
-    if i >= len(m_points) - 1: i = len(m_points) - 2
-    if j >= len(h_points) - 1: j = len(h_points) - 2
+    if i < 0:
+        i = 0
+    if j < 0:
+        j = 0
+    if i >= len(m_points) - 1:
+        i = len(m_points) - 2
+    if j >= len(h_points) - 1:
+        j = len(h_points) - 2
     
     # Interpolate
     m0, m1 = m_points[i], m_points[i+1]

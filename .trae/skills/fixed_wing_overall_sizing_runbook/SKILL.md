@@ -1,6 +1,6 @@
 ---
 name: "fixed_wing_overall_sizing_runbook"
-description: "执行固定翼总体设计闭环计算并输出 results.json/report.md 以及 PySide6 可视化 App 数据。当需要从输入需求一键得到可计算方案、详细报告与可视化结果时调用。"
+description: "执行固定翼总体设计闭环计算并输出 results.json/report.md 以及 PySide6 可视化 App 数据。每次都要调用，能从输入需求一键得到可计算方案、详细报告与可视化结果。"
 ---
 
 # Fixed Wing Overall Sizing Runbook

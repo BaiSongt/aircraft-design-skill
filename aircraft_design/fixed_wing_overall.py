@@ -126,16 +126,22 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
                     fus_wet = area
         
         if hasattr(geometry_detailed, "wing") and hasattr(geometry_detailed.wing, "wetted_area"):
-             wing_wet = geometry_detailed.wing.wetted_area()
-        
+            wing_wet = geometry_detailed.wing.wetted_area()
+
         if hasattr(geometry_detailed, "tail"):
-             tail = geometry_detailed.tail
-             if hasattr(tail, "ht_wetted_area"): ht_wet = tail.ht_wetted_area()
-             if hasattr(tail, "vt_wetted_area"): vt_wet = tail.vt_wetted_area()
-             if hasattr(tail, "ht_mean_aerodynamic_chord"): ht_mac = tail.ht_mean_aerodynamic_chord
-             if hasattr(tail, "vt_mean_aerodynamic_chord"): vt_mac = tail.vt_mean_aerodynamic_chord
-             if hasattr(tail, "ht_sweep"): ht_sweep_rad = tail.ht_sweep * (pi/180.0)
-             if hasattr(tail, "vt_sweep"): vt_sweep_rad = tail.vt_sweep * (pi/180.0)
+            tail = geometry_detailed.tail
+            if hasattr(tail, "ht_wetted_area"):
+                ht_wet = tail.ht_wetted_area()
+            if hasattr(tail, "vt_wetted_area"):
+                vt_wet = tail.vt_wetted_area()
+            if hasattr(tail, "ht_mean_aerodynamic_chord"):
+                ht_mac = tail.ht_mean_aerodynamic_chord
+            if hasattr(tail, "vt_mean_aerodynamic_chord"):
+                vt_mac = tail.vt_mean_aerodynamic_chord
+            if hasattr(tail, "ht_sweep"):
+                ht_sweep_rad = tail.ht_sweep * (pi / 180.0)
+            if hasattr(tail, "vt_sweep"):
+                vt_sweep_rad = tail.vt_sweep * (pi / 180.0)
 
     # Helper to extract tail details
     ht_ratio = None
