@@ -43,7 +43,7 @@ def _clear_actors(renderer, actors):
     actors.clear()
 
 
-def _add_polydata(vtk, renderer, actors, named_colors, polydata, color="LightGray", show_edges=True):
+def _add_polydata(vtk, renderer, actors, named_colors, polydata, color="LightGray", show_edges=True, clip_plane=None):
     normals = vtk.vtkPolyDataNormals()
     normals.SetInputData(polydata)
     normals.AutoOrientNormalsOn()
@@ -51,7 +51,16 @@ def _add_polydata(vtk, renderer, actors, named_colors, polydata, color="LightGra
     normals.SplittingOff()
     normals.Update()
     mapper = vtk.vtkPolyDataMapper()
-    mapper.SetInputConnection(normals.GetOutputPort())
+    clipper = None
+    if clip_plane is not None:
+        clipper = vtk.vtkClipPolyData()
+        clipper.SetInputConnection(normals.GetOutputPort())
+        clipper.SetClipFunction(clip_plane)
+        clipper.InsideOutOn()
+        clipper.Update()
+        mapper.SetInputConnection(clipper.GetOutputPort())
+    else:
+        mapper.SetInputConnection(normals.GetOutputPort())
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
     actor.GetProperty().SetColor(_resolve_color(named_colors, color))
@@ -65,6 +74,7 @@ def _add_polydata(vtk, renderer, actors, named_colors, polydata, color="LightGra
         actor.GetProperty().SetLineWidth(1.0)
     renderer.AddActor(actor)
     actors.append(actor)
+    return actor, clipper
 
 
 def _apply_view_mode(renderer, view_mode):
@@ -94,9 +104,10 @@ def _apply_view_mode(renderer, view_mode):
     renderer.ResetCameraClippingRange()
 
 
-def _build_mesh_from_geom(vtk, renderer, actors, named_colors, geom_dict):
+def _build_mesh_from_geom(vtk, renderer, actors, named_colors, geom_dict, clip_plane=None):
     components = ["fuselage", "wing", "htail", "vtail", "horizontal_tail", "vertical_tail"]
     has_mesh_data = False
+    clippers = []
     for name in components:
         comp = geom_dict.get(name)
         if not comp:
@@ -124,11 +135,23 @@ def _build_mesh_from_geom(vtk, renderer, actors, named_colors, geom_dict):
             polydata.SetPoints(points)
             polydata.SetPolys(polys)
             color = comp.get("color", "LightGray")
-            _add_polydata(vtk, renderer, actors, named_colors, polydata, color=color, show_edges=True)
-    return has_mesh_data
+            _, clipper = _add_polydata(
+                vtk,
+                renderer,
+                actors,
+                named_colors,
+                polydata,
+                color=color,
+                show_edges=True,
+                clip_plane=clip_plane,
+            )
+            if clipper is not None:
+                clippers.append(clipper)
+    return has_mesh_data, clippers
 
 
-def _build_parametric(vtk, renderer, actors, named_colors, geom_dict):
+def _build_parametric(vtk, renderer, actors, named_colors, geom_dict, clip_plane=None):
+    clippers = []
     fus = geom_dict.get("fuselage", {})
     length = fus.get("length_m") or geom_dict.get("fuselage_length_m", 10.0)
     diameter = fus.get("diameter_m") or geom_dict.get("fuselage_diameter_m", 1.0)
@@ -146,9 +169,18 @@ def _build_parametric(vtk, renderer, actors, named_colors, geom_dict):
     transform_filter.SetInputData(cylinder.GetOutput())
     transform_filter.SetTransform(transform)
     transform_filter.Update()
-    _add_polydata(
-        vtk, renderer, actors, named_colors, transform_filter.GetOutput(), color="LightGray", show_edges=False
+    _, clipper = _add_polydata(
+        vtk,
+        renderer,
+        actors,
+        named_colors,
+        transform_filter.GetOutput(),
+        color="LightGray",
+        show_edges=False,
+        clip_plane=clip_plane,
     )
+    if clipper is not None:
+        clippers.append(clipper)
 
     wing = geom_dict.get("wing", {})
     area = wing.get("s_ref_m2") or geom_dict.get("s_wing", 20.0)
@@ -201,10 +233,22 @@ def _build_parametric(vtk, renderer, actors, named_colors, geom_dict):
         polydata = vtk.vtkPolyData()
         polydata.SetPoints(points)
         polydata.SetPolys(polys)
-        _add_polydata(vtk, renderer, actors, named_colors, polydata, color="LightBlue", show_edges=True)
+        _, clipper = _add_polydata(
+            vtk,
+            renderer,
+            actors,
+            named_colors,
+            polydata,
+            color="LightBlue",
+            show_edges=True,
+            clip_plane=clip_plane,
+        )
+        if clipper is not None:
+            clippers.append(clipper)
+    return clippers
 
 
-def _load_file(vtk, renderer, actors, named_colors, path):
+def _load_file(vtk, renderer, actors, named_colors, path, clip_plane=None):
     ext = path.lower().split(".")[-1]
     reader = None
     if ext == "obj":
@@ -214,12 +258,15 @@ def _load_file(vtk, renderer, actors, named_colors, path):
     elif ext == "ply":
         reader = vtk.vtkPLYReader()
     if not reader:
-        return False
+        return False, []
     reader.SetFileName(path)
     reader.Update()
     polydata = reader.GetOutput()
-    _add_polydata(vtk, renderer, actors, named_colors, polydata, color="White", show_edges=True)
-    return True
+    _, clipper = _add_polydata(
+        vtk, renderer, actors, named_colors, polydata, color="White", show_edges=True, clip_plane=clip_plane
+    )
+    clippers = [clipper] if clipper is not None else []
+    return True, clippers
 
 
 def _vtk_worker(command_queue, result_queue):
@@ -309,12 +356,16 @@ def _vtk_worker(command_queue, result_queue):
                     render_frame(view, view_id, cmd.get("width"), cmd.get("height"))
                 elif cmd_type == "load_file":
                     _clear_actors(view["renderer"], view["actors"])
-                    if _load_file(vtk, view["renderer"], view["actors"], view["named_colors"], cmd.get("path", "")):
+                    ok, _ = _load_file(vtk, view["renderer"], view["actors"], view["named_colors"], cmd.get("path", ""))
+                    if ok:
                         render_frame(view, view_id, cmd.get("width"), cmd.get("height"))
                 elif cmd_type == "update":
                     _clear_actors(view["renderer"], view["actors"])
                     geom = cmd.get("geometry") or {}
-                    if not _build_mesh_from_geom(vtk, view["renderer"], view["actors"], view["named_colors"], geom):
+                    has_mesh, _ = _build_mesh_from_geom(
+                        vtk, view["renderer"], view["actors"], view["named_colors"], geom
+                    )
+                    if not has_mesh:
                         _build_parametric(vtk, view["renderer"], view["actors"], view["named_colors"], geom)
                     render_frame(view, view_id, cmd.get("width"), cmd.get("height"))
         except Exception as e:
@@ -459,8 +510,9 @@ class PyVistaWidget(QWidget):
         self.view_mode = view_mode
         layout = QVBoxLayout(self)
         disable_qvtk = os.environ.get("AD_DISABLE_QVTK") == "1"
+        force_qvtk = os.environ.get("AD_FORCE_QVTK") == "1"
         self._qvtk_class = None if disable_qvtk else _get_qvtk_class()
-        self._use_qvtk = bool(self._qvtk_class) and sys.platform == "darwin"
+        self._use_qvtk = bool(self._qvtk_class) and (force_qvtk or sys.platform == "darwin")
         self._manager = None
         self._view_id = None
         self._pending_commands = []
@@ -472,6 +524,20 @@ class PyVistaWidget(QWidget):
         self._render_window = None
         self._pending_geometry = None
         self._last_source = None
+        self._grid_actor = None
+        self._grid_source = None
+        self._grid_enabled = True
+        self._axes_widget = None
+        self._axes_enabled = True
+        self._distance_widget = None
+        self._measure_enabled = False
+        self._plane_widget = None
+        self._slice_plane = None
+        self._slice_enabled = False
+        self._clip_filters = []
+        self._highlight_actor = None
+        self._highlight_style = None
+        self._picker = None
 
         if self._use_qvtk:
             self._qvtk = self._qvtk_class(self)
@@ -518,11 +584,162 @@ class PyVistaWidget(QWidget):
         self._render_window.AddRenderer(self._renderer)
         self._qvtk.Initialize()
         self._qvtk.Start()
+        self._setup_interaction(vtk)
         self._vtk_ready = True
         if self._pending_geometry is not None:
             geom = self._pending_geometry
             self._pending_geometry = None
             self.update_mesh(geom)
+
+    def _setup_interaction(self, vtk):
+        interactor = self._render_window.GetInteractor()
+        style = vtk.vtkInteractorStyleTrackballCamera()
+        interactor.SetInteractorStyle(style)
+
+        self._picker = vtk.vtkCellPicker()
+        self._picker.SetTolerance(0.0005)
+
+        axes_actor = vtk.vtkAxesActor()
+        self._axes_widget = vtk.vtkOrientationMarkerWidget()
+        self._axes_widget.SetOrientationMarker(axes_actor)
+        self._axes_widget.SetInteractor(interactor)
+        self._axes_widget.SetViewport(0.0, 0.0, 0.2, 0.2)
+        self._axes_widget.SetEnabled(1 if self._axes_enabled else 0)
+        self._axes_widget.SetInteractive(0)
+
+        self._distance_widget = vtk.vtkDistanceWidget()
+        self._distance_widget.SetInteractor(interactor)
+        self._distance_widget.CreateDefaultRepresentation()
+        self._distance_widget.SetEnabled(1 if self._measure_enabled else 0)
+
+        self._slice_plane = vtk.vtkPlane()
+        plane_rep = vtk.vtkImplicitPlaneRepresentation()
+        plane_rep.SetPlaceFactor(1.2)
+        plane_rep.SetNormal(0.0, 0.0, 1.0)
+        plane_rep.SetOrigin(0.0, 0.0, 0.0)
+        plane_rep.PlaceWidget([-1, 1, -1, 1, -1, 1])
+        self._plane_widget = vtk.vtkImplicitPlaneWidget2()
+        self._plane_widget.SetInteractor(interactor)
+        self._plane_widget.SetRepresentation(plane_rep)
+        self._plane_widget.SetEnabled(1 if self._slice_enabled else 0)
+
+        def on_plane(_obj, _evt):
+            plane_rep.GetPlane(self._slice_plane)
+            for clip in self._clip_filters:
+                clip.Update()
+            self._render_window.Render()
+
+        self._plane_widget.AddObserver("InteractionEvent", on_plane)
+
+        def on_left_press(_obj, _evt):
+            if interactor.GetShiftKey():
+                x, y = interactor.GetEventPosition()
+                self._picker.Pick(x, y, 0, self._renderer)
+                actor = self._picker.GetActor()
+                self._apply_highlight(actor)
+                self._render_window.Render()
+            else:
+                style.OnLeftButtonDown()
+
+        interactor.AddObserver("LeftButtonPressEvent", on_left_press)
+
+        def on_key_press(_obj, _evt):
+            key = interactor.GetKeySym().lower()
+            if key == "g":
+                self._grid_enabled = not self._grid_enabled
+                self._update_grid_visibility()
+            elif key == "a":
+                self._axes_enabled = not self._axes_enabled
+                self._update_axes_visibility()
+            elif key == "s":
+                self._slice_enabled = not self._slice_enabled
+                self._rebuild_scene()
+            elif key == "m":
+                self._measure_enabled = not self._measure_enabled
+                self._update_measure_visibility()
+            elif key == "r":
+                self.reset_camera()
+            self._render_window.Render()
+
+        interactor.AddObserver("KeyPressEvent", on_key_press)
+
+    def _update_axes_visibility(self):
+        if self._axes_widget is None:
+            return
+        self._axes_widget.SetEnabled(1 if self._axes_enabled else 0)
+
+    def _update_measure_visibility(self):
+        if self._distance_widget is None:
+            return
+        self._distance_widget.SetEnabled(1 if self._measure_enabled else 0)
+
+    def _update_grid_visibility(self):
+        if self._grid_actor is not None:
+            self._grid_actor.SetVisibility(1 if self._grid_enabled else 0)
+
+    def _apply_highlight(self, actor):
+        if actor is self._highlight_actor:
+            return
+        if self._highlight_actor is not None and self._highlight_style is not None:
+            prop = self._highlight_actor.GetProperty()
+            prop.SetColor(*self._highlight_style["color"])
+            prop.SetEdgeColor(*self._highlight_style["edge_color"])
+            prop.SetEdgeVisibility(self._highlight_style["edge_vis"])
+            prop.SetLineWidth(self._highlight_style["line_width"])
+        self._highlight_actor = None
+        self._highlight_style = None
+        if actor is None or actor not in self._actors:
+            return
+        prop = actor.GetProperty()
+        self._highlight_style = {
+            "color": prop.GetColor(),
+            "edge_color": prop.GetEdgeColor(),
+            "edge_vis": prop.GetEdgeVisibility(),
+            "line_width": prop.GetLineWidth(),
+        }
+        prop.SetColor(1.0, 0.4, 0.0)
+        prop.SetEdgeVisibility(1)
+        prop.SetEdgeColor(1.0, 0.2, 0.0)
+        prop.SetLineWidth(2.0)
+        self._highlight_actor = actor
+
+    def _ensure_grid(self, vtk, bounds):
+        if bounds is None or bounds[1] < bounds[0]:
+            bounds = (-5.0, 5.0, -5.0, 5.0, -1.0, 1.0)
+        x_min, x_max, y_min, y_max, z_min, z_max = bounds
+        size = max(x_max - x_min, y_max - y_min, 1.0) * 1.2
+        cx = (x_min + x_max) * 0.5
+        cy = (y_min + y_max) * 0.5
+        z = z_min
+        if self._grid_source is None:
+            self._grid_source = vtk.vtkPlaneSource()
+            mapper = vtk.vtkPolyDataMapper()
+            mapper.SetInputConnection(self._grid_source.GetOutputPort())
+            self._grid_actor = vtk.vtkActor()
+            self._grid_actor.SetMapper(mapper)
+            self._grid_actor.GetProperty().SetColor(0.8, 0.8, 0.8)
+            self._grid_actor.GetProperty().SetLineWidth(1.0)
+            self._grid_actor.GetProperty().SetRepresentationToWireframe()
+            self._grid_actor.GetProperty().SetOpacity(0.6)
+            self._renderer.AddActor(self._grid_actor)
+        self._grid_source.SetXResolution(20)
+        self._grid_source.SetYResolution(20)
+        self._grid_source.SetOrigin(cx - size * 0.5, cy - size * 0.5, z)
+        self._grid_source.SetPoint1(cx + size * 0.5, cy - size * 0.5, z)
+        self._grid_source.SetPoint2(cx - size * 0.5, cy + size * 0.5, z)
+        self._grid_source.Update()
+        self._update_grid_visibility()
+
+    def _rebuild_scene(self):
+        if not self._vtk_ready or not self._last_source:
+            return
+        if self._plane_widget is not None:
+            self._plane_widget.SetEnabled(1 if self._slice_enabled else 0)
+        source_type, value = self._last_source
+        if source_type == "geometry":
+            self._update_scene(value)
+        elif source_type == "file":
+            self._update_scene(value, is_file=True)
 
     def _init_manager(self):
         if self._manager_ready:
@@ -686,11 +903,39 @@ class PyVistaWidget(QWidget):
         except Exception:
             return
         _clear_actors(self._renderer, self._actors)
+        self._clip_filters = []
+        self._apply_highlight(None)
+        clip_plane = self._slice_plane if self._slice_enabled else None
         if is_file:
-            _load_file(vtk, self._renderer, self._actors, self._named_colors, payload)
+            _, clippers = _load_file(
+                vtk, self._renderer, self._actors, self._named_colors, payload, clip_plane=clip_plane
+            )
+            self._clip_filters = clippers
         else:
-            if not _build_mesh_from_geom(vtk, self._renderer, self._actors, self._named_colors, payload or {}):
-                _build_parametric(vtk, self._renderer, self._actors, self._named_colors, payload or {})
+            has_mesh, clippers = _build_mesh_from_geom(
+                vtk, self._renderer, self._actors, self._named_colors, payload or {}, clip_plane=clip_plane
+            )
+            if not has_mesh:
+                clippers = _build_parametric(
+                    vtk, self._renderer, self._actors, self._named_colors, payload or {}, clip_plane=clip_plane
+                )
+            self._clip_filters = clippers
+        bounds = self._renderer.ComputeVisiblePropBounds()
+        self._ensure_grid(vtk, bounds)
+        self._update_axes_visibility()
+        self._update_measure_visibility()
+        if self._plane_widget is not None and self._slice_enabled:
+            plane_rep = self._plane_widget.GetRepresentation()
+            if plane_rep is not None and bounds and bounds[1] >= bounds[0]:
+                plane_rep.PlaceWidget(bounds)
+                cx = (bounds[0] + bounds[1]) * 0.5
+                cy = (bounds[2] + bounds[3]) * 0.5
+                cz = (bounds[4] + bounds[5]) * 0.5
+                plane_rep.SetOrigin(cx, cy, cz)
+                plane_rep.SetNormal(0.0, 0.0, 1.0)
+                plane_rep.GetPlane(self._slice_plane)
+                for clip in self._clip_filters:
+                    clip.Update()
         self._renderer.ResetCamera()
         _apply_view_mode(self._renderer, self.view_mode)
         self._render_window.Render()

@@ -586,30 +586,41 @@ def build_wing_airfoil_loft_mesh(
     return parts
 
 
-def generate_three_view_html(geometry: dict, output_path: str, resource_config: dict | None = None):
-    """
-    Generate a standalone HTML file visualizing the geometry with Three.js.
-
-    Args:
-        geometry (dict): The geometry dictionary containing 'fuselage', 'wing', 'tail', etc.
-        output_path (str): The path to save the generated HTML file.
-    """
-    import json
-
-    rc = resource_config if isinstance(resource_config, dict) else None
-    if rc is None and isinstance(geometry.get("resources"), dict):
-        rc = geometry.get("resources")
-
-    # 1. Build Mesh Parts
-    mesh_parts = []
-
-    # Fuselage
+def build_mesh_parts_from_geometry(geometry: dict) -> list[MeshPart]:
+    mesh_parts: list[MeshPart] = []
+    components = ["fuselage", "wing", "htail", "vtail", "horizontal_tail", "vertical_tail"]
+    for name in components:
+        comp = geometry.get(name)
+        if not isinstance(comp, dict):
+            continue
+        verts = comp.get("vertices")
+        faces = comp.get("faces")
+        if not isinstance(verts, list) or not isinstance(faces, list):
+            continue
+        flat_vertices: list[float] = []
+        for v in verts:
+            if not isinstance(v, (list, tuple)) or len(v) < 3:
+                continue
+            flat_vertices.extend([float(v[0]), float(v[1]), float(v[2])])
+        indices: list[int] = []
+        for f in faces:
+            if isinstance(f, (list, tuple)) and len(f) >= 3:
+                indices.extend([int(f[0]), int(f[1]), int(f[2])])
+        if flat_vertices and indices:
+            mesh_parts.append(
+                MeshPart(
+                    name=str(name),
+                    color=str(comp.get("color", "#c7d2fe")),
+                    vertices=flat_vertices,
+                    indices=indices,
+                )
+            )
+    if mesh_parts:
+        return mesh_parts
     fus_st = geometry.get("fuselage", {}).get("stations")
     if fus_st:
-        # Increase resolution for better visualization
         mesh_parts.append(build_fuselage_loft(stations=fus_st, n_circ=48))
 
-    # Wing
     wing = geometry.get("wing", {})
     wing_pf = wing.get("planform")
     if wing_pf:
@@ -639,7 +650,6 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
             )
         )
 
-    # Tail
     tail = geometry.get("tail", {})
     for surf in tail.get("surfaces", []):
         source = surf.get("source", "horizontal")
@@ -695,14 +705,48 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
                 )
             )
 
-    # 2. Serialize parts to JSON
+    return mesh_parts
+
+
+def _normalize_web_config(web_config: dict | None) -> dict:
+    base: dict = web_config if isinstance(web_config, dict) else {}
+    layout_value = base.get("layout")
+    layout = layout_value if isinstance(layout_value, dict) else {}
+    columns_value = layout.get("columns")
+    rows_value = layout.get("rows")
+    columns = columns_value if isinstance(columns_value, list) else [1, 1]
+    rows = rows_value if isinstance(rows_value, list) else [1, 1]
+    grid_enabled = base.get("grid_enabled")
+    if grid_enabled is None:
+        grid_enabled = True
+    default_zoom = base.get("default_zoom")
+    if default_zoom is None:
+        default_zoom = 1.0
+    sky = base.get("sky")
+    if not isinstance(sky, str) or not sky.strip():
+        sky = "linear-gradient(180deg, #7cc6ff 0%, #cbe9ff 45%, #f6fbff 100%)"
+    return {
+        "layout": {"columns": columns, "rows": rows},
+        "grid_enabled": bool(grid_enabled),
+        "default_zoom": float(default_zoom),
+        "sky": sky,
+    }
+
+
+def render_three_view_html_from_parts(
+    parts: list[MeshPart],
+    resource_config: dict | None = None,
+    web_config: dict | None = None,
+) -> str:
+    rc = resource_config if isinstance(resource_config, dict) else None
     parts_data = []
-    for p in mesh_parts:
+    for p in parts:
         parts_data.append({"name": p.name, "color": p.color, "vertices": p.vertices, "indices": p.indices})
 
     parts_json = json.dumps(parts_data)
+    config = _normalize_web_config(web_config)
+    config_json = json.dumps(config)
 
-    # 3. Enhanced Template
     html_template = """<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -710,38 +754,40 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Aircraft Geometry Analysis</title>
   <style>
-    :root { --bg: #1a1a1a; --panel: #2d2d2d; --text: #e0e0e0; --accent: #4a90e2; --card: #3a3a3a; --card-border: #4a4a4a; }
+    :root { --bg: SKY_PLACEHOLDER; --panel: rgba(7, 20, 38, 0.55); --text: #eaf4ff; --accent: #38bdf8; --card: rgba(255,255,255,0.14); --card-border: rgba(255,255,255,0.25); }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI', Roboto, sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
 
     #toolbar {
-        height: 48px; background: var(--panel); border-bottom: 1px solid #444;
+        height: 48px; background: var(--panel); border-bottom: 1px solid rgba(255,255,255,0.18);
         display: flex; align-items: center; padding: 0 16px; gap: 16px; font-size: 14px;
+        backdrop-filter: blur(10px);
     }
     .btn {
-        background: #444; border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: background 0.2s;
+        background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: background 0.2s, border-color 0.2s;
     }
-    .btn:hover { background: #555; }
+    .btn:hover { background: rgba(255,255,255,0.28); border-color: rgba(255,255,255,0.4); }
     .btn.active { background: var(--accent); }
-    .info-tag { font-family: monospace; color: #aaa; }
+    .info-tag { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #dbeafe; }
     .mode-group { display: flex; gap: 8px; align-items: center; }
     .mode-card {
-        background: var(--card); color: #ddd; border: 1px solid var(--card-border); border-radius: 10px;
+        background: var(--card); color: #e6f3ff; border: 1px solid var(--card-border); border-radius: 10px;
         padding: 6px 12px; cursor: pointer; transition: all 0.2s; min-width: 64px; text-align: center;
-        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
     }
     .mode-card.active {
-        background: #1f2937; color: #fff; border-color: #3b82f6;
-        box-shadow: 0 0 0 2px rgba(59,130,246,0.35);
+        background: rgba(56,189,248,0.3); color: #ffffff; border-color: rgba(56,189,248,0.8);
+        box-shadow: 0 0 0 2px rgba(56,189,248,0.35);
     }
 
     #workspace {
-        flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; background: #000;
+        flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; background: rgba(255,255,255,0.15);
     }
-    .view-container { position: relative; background: #151515; overflow: hidden; }
+    .view-container { position: relative; background: rgba(255,255,255,0.08); overflow: hidden; }
     .view-label {
         position: absolute; left: 8px; top: 8px;
-        background: rgba(0,0,0,0.6); color: #ccc; padding: 2px 8px; border-radius: 4px;
-        font-size: 12px; pointer-events: none; user-select: none;
+        background: rgba(10,24,40,0.55); color: #eaf4ff; padding: 4px 10px; border-radius: 8px;
+        font-size: 12px; pointer-events: none; user-select: none; border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(6px);
     }
     canvas { display: block; width: 100%; height: 100%; outline: none; }
 
@@ -802,8 +848,140 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
         }, 500);
     }
 
+    const parts = PARAMS_PLACEHOLDER;
+    const config = CONFIG_PLACEHOLDER || {};
+    const workspaceEl = document.getElementById('workspace');
+    const layoutCfg = config.layout || { columns: [1, 1], rows: [1, 1] };
+    function applyLayout() {
+        const cols = Array.isArray(layoutCfg.columns) && layoutCfg.columns.length ? layoutCfg.columns : [1, 1];
+        const rows = Array.isArray(layoutCfg.rows) && layoutCfg.rows.length ? layoutCfg.rows : [1, 1];
+        if (workspaceEl) {
+            workspaceEl.style.gridTemplateColumns = cols.map(v => `${v}fr`).join(' ');
+            workspaceEl.style.gridTemplateRows = rows.map(v => `${v}fr`).join(' ');
+        }
+    }
+    applyLayout();
+
+    function computeBounds() {
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+        let has = false;
+        parts.forEach(p => {
+            for (let i = 0; i < p.vertices.length; i += 3) {
+                const x = p.vertices[i], y = p.vertices[i + 1], z = p.vertices[i + 2];
+                minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+                minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+                has = true;
+            }
+        });
+        if (!has) return null;
+        return { minX, maxX, minY, maxY, minZ, maxZ };
+    }
+
+    function projectPoint(v, type) {
+        const x = v[0], y = v[1], z = v[2];
+        if (type === "top") return [x, y];
+        if (type === "side") return [x, z];
+        if (type === "front") return [y, z];
+        const ang = -Math.PI / 4;
+        const cosA = Math.cos(ang), sinA = Math.sin(ang);
+        const x1 = x * cosA - y * sinA;
+        const y1 = x * sinA + y * cosA;
+        const pitch = 0.6;
+        const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+        const y2 = y1 * cosP - z * sinP;
+        return [x1, y2];
+    }
+
+    function projectedBounds(type) {
+        let minU = Infinity, maxU = -Infinity;
+        let minV = Infinity, maxV = -Infinity;
+        let has = false;
+        parts.forEach(p => {
+            for (let i = 0; i < p.vertices.length; i += 3) {
+                const u = projectPoint([p.vertices[i], p.vertices[i + 1], p.vertices[i + 2]], type);
+                minU = Math.min(minU, u[0]); maxU = Math.max(maxU, u[0]);
+                minV = Math.min(minV, u[1]); maxV = Math.max(maxV, u[1]);
+                has = true;
+            }
+        });
+        if (!has) return null;
+        return { minU, maxU, minV, maxV };
+    }
+
+    function renderFallbackView(canvas, type) {
+        if (!canvas) return;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width));
+        const h = Math.max(1, Math.floor(rect.height));
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.clearRect(0, 0, w, h);
+        const pb = projectedBounds(type);
+        if (!pb) return;
+        const du = Math.max(1e-6, pb.maxU - pb.minU);
+        const dv = Math.max(1e-6, pb.maxV - pb.minV);
+        const scale = 0.9 * Math.min(w / du, h / dv);
+        const cu = 0.5 * (pb.minU + pb.maxU);
+        const cv = 0.5 * (pb.minV + pb.maxV);
+        ctx.strokeStyle = "rgba(15, 25, 40, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        parts.forEach(p => {
+            const verts = p.vertices;
+            const idx = p.indices;
+            for (let i = 0; i < idx.length; i += 3) {
+                const a = idx[i] * 3;
+                const b = idx[i + 1] * 3;
+                const c = idx[i + 2] * 3;
+                const pa = projectPoint([verts[a], verts[a + 1], verts[a + 2]], type);
+                const pbp = projectPoint([verts[b], verts[b + 1], verts[b + 2]], type);
+                const pc = projectPoint([verts[c], verts[c + 1], verts[c + 2]], type);
+                const ax = (pa[0] - cu) * scale + w / 2;
+                const ay = h / 2 - (pa[1] - cv) * scale;
+                const bx = (pbp[0] - cu) * scale + w / 2;
+                const by = h / 2 - (pbp[1] - cv) * scale;
+                const cx = (pc[0] - cu) * scale + w / 2;
+                const cy = h / 2 - (pc[1] - cv) * scale;
+                ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+                ctx.lineTo(cx, cy); ctx.lineTo(ax, ay);
+            }
+        });
+        ctx.stroke();
+    }
+
+    function startFallback(reason) {
+        const b = computeBounds();
+        if (!b) {
+            showLoaderError("无可用几何数据");
+            return;
+        }
+        if (reason) {
+            showLoaderError(reason);
+        }
+        const dims = document.getElementById('dims');
+        if (dims) {
+            dims.textContent = `L:${(b.maxX - b.minX).toFixed(2)}m W:${(b.maxY - b.minY).toFixed(2)}m H:${(b.maxZ - b.minZ).toFixed(2)}m`;
+        }
+        renderFallbackView(document.getElementById("cv_top"), "top");
+        renderFallbackView(document.getElementById("cv_side"), "side");
+        renderFallbackView(document.getElementById("cv_front"), "front");
+        renderFallbackView(document.getElementById("cv_iso"), "iso");
+        hideLoader();
+        window.addEventListener("resize", () => {
+            renderFallbackView(document.getElementById("cv_top"), "top");
+            renderFallbackView(document.getElementById("cv_side"), "side");
+            renderFallbackView(document.getElementById("cv_front"), "front");
+            renderFallbackView(document.getElementById("cv_iso"), "iso");
+        });
+    }
+
     if (!window.THREE) {
-        showLoaderError('Three.js 未加载（可能网络受限或被拦截）');
+        startFallback('Three.js 未加载（可能网络受限或被拦截）');
         return;
     }
     if (!window.THREE.OrbitControls) {
@@ -820,13 +998,10 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
         };
     }
 
-    // Data injected from Python
-    const parts = PARAMS_PLACEHOLDER;
-
     // State
     const state = {
         displayMode: "solid",
-        showGrid: true
+        showGrid: config.grid_enabled !== false
     };
 
     // Scene Setup
@@ -834,8 +1009,8 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
         ortho: new THREE.Scene(),
         iso: new THREE.Scene()
     };
-    scenes.ortho.background = new THREE.Color(0x151515);
-    scenes.iso.background = new THREE.Color(0x202025);
+    scenes.ortho.background = null;
+    scenes.iso.background = null;
 
     // Lights
     function setupLights(scene) {
@@ -931,6 +1106,7 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
 
     // Cameras & Renderers
     const viewRadius = Math.max(size.x, size.y, size.z, 1.0) * 0.9;
+    const baseZoom = Math.max(0.2, Number(config.default_zoom || 1.0));
 
     const views = [
         { id: 'cv_top',   type: 'ortho', axis: 'z', up: [0,1,0], pos: [0,0,viewRadius*2.2] },
@@ -943,13 +1119,14 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
 
     views.forEach(v => {
         const cv = document.getElementById(v.id);
-        const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+        const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0x000000, 0);
 
         let camera;
         if (v.type === 'ortho') {
             camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10000);
-            camera.zoom = 1;
+            camera.zoom = baseZoom;
         } else {
             camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
         }
@@ -1043,10 +1220,12 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
     document.getElementById('btn-mode-wire').onclick = () => setDisplayMode("wire");
 
     // Grid Toggle
+    helpers.visible = state.showGrid;
+    document.getElementById('btn-grid').classList.toggle('active', state.showGrid);
     function toggleGrid() {
         state.showGrid = !state.showGrid;
         helpers.visible = state.showGrid;
-        document.getElementById('btn-grid').classList.toggle('active', !state.showGrid); // Invert logic visually if needed, but here active means ON
+        document.getElementById('btn-grid').classList.toggle('active', state.showGrid);
     }
     document.getElementById('btn-grid').onclick = toggleGrid;
 
@@ -1057,7 +1236,7 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
             item.controls.reset();
             item.camera.position.set(...v.pos);
             item.camera.lookAt(0,0,0);
-            if(item.camera.isOrthographicCamera) item.camera.zoom = 1;
+            if(item.camera.isOrthographicCamera) item.camera.zoom = baseZoom;
             item.camera.updateProjectionMatrix();
         });
         handleResize(); // re-fit
@@ -1077,7 +1256,26 @@ def generate_three_view_html(geometry: dict, output_path: str, resource_config: 
 </html>"""
 
     html = html_template.replace("PARAMS_PLACEHOLDER", parts_json)
+    html = html.replace("CONFIG_PLACEHOLDER", config_json)
+    html = html.replace("SKY_PLACEHOLDER", config["sky"])
     html = html.replace("LOADER_PLACEHOLDER", _three_js_loader_script(rc, include_orbit=True))
+    return html
+
+
+def render_three_view_html_from_geometry(
+    geometry: dict, resource_config: dict | None = None, web_config: dict | None = None
+) -> str:
+    rc = resource_config if isinstance(resource_config, dict) else None
+    if rc is None and isinstance(geometry.get("resources"), dict):
+        rc = geometry.get("resources")
+    mesh_parts = build_mesh_parts_from_geometry(geometry)
+    return render_three_view_html_from_parts(mesh_parts, rc, web_config)
+
+
+def generate_three_view_html(
+    geometry: dict, output_path: str, resource_config: dict | None = None, web_config: dict | None = None
+):
+    html = render_three_view_html_from_geometry(geometry, resource_config, web_config)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -1404,13 +1602,14 @@ def render_geometry_viewer_html(
   <title>{title}</title>
   <style>
     html,body{{height:100%;margin:0;}}
-    #views{{position:fixed;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:#222;}}
-    .view{{position:relative;background:#111;overflow:hidden;}}
-    .label{{position:absolute;left:10px;top:10px;color:#ddd;font:12px/1.2 system-ui,Segoe UI,Roboto,Helvetica,Arial;background:rgba(0,0,0,0.5);padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);z-index:2;}}
-    canvas{{display:block;width:100%;height:100%;}}
-    #hud{{position:fixed;left:12px;top:12px;color:#eee;font:12px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:520px;}}
-    #hud .box{{background:rgba(0,0,0,0.55);padding:10px 12px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;}}
-    #hud code{{background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:6px;}}
+    body{{background:linear-gradient(180deg,#7cc6ff 0%,#cbe9ff 45%,#f6fbff 100%);}}
+    #views{{position:fixed;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:rgba(255,255,255,0.2);}}
+    .view{{position:relative;background:rgba(255,255,255,0.08);overflow:hidden;}}
+    .label{{position:absolute;left:10px;top:10px;color:#eaf4ff;font:12px/1.2 system-ui,Segoe UI,Roboto,Helvetica,Arial;background:rgba(10,24,40,0.55);padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);z-index:2;backdrop-filter:blur(6px);}}
+    canvas{{display:block;width:100%;height:100%;outline:none;}}
+    #hud{{position:fixed;left:12px;top:12px;color:#eaf4ff;font:12px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:520px;}}
+    #hud .box{{background:rgba(7,20,38,0.55);padding:10px 12px;border:1px solid rgba(255,255,255,0.18);border-radius:12px;backdrop-filter:blur(10px);}}
+    #hud code{{background:rgba(255,255,255,0.18);padding:2px 6px;border-radius:6px;}}
     #status{{margin-top:6px;opacity:0.9;}}
   </style>
 </head>
@@ -1482,7 +1681,7 @@ def render_geometry_viewer_html(
 
     function startThree() {{
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x111111);
+      scene.background = null;
 
       const ambient = new THREE.AmbientLight(0xffffff, 0.6);
       scene.add(ambient);
@@ -1538,14 +1737,14 @@ def render_geometry_viewer_html(
         iso: document.getElementById('cv_iso')
       }};
       const renderers = {{
-        top: new THREE.WebGLRenderer({{canvas: canvases.top, antialias:true}}),
-        side: new THREE.WebGLRenderer({{canvas: canvases.side, antialias:true}}),
-        front: new THREE.WebGLRenderer({{canvas: canvases.front, antialias:true}}),
-        iso: new THREE.WebGLRenderer({{canvas: canvases.iso, antialias:true}})
+        top: new THREE.WebGLRenderer({{canvas: canvases.top, antialias:true, alpha:true}}),
+        side: new THREE.WebGLRenderer({{canvas: canvases.side, antialias:true, alpha:true}}),
+        front: new THREE.WebGLRenderer({{canvas: canvases.front, antialias:true, alpha:true}}),
+        iso: new THREE.WebGLRenderer({{canvas: canvases.iso, antialias:true, alpha:true}})
       }};
       for (const k of Object.keys(renderers)) {{
         renderers[k].setPixelRatio(window.devicePixelRatio || 1);
-        renderers[k].setClearColor(0x111111, 1.0);
+        renderers[k].setClearColor(0x000000, 0);
       }}
 
       const dist = radius * 3.0;

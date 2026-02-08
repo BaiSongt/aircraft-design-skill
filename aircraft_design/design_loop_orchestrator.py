@@ -263,36 +263,78 @@ def sizing_loop(
             if viz:
                 error = abs(mtow - guess.mtow_kg) / guess.mtow_kg if i == 0 else abs(mtow - mtow_old) / mtow_old
 
-                # Construct Parametric Geometry
-                p_geo = ParametricGeometry(
-                    wing=DetailedWing(
-                        area=s_wing,
-                        span=b_wing,
-                        aspect_ratio=guess.aspect_ratio,
-                        taper_ratio=guess.taper_ratio,
-                        sweep_qc=guess.sweep_deg,
-                        thickness_to_chord_root=guess.thickness_ratio,
-                        dihedral=3.0,
-                        incidence=1.0,
-                    ),
-                    fuselage=DetailedFuselage(
-                        length=l_fus,
-                        diameter=l_fus * 0.11,
-                    ),
-                    tail=DetailedTail(
-                        ht_area=tail_geo["s_ht_m2"],
-                        vt_area=tail_geo["s_vt_m2"],
-                        ht_aspect_ratio=4.0,
-                        vt_aspect_ratio=1.5,
-                        ht_sweep=25.0,
-                        vt_sweep=35.0,
-                    ),
-                )
+                if i == 0:
+                    p_geo = ParametricGeometry(
+                        wing=DetailedWing(
+                            area=s_wing,
+                            span=b_wing,
+                            aspect_ratio=guess.aspect_ratio,
+                            taper_ratio=guess.taper_ratio,
+                            sweep_qc=guess.sweep_deg,
+                            thickness_to_chord_root=guess.thickness_ratio,
+                            dihedral=2.0,
+                            incidence=0.5,
+                        ),
+                        fuselage=DetailedFuselage(
+                            length=l_fus,
+                            diameter=l_fus * 0.11,
+                        ),
+                        tail=DetailedTail(
+                            ht_area=tail_geo["s_ht_m2"],
+                            vt_area=tail_geo["s_vt_m2"],
+                            ht_aspect_ratio=4.0,
+                            vt_aspect_ratio=1.5,
+                            ht_sweep=20.0,
+                            vt_sweep=30.0,
+                        ),
+                    )
+                else:
+                    p_geo = ParametricGeometry(
+                        wing=DetailedWing(
+                            area=s_wing,
+                            span=b_wing,
+                            aspect_ratio=guess.aspect_ratio,
+                            taper_ratio=guess.taper_ratio,
+                            sweep_qc=guess.sweep_deg,
+                            thickness_to_chord_root=guess.thickness_ratio,
+                            dihedral=3.0,
+                            incidence=1.0,
+                            twist=0.5,
+                            x_le_root=0.0,
+                            y_root=0.0,
+                            z_root=0.0,
+                        ),
+                        fuselage=DetailedFuselage(
+                            length=l_fus,
+                            diameter=l_fus * 0.11,
+                            control_points=[
+                                {"x_rel": 0.0, "radius_rel": 0.05},
+                                {"x_rel": 0.12, "radius_rel": 0.95},
+                                {"x_rel": 0.50, "radius_rel": 1.00},
+                                {"x_rel": 0.82, "radius_rel": 0.60},
+                                {"x_rel": 1.00, "radius_rel": 0.04},
+                            ],
+                        ),
+                        tail=DetailedTail(
+                            ht_area=tail_geo["s_ht_m2"],
+                            vt_area=tail_geo["s_vt_m2"],
+                            ht_aspect_ratio=4.0,
+                            vt_aspect_ratio=1.6,
+                            ht_taper=0.5,
+                            ht_sweep=25.0,
+                            vt_taper=0.6,
+                            vt_sweep=35.0,
+                        ),
+                    )
 
                 # We need l_fus defined before geometry construction or use the same logic
                 # The original code defined l_fus at line 281. I should move l_fus calc up.
 
-                viz.update_iteration(i, mtow, error, geometry=p_geo.generate_mesh())
+                try:
+                    geom_mesh = p_geo.generate_mesh()
+                except Exception:
+                    geom_mesh = {}
+                viz.update_iteration(i, mtow, error, geometry=geom_mesh)
                 # Slow down slightly for demo effect if needed
                 # time.sleep(0.05)
 
