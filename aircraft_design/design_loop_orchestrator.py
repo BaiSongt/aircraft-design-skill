@@ -39,6 +39,7 @@ from .atmosphere import isa_tropopause
 from .units import CONST
 from .visualization_realtime import RealTimeVisualizer
 from .geometry_detailed import ParametricGeometry, DetailedWing, DetailedFuselage, DetailedTail
+from .geometry_shape import geometry_shape_from_inputs
 
 
 @dataclass
@@ -334,7 +335,73 @@ def sizing_loop(
                     geom_mesh = p_geo.generate_mesh()
                 except Exception:
                     geom_mesh = {}
-                viz.update_iteration(i, mtow, error, geometry=geom_mesh)
+                use_geom = geom_mesh
+                if not isinstance(use_geom, dict) or not use_geom:
+                    # Build minimal geometry_shape inputs to ensure Web3D can render fuselage/wing/tail
+                    gs_inputs = {
+                        "project_name": "Class I Fallback Geometry",
+                        "geometry_shape": {
+                            "layout": {"views": ["top", "side", "front", "iso"]},
+                            "resolution": {"fuselage_n_stations": 25, "airfoil_n_points": 161},
+                            "fuselage": {
+                                "axis": {"length_m": float(l_fus)},
+                                "profile": {
+                                    "mode": "parametric",
+                                    "max_radius_m": float(l_fus * 0.055),
+                                    "nose_fineness_ratio": 2.0,
+                                    "tail_fineness_ratio": 3.0,
+                                    "nose_shape": "ellipsoid",
+                                    "tail_shape": "conical",
+                                },
+                            },
+                            "wing": {
+                                "planform": {
+                                    "s_ref_m2": float(s_wing),
+                                    "aspect_ratio": float(guess.aspect_ratio),
+                                    "taper_ratio": float(guess.taper_ratio),
+                                    "sweep_quarter_chord_deg": float(guess.sweep_deg),
+                                    "x_offset_m": float(l_fus * 0.40),
+                                    "dihedral_deg": 3.0,
+                                },
+                                "sections": {
+                                    "root_airfoil": {"type": "naca4", "code": "2412"},
+                                    "tip_airfoil": {"type": "naca4", "code": "0010"},
+                                },
+                            },
+                            "tail": {
+                                "layout": {"type": "conventional"},
+                                "horizontal": {
+                                    "planform": {
+                                        "s_ref_m2": float(tail_geo["s_ht_m2"]),
+                                        "aspect_ratio": 4.0,
+                                        "taper_ratio": 0.5,
+                                        "sweep_quarter_chord_deg": 20.0,
+                                        "x_offset_m": float(l_fus * 0.90),
+                                        "z_offset_m": 0.5,
+                                    }
+                                },
+                                "vertical": {
+                                    "planform": {
+                                        "s_ref_m2": float(tail_geo["s_vt_m2"]),
+                                        "aspect_ratio": 1.6,
+                                        "taper_ratio": 0.6,
+                                        "sweep_quarter_chord_deg": 30.0,
+                                        "x_offset_m": float(l_fus * 0.85),
+                                        "z_offset_m": 0.0,
+                                    }
+                                },
+                            },
+                        },
+                    }
+                    try:
+                        derived = geometry_shape_from_inputs(gs_inputs)
+                        if isinstance(derived, dict) and derived:
+                            use_geom = derived
+                        else:
+                            use_geom = {}
+                    except Exception:
+                        use_geom = {}
+                viz.update_iteration(i, mtow, error, geometry=use_geom)
                 # Slow down slightly for demo effect if needed
                 # time.sleep(0.05)
 

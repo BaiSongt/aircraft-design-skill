@@ -214,6 +214,8 @@ class MainWindow(QMainWindow):
 
         self.status_label = QLabel("Ready")
         self.statusBar().addWidget(self.status_label)
+        if not self.web_view.is_available():
+            self.status_label.setText("Qt WebEngine 未安装，Web 3D 视图不可用")
 
         # Data State
         self.history = []

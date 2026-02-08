@@ -1,25 +1,24 @@
 {
   "requirements": {
-    "range_m": 2000000.0,
+    "range_m": 500000.0,
     "payload_kg": 1000.0,
-    "cruise_mach": 0.8,
-    "cruise_altitude_m": 11000.0,
-    "takeoff_distance_m": 1000.0,
-    "landing_distance_m": 1000.0,
-    "max_load_factor": 7.33,
-    "sustained_turn_g": 2.0,
-    "service_ceiling_m": 15000.0
+    "cruise_mach": 0.25,
+    "cruise_altitude_m": 2000.0,
+    "takeoff_distance_m": 800.0,
+    "landing_distance_m": 800.0,
+    "max_load_factor": 3.5,
+    "sustained_turn_g": 1.5,
+    "service_ceiling_m": 2000.0
   },
   "initial_guess": {
-    "mtow_kg": 10000.0,
-    "thrust_to_weight": 0.6,
-    "wing_loading_pa": 3000.0,
-    "aspect_ratio": 3.5,
-    "sweep_deg": 45.0,
-    "taper_ratio": 0.3,
-    "thickness_ratio": 0.08,
+    "thrust_to_weight": 0.35,
+    "wing_loading_pa": 2500.0,
+    "aspect_ratio": 8.0,
+    "sweep_deg": 0.0,
+    "taper_ratio": 0.6,
+    "thickness_ratio": 0.15,
     "sfc_cruise_1_s": 0.000222,
-    "cd0": 0.02,
-    "oswald_e": 0.8
+    "cd0": 0.025,
+    "oswald_e": 0.85
   }
 }
