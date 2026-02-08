@@ -264,7 +264,11 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             l_char_tail_m=geom_temp.cbar_m, # approximation
         )
         cd0 = float(cd0_in) if isinstance(cd0_in, (int, float)) else float(bu.cd0)
-        aero_buildup_out = {"cd0_buildup": bu.cd0, "breakdown": bu.breakdown}
+        aero_buildup_out = {
+            "cd0_buildup": bu.cd0,
+            "breakdown": bu.breakdown,
+            "wave_drag_cd": bu.wave_drag_cd
+        }
     else:
         if not isinstance(cd0_in, (int, float)):
             raise KeyError("Missing required input key: cd0")
@@ -290,6 +294,9 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
     w0_iter = max(1.0, w0_guess_kg)
     empty_additional_kg = 0.0
     for _ in range(25):
+        if w0_iter > 1e7 or w0_iter != w0_iter:  # Check for NaN (w0_iter != w0_iter)
+            break
+            
         geom_temp = wing_geometry_from_loading(
             w0_kg=w0_iter, wing_loading_pa=wing_loading_pa, aspect_ratio=aspect_ratio
         )
@@ -308,7 +315,11 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             )
             cd0 = float(_get_optional(aero_in, "cd0", bu.cd0))
             polar = AeroPolar(cd0=cd0, e=e, ar=aspect_ratio)
-            aero_buildup_out = {"cd0_buildup": bu.cd0, "breakdown": bu.breakdown}
+            aero_buildup_out = {
+                "cd0_buildup": bu.cd0,
+                "breakdown": bu.breakdown,
+                "wave_drag_cd": bu.wave_drag_cd
+            }
 
         w_cruise_kg = 0.97 * w0_iter
         q = 0.5 * cruise_atm.rho_kg_m3 * cruise_speed_m_s * cruise_speed_m_s
@@ -316,10 +327,17 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         cd = polar.cd(cl)
         ld = cl / cd
 
+        # DEBUG: Print iteration status
+        # aero_buildup_out is a dict, breakdown is a list of components
+        cd_wave = aero_buildup_out.get("wave_drag_cd", 0.0)
+        print(f"[DEBUG] Iter: W0={w0_iter:.2e}, S={geom_temp.s_m2:.2e}, CL={cl:.4f}, CD={cd:.4f}, L/D={ld:.4f}")
+        print(f"[DEBUG] CD Breakdown: CD0={cd0:.4f}, Wave={cd_wave:.4f}")
+
         propulsion_model_temp = build_propulsion_model(
             propulsion_in, mtow_kg=w0_iter, thrust_to_weight=thrust_to_weight
         )
-        mission_breakdown_temp = mission_fuel_breakdown(
+        # 5. Mission Fuel
+        mission_fuel = mission_fuel_breakdown(
             w0_kg=w0_iter,
             s_m2=geom_temp.s_m2,
             polar=polar,
@@ -327,7 +345,9 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             mission=mission,
             isa_delta_c=isa_delta_c,
         )
-        fuel_frac = float(mission_breakdown_temp["fuel_fraction_total"])
+        print(f"[DEBUG] Mission Fuel: Total={mission_fuel['fuel_fraction_total']:.4f}")
+        
+        fuel_frac = float(mission_fuel["fuel_fraction_total"])
 
         empty_additional_kg = 0.0
         if enable_struct_feedback:
@@ -347,8 +367,12 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             w0_guess_kg=w0_iter,
         )
         w0_next = float(mtow["w0_kg"])
+        if w0_next > 1e8:
+             w0_next = 1e8 # Clamp to prevent overflow
+             
         rel = abs(w0_next - w0_iter) / max(1e-9, w0_next)
-        w0_iter = w0_next
+        # Relaxation to prevent oscillation
+        w0_iter = 0.6 * w0_iter + 0.4 * w0_next
         if rel < 1e-4:
             break
 
@@ -947,4 +971,10 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
         "uncertainty": uncertainty_out,
         "geometry_detailed": geometry_detailed,
         "geometry_shape": geometry_shape,
+        "geometry": {
+            "s_m2": geom.s_m2,
+            "b_m": geom.b_m,
+            "cbar_m": geom.cbar_m,
+            "ar": geom.ar,
+        },
     }

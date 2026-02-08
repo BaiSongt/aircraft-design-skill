@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass
 
 from .atmosphere import isa_tropopause
@@ -22,6 +23,8 @@ class PropulsionModel:
     bypass_ratio: float = 0.3
     mil_to_ab_sfc_ratio: float = 2.5  # Ratio of AB SFC to Mil SFC (SL)
     tsfc_ab_1_s: float | None = None  # Explicit AB SFC if provided
+    thrust_map: dict | None = None  # { "mach": [...], "altitude": [...], "thrust": [[...]] }
+    sfc_map: dict | None = None  # { "mach": [...], "altitude": [...], "sfc": [[...]] }
 
 
 def build_propulsion_model(
@@ -52,9 +55,12 @@ def build_propulsion_model(
 
     sfc_1_s = propulsion_in.get("sfc_1_s", None)
     eta_prop = propulsion_in.get("prop_efficiency", None)
+    
+    thrust_map = propulsion_in.get("thrust_map", None)
+    sfc_map = propulsion_in.get("sfc_map", None)
 
     # Defaults for robustness
-    if ptype == "jet" and tsfc_1_s is None:
+    if ptype == "jet" and tsfc_1_s is None and sfc_map is None:
         tsfc_1_s = 2.26e-5  # Approx 0.8 lb/lbf/hr
 
     if ptype == "prop":
@@ -78,6 +84,8 @@ def build_propulsion_model(
         bypass_ratio=bypass_ratio,
         mil_to_ab_sfc_ratio=mil_to_ab_sfc_ratio,
         tsfc_ab_1_s=tsfc_ab_1_s,
+        thrust_map=thrust_map,
+        sfc_map=sfc_map,
     )
 
 
@@ -114,6 +122,135 @@ def _calculate_mattingly_thrust_factor(
     return max(0.0, alpha)
 
 
+def _calculate_turbo_ramjet_thrust_factor(
+    mach: float,
+    theta: float,
+    delta: float,
+    afterburner: bool = True
+) -> float:
+    """
+    Simulated High-Speed Turbojet / Turbo-Ramjet (J58 class).
+    Thrust increases with Mach up to M=3.2 due to ram recovery.
+    """
+    # Base lapse (Standard Jet)
+    # Standard jet drops as sigma^0.7 approx.
+    # But Ram recovery P2/P1 ~ (1 + 0.2 M^2)^3.5
+    # For a J58, Thrust at M=3.0 is approx equal to Thrust SL Static (or higher).
+    
+    # Empirical fit for "High Mach Turbojet":
+    # 0 < M < 1: Standard drop
+    # 1 < M < 3: Recovery gain
+    # M > 3.5: Drop due to thermal limits
+    
+    # Let's model it as:
+    # Alpha = (delta / theta) * (1 + 0.5 * M^2)  <-- Rough Ram effect
+    # But limited by engine structural limits.
+    
+    # Simplified Curve for Design Skill:
+    # 1. Start with SL Thrust (1.0)
+    # 2. At Altitude, density drops.
+    # 3. But Velocity increases momentum flux.
+    # 4. Ram pressure increases mass flow density.
+    
+    # Let's use a piecewise linear factor on top of the standard lapse?
+    # No, standard lapse is too punishing for M=3.
+    
+    # Use a direct correlation for "High Speed Jet" alpha (T/Tsl):
+    # Based on SR-71 performance charts (approx):
+    # 30k ft, M=0.9: Thrust ~ 0.4 Tsl
+    # 80k ft, M=3.2: Thrust ~ 0.2 Tsl ??
+    # Wait, Drag at M=3.2 is high.
+    # Actually, J58 T_sl = 34k. Cruise Thrust ~ 7k per engine? (L/D=6, W=100k -> D=16k. 8k/eng).
+    # So T_cruise / T_sl = 8/34 = 0.23.
+    # But this is at 80k ft! Sigma at 80k is ~0.03.
+    # So Thrust/Sigma ~ 0.23 / 0.03 = 7.6 !!
+    # Normal jet T/Sigma ~ 1.0.
+    # So Mach effect provides a 7x multiplier at M=3.2.
+    
+    # Formula:
+    # T_avail = T_sl * sigma * (1 + C * M^2)
+    # If C = 0.6, at M=3.2 -> 1 + 0.6*10 = 7.
+    # This matches nicely!
+    
+    mach_factor = 1.0 + 0.7 * (mach ** 2.0)
+    
+    # Altitude lapse
+    # Sigma (density ratio)
+    # For Turbo-Ramjet, it's roughly proportional to ambient pressure (delta) or density (sigma).
+    # Let's use Delta (pressure ratio) for Ramjets usually.
+    # But let's stick to sigma for consistency with other models unless specialized.
+    # Mattingly uses (delta / theta^0.8)^0.7
+    
+    # Let's use:
+    # Alpha = (delta / theta) * mach_factor
+    # This mimics constant corrected thrust?
+    
+    # Let's just use the sigma * mach_factor model which is robust and tunable.
+    return 0.0 # Not used directly, integrated in main func
+    
+
+def _interpolate_map(map_data: dict, mach: float, altitude_m: float) -> float:
+    """
+    Bilinear interpolation for map data.
+    Expected map format:
+    {
+        "mach_points": [m0, m1, ...],  # Sorted ascending
+        "altitude_points_m": [h0, h1, ...], # Sorted ascending
+        "values": [[v_m0_h0, v_m0_h1...], [v_m1_h0...]] # Shape (n_mach, n_alt)
+    }
+    """
+    m_points = map_data.get("mach_points", [])
+    h_points = map_data.get("altitude_points_m", [])
+    values = map_data.get("values", [])
+    
+    if not m_points or not h_points or not values:
+        return 0.0
+
+    # Clamp inputs
+    m = max(m_points[0], min(m_points[-1], mach))
+    h = max(h_points[0], min(h_points[-1], altitude_m))
+    
+    # Find indices
+    i = bisect.bisect_right(m_points, m) - 1
+    j = bisect.bisect_right(h_points, h) - 1
+    
+    # Handle edges/clamping logic of bisect
+    if i < 0: i = 0
+    if j < 0: j = 0
+    if i >= len(m_points) - 1: i = len(m_points) - 2
+    if j >= len(h_points) - 1: j = len(h_points) - 2
+    
+    # Interpolate
+    m0, m1 = m_points[i], m_points[i+1]
+    h0, h1 = h_points[j], h_points[j+1]
+    
+    # Normalize coords (0..1)
+    tm = (m - m0) / (m1 - m0) if m1 > m0 else 0.0
+    th = (h - h0) / (h1 - h0) if h1 > h0 else 0.0
+    
+    # Bilinear
+    # values[i] is row for m_points[i]
+    # values[i][j] is value at m_points[i], h_points[j]
+    
+    try:
+        v00 = values[i][j]
+        v01 = values[i][j+1]
+        v10 = values[i+1][j]
+        v11 = values[i+1][j+1]
+    except IndexError:
+        # Fallback if map is malformed
+        return values[0][0] if values and values[0] else 0.0
+    
+    # Interpolate in Mach first (along columns)
+    v0 = v00 * (1 - tm) + v10 * tm
+    v1 = v01 * (1 - tm) + v11 * tm
+    
+    # Interpolate in Alt
+    val = v0 * (1 - th) + v1 * th
+    
+    return val
+
+
 def thrust_available_n(
     model: PropulsionModel, *, altitude_m: float, speed_m_s: float, isa_delta_c: float = 0.0, rating: str = "mto"
 ) -> float:
@@ -126,49 +263,46 @@ def thrust_available_n(
         r_factor = model.mct_to_mto_ratio
 
     if model.type == "jet":
-        if model.thrust_sl_n is None:
-            raise ValueError("Jet model requires thrust_sl_n.")
         mach = speed_m_s / atm.a_m_s
 
+        if model.thrust_map:
+             t_avail = _interpolate_map(model.thrust_map, mach, altitude_m)
+             return t_avail * r_factor
+
+        if model.thrust_sl_n is None:
+            raise ValueError("Jet model requires thrust_sl_n.")
+        
         if model.jet_model_method == "mattingly_low_bypass":
-            # Use Mattingly model
+            # ... (existing mattingly code)
             theta = atm.t_k / 288.15
             delta = atm.p_pa / 101325.0
-
-            # Assuming MTO is afterburner if rating is mto? Or just Mil?
-            # Usually MTO for fighters implies AB.
-            # But let's assume MTO = Max Power.
-            # If r_factor < 1.0 (cruise/mct), we use Mil curve scaled?
-            # The doc distinguishes "Afterburner" and "Mil" (non-afterburning max).
-
-            # Logic: If rating="mto" and we assume AB capability -> AB curve.
-            # If rating="mct" -> Mil curve.
-            # Since we don't have an explicit AB flag in model, let's assume:
-            # If r_factor == 1.0 -> AB (if applicable) or Mil (if no AB).
-            # But the formula gives distinct curves.
-            # Let's use Mil curve as baseline for non-AB engines or cruise.
-            # Let's assume "mto" uses AB curve if the user selected "mattingly_low_bypass" which implies a fighter engine.
-
             use_ab = rating == "mto"
             alpha = _calculate_mattingly_thrust_factor(mach, theta, delta, afterburner=use_ab)
-
-            # If rating is cruise (r_factor < 1), we apply r_factor to the calculated alpha?
-            # Or should we use Mil curve for cruise?
-            # Mil curve is "Maximum Non-Augmented".
-            # Cruise is usually part of Mil.
-            # So: if use_ab is False (rating != mto), we calculate Mil alpha.
-            # Then apply r_factor (e.g. 0.85 for MCT).
-
-            # Refined logic:
-            # If rating == "mto": use AB curve.
-            # If rating != "mto": use Mil curve * r_factor.
-
             if not use_ab:
-                # Recalculate alpha for Mil
+                # Recalculate alpha for Mil (approx)
                 alpha = _calculate_mattingly_thrust_factor(mach, theta, delta, afterburner=False)
                 alpha *= r_factor
-
             return model.thrust_sl_n * alpha
+            
+        elif model.jet_model_method == "turbo_ramjet":
+            # High speed model (T ~ Sigma * (1 + 0.7 M^2))
+            # Matches SR-71 behavior roughly.
+            # T_avail = T_sl * (P/P0) * (1 + 0.6 M^2)
+            # Using Sigma approx P/P0 at isothermal stratosphere
+            
+            mach_factor = 1.0 + 0.6 * (mach ** 2.0)
+            
+            # For Ramjets, Thrust is zero at M=0? 
+            # No, this is a Turbo-Ramjet (J58), so it has static thrust.
+            
+            # Cutoff or limit?
+            # J58 inlet recovery drops after M=3.2.
+            # Let's add a rolloff > M=3.5
+            if mach > 3.5:
+                mach_factor *= max(0.0, 1.0 - (mach - 3.5))
+            
+            thrust = model.thrust_sl_n * sigma * mach_factor * r_factor
+            return thrust
 
         else:
             # Simple model

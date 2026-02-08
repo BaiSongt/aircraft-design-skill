@@ -104,43 +104,111 @@ class DragBuildUpResult:
     reynolds_number_fuselage: float = 0.0
     reynolds_number_wing: float = 0.0
     skin_friction_wing: float = 0.0
+    wave_drag_cd: float = 0.0
 
 
 def calculate_cf_turbulent(re: float, mach: float) -> float:
     """
-    Calculate turbulent skin friction coefficient for a flat plate.
-    Using Prandtl-Schlichting formula with compressibility correction.
+    Turbulent flat plate skin friction coefficient (Prandtl-Schlichting).
+    Adjusted for compressibility (Raymer Eq 12.27).
     """
-    if re <= 0:
+    if re <= 100.0: # Avoid log(0) or negative
         return 0.0
     
-    # Prandtl-Schlichting
-    cf_incomp = 0.455 / (log10(re) ** 2.58)
+    # Incompressible Cf
+    cf_inc = 0.455 / (log10(re) ** 2.58)
     
-    # Compressibility correction (approximate)
-    factor = pow(1.0 + 0.144 * mach * mach, 0.65)
+    # Compressibility Correction
+    if mach < 0.1:
+        return cf_inc
+    else:
+        # General approx for subsonic/supersonic
+        # Raymer Eq 12.27 for turbulent
+        return cf_inc / ((1.0 + 0.144 * mach * mach) ** 0.65)
+
+
+def calculate_form_factor_fuselage(f_ratio: float) -> float:
+    """
+    Fuselage Form Factor (Raymer Eq 12.31)
+    f = L/D
+    FF = 1 + 60/f^3 + f/400
+    """
+    if f_ratio <= 0:
+        return 1.0
+    return 1.0 + 60.0 / (f_ratio ** 3) + f_ratio / 400.0
+
+
+def calculate_form_factor_wing(t_c: float, sweep_rad: float) -> float:
+    """
+    Wing/Tail Form Factor (Raymer Eq 12.30 simplified)
+    FF = 1 + 1.2(t/c) + 100(t/c)^4
+    Assuming sweep is accounted for in t/c or negligible for FF base.
+    """
+    return 1.0 + 1.2 * t_c + 100.0 * (t_c ** 4)
+
+
+def calculate_wave_drag(
+    mach: float,
+    fuselage_length_m: float,
+    fuselage_diameter_m: float,
+    s_ref_m2: float,
+    wing_volume_m3: float = 0.0,
+    efficiency_factor: float = 1.4
+) -> float:
+    """
+    Estimates Supersonic Wave Drag using Sears-Haack approximation.
+    (D/q)_wave = Ew * [128 * V_tot^2 / (pi * L^4)]
     
-    return cf_incomp / factor
-
-
-def calculate_form_factor_fuselage(l_d_ratio: float) -> float:
+    Args:
+        mach: Mach number
+        fuselage_length_m: Effective length of the body
+        fuselage_diameter_m: Max diameter (for volume est)
+        s_ref_m2: Reference area to normalize CD
+        wing_volume_m3: Additional volume from wing
+        efficiency_factor: Ew (1.0 = perfect Sears-Haack, 1.4 = typical clean supersonic)
+        
+    Returns:
+        CD_wave
     """
-    Raymer Eq 12.31 for fuselage form factor.
-    FF = 1 + 60/(f^3) + f/400  where f = L/d
-    """
-    f = l_d_ratio
-    return 1.0 + 60.0 / (f * f * f) + f / 400.0
-
-
-def calculate_form_factor_wing(t_c: float, sweep_max_t_rad: float, lift_coeff: float = 0.0) -> float:
-    """
-    Raymer Eq 12.30 for wing/tail form factor.
-    FF = [1 + L(t/c) + 100(t/c)^4] * R_LS
-    """
-    # Simple version for thickness only
-    # Assuming sweep of max thickness line.
-    cos_sweep = cos(sweep_max_t_rad)
-    return 1.0 + 1.2 * t_c / cos_sweep + 100.0 * pow(t_c / cos_sweep, 4)
+    if mach < 1.0:
+        return 0.0
+        
+    # Estimate Fuselage Volume (assume approximation of a sears-haack or cylinder with taper)
+    # V_fus = integral(A(x)dx). For a 3/4 power body or similar:
+    # Approx as 0.7 * Cylinder
+    vol_fus = 0.7 * pi * pow(fuselage_diameter_m / 2.0, 2) * fuselage_length_m
+    
+    vol_tot = vol_fus + wing_volume_m3
+    
+    # Sears-Haack D/q
+    # D/q = 128 * V^2 / (pi * L^4)
+    if fuselage_length_m <= 0:
+        return 0.0
+        
+    d_q_wave_ideal = 128.0 * pow(vol_tot, 2) / (pi * pow(fuselage_length_m, 4))
+    
+    d_q_wave = d_q_wave_ideal * efficiency_factor
+    
+    cd_wave = d_q_wave / s_ref_m2
+    
+    # Mach Correction
+    # Sears-Haack formula gives the wave drag at M=1 (sonic) or close to it, 
+    # but linear theory suggests CD_wave scales with 1/beta for M > 1.
+    # We assume the calculated cd_wave is the peak value around M=1.2
+    
+    if mach < 1.0:
+        return 0.0
+    elif mach < 1.2:
+        # Ramp up from M=1.0 to M=1.2
+        factor = (mach - 1.0) / 0.2
+        return cd_wave * factor
+    else:
+        # For higher Mach, CD_wave decays with 1/sqrt(M^2 - 1)
+        # We normalize to M=1.2
+        beta_ref = sqrt(1.2 * 1.2 - 1.0)
+        beta_curr = sqrt(mach * mach - 1.0)
+        factor = beta_ref / beta_curr
+        return cd_wave * factor
 
 
 def calculate_parasite_drag_buildup(
@@ -154,7 +222,7 @@ def calculate_parasite_drag_buildup(
     l_char_tail_m: float,
 ) -> DragBuildUpResult:
     """
-    Calculates CD0 using component buildup method (Raymer).
+    Calculates CD0 using component buildup method (Raymer) + Wave Drag.
     """
     
     atm = isa_tropopause(altitude_m)
@@ -198,6 +266,7 @@ def calculate_parasite_drag_buildup(
     swet_wing = geometry.wing_wetted_area_m2
     if swet_wing is None:
         swet_wing = s_ref_m2 * 2.0 * 1.02 # Exposed * 2 * curvature
+
         
     q_wing = geometry.interference_factor_wing
     
@@ -265,12 +334,26 @@ def calculate_parasite_drag_buildup(
     cd0_misc = cd0_total * 0.10
     breakdown.append(DragComponent("Misc/Leakage", 0.0, 0.0, 0.0, 0.0, 0.0, cd0_misc))
     
+    # Wave Drag
+    wing_vol = s_ref_m2 * geometry.wing_t_c * 0.7
+    cd_wave = calculate_wave_drag(
+        mach=mach,
+        fuselage_length_m=geometry.fuselage_length_m,
+        fuselage_diameter_m=geometry.fuselage_diameter_m,
+        s_ref_m2=s_ref_m2,
+        wing_volume_m3=wing_vol
+    )
+    
+    if cd_wave > 0:
+        breakdown.append(DragComponent("Wave Drag", 0.0, 0.0, 0.0, 1.0, cd_wave * s_ref_m2, cd_wave))
+
     return DragBuildUpResult(
-        cd0=cd0_total + cd0_misc,
+        cd0=cd0_total + cd0_misc + cd_wave,
         breakdown=breakdown,
         reynolds_number_fuselage=re_fus,
         reynolds_number_wing=re_wing,
-        skin_friction_wing=cf_wing
+        skin_friction_wing=cf_wing,
+        wave_drag_cd=cd_wave
     )
 
 # Alias for compatibility if needed, or update caller
