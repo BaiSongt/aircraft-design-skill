@@ -99,6 +99,7 @@ def main():
     parser.add_argument("--project-name", "-n", type=str, default="aircraft_sizing", help="Name of the project")
     parser.add_argument("--output-dir", "-o", type=Path, default=Path("output"), help="Base directory for outputs")
     parser.add_argument("--no-viz", action="store_true", help="Disable real-time visualization")
+    parser.add_argument("--viz-port", type=int, default=9999, help="Port for visualization server")
 
     args = parser.parse_args()
     original_stdout = sys.stdout
@@ -117,10 +118,10 @@ def main():
     viz = None
     if not args.no_viz:
         print("  Initializing Visualization Environment...")
-        viz = RealTimeVisualizer()
+        viz = RealTimeVisualizer(port=args.viz_port)
         if not viz.start(require_server=True):
             print("  > Visualization server is not running.")
-            print("  > Start it first in another terminal: python -m aircraft_design.gui.server")
+            print(f"  > Start it first in another terminal: python -m aircraft_design.gui.server --port {args.viz_port}")
             sys.exit(1)
         print("  > 3D Visualization Server is running.")
         print("  > Real-time updates will be shown in the popup window.")
