@@ -95,6 +95,30 @@ def run_sizing_loop(request: SizingRequest):
 
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    parser = argparse.ArgumentParser(description="Fixed Wing Aircraft Design Skill API")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--gui", action="store_true")
+    parser.add_argument("--gui-only", action="store_true")
+    parser.add_argument("--gui-server-only", action="store_true")
+    parser.add_argument("--gui-host", type=str, default="localhost")
+    parser.add_argument("--gui-port", type=int, default=9999)
+    args = parser.parse_args()
+
+    if args.gui or args.gui_only or args.gui_server_only:
+        from aircraft_design.gui.server import run_server_app
+
+        start_server = not args.gui_only
+        start_gui = not args.gui_server_only
+        run_server_app(
+            host=args.gui_host,
+            port=args.gui_port,
+            start_server=start_server,
+            start_gui=start_gui,
+        )
+    else:
+        print("API server started. GUI window uses: python -m aircraft_design.gui.server")
+        uvicorn.run(app, host=args.host, port=args.port)

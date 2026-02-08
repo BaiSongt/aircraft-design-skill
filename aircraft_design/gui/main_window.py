@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QSplitter,
 )
 from PySide6.QtCore import QTimer, Slot, Qt
+from PySide6.QtGui import QGuiApplication
 import datetime
 import csv
 import queue
@@ -139,6 +140,18 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(500, self.bring_to_front)
 
     def bring_to_front(self):
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            frame = self.frameGeometry()
+            if frame.width() > available.width() or frame.height() > available.height():
+                self.resize(
+                    min(self.width(), max(800, int(available.width() * 0.8))),
+                    min(self.height(), max(600, int(available.height() * 0.8))),
+                )
+                frame = self.frameGeometry()
+            frame.moveCenter(available.center())
+            self.move(frame.topLeft())
         self.setWindowState(self.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
         self.showNormal()
         self.setWindowFlag(Qt.WindowStaysOnTopHint, True)

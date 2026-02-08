@@ -14,6 +14,26 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
 
 ## 执行步骤
 
+### 0. 环境检查与虚拟环境准备
+
+在运行设计流程前，先完成虚拟环境创建与依赖检查，确认无误后再进行后续步骤。
+
+**创建并进入虚拟环境**：
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**安装与检查依赖**：
+
+```bash
+pip install -r requirements.txt
+python -c "import PySide6, pyvista, pyvistaqt, numpy, scipy"
+```
+
+若依赖检查通过，继续后续步骤；如有错误，先修复依赖问题。
+
 ### 1. 准备输入文件 (`sizing_input.json`)
 
 首先，根据用户提供的信息构建 JSON 输入文件。如果用户未提供某些字段，使用以下**轻型战斗机默认值**：
