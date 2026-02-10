@@ -5,35 +5,39 @@ description: "执行固定翼气动阻力分解计算。当需要从几何参数
 
 # 固定翼气动阻力分解执行步骤（Runbook）
 
-## 1. 准备几何数据
-- 检查 `geometry_shape` 是否存在。若仅有 `sizing` 输入，需调用 `fixed_wing_shape_parametric` 生成默认几何。
-- 关键参数检查：`wetted_area` 是否已计算？若为 `null`，需使用简易公式估算（如 Raymer wetted area correlations）。
+## 角色定位（统一入口）
 
-## 2. 确定大气环境
-- 根据 `altitude_m` 计算 `density`, `viscosity`, `speed_of_sound`。
-- 计算 `Re` (Reynolds Number) per unit length。
+- 本技能默认由 `fixed_wing_overall_sizing_runbook` 在“收敛后的阶段 2–7 扩展分析”中自动执行（Stage2 Aero）。
+- 单独调用用于回答两类问题：
+  - “我填的 `initial_guess.cd0` 是否合理？如果不合理，哪一部分在贡献阻力？”
+  - “能否用几何可追溯的 CD0 替代拍脑袋的 CD0？”
 
-## 3. 部件循环计算
-对每个部件 (Fuselage, Wing, HTail, VTail):
-1. **特征长度 ($L$)**: 机身为长度，翼面为 MAC。
-2. **雷诺数 ($Re_L$)**: $Re_L = \frac{\rho V L}{\mu}$。
-3. **摩擦系数 ($C_f$)**:
-   - 湍流: $C_f = \frac{0.455}{(\log_{10} Re_L)^{2.58} (1 + 0.144 M^2)^{0.65}}$
-4. **形状因子 ($FF$)**:
-   - 机身: $FF = 1 + \frac{60}{(L/d)^3} + 0.0025 (L/d)$
-   - 翼面: $FF = 1 + L(t/c) + 100(t/c)^4$ (含后掠修正)
-5. **干扰因子 ($Q$)**:
-   - 机身: 1.0
-   - 机翼: 1.0 (高单翼/低单翼不同)
-   - 尾翼: 1.03-1.05
-6. **部件阻力面积 ($f$)**: $f = C_f \cdot FF \cdot Q \cdot S_{wet}$
+## 计算模型（以代码为准）
 
-## 4. 杂项阻力叠加
-- 泄漏与凸起 (Leaks & Protuberances): 增加 5-10% 的总 $f$。
+- 部件级 buildup：`aircraft_design/aero_drag_buildup.py`
+  - 输出 `cd0` 及 `Fuselage/Wing/Horizontal Tail/Vertical Tail/Misc/Wave Drag` 分解
 
-## 5. 计算 $C_{D0}$
-- $C_{D0} = \frac{\sum f}{S_{ref}}$
+## 输入要点（来自统一输入 JSON）
 
-## 6. 输出与验证
-- 检查 $C_{D0}$ 是否在合理范围 (0.015 - 0.040 for typical jets)。
-- 若异常，检查 $S_{wet}$ 是否过大或 $S_{ref}$ 定义错误。
+- `requirements.cruise_altitude_m`、`requirements.cruise_mach`：巡航工况
+- `initial_guess.thickness_ratio`、`initial_guess.sweep_deg`、`initial_guess.aspect_ratio`、`initial_guess.taper_ratio`
+- 几何（优先级从高到低）：
+  - `geometry_shape` / `geometry_detailed`（最可追溯）
+  - 若未提供，则由总体闭环的几何派生模块给出默认量级
+
+## 执行方式
+
+- 统一入口运行：`fixed_wing_overall_sizing_runbook`
+- 重点关注收敛后是否进入扩展阶段（未收敛则不会生成阻力分解结果）
+
+## 输出位置与读取
+
+- `output/<project>_*/advanced_design_results_*.json`：
+  - `stage2_aero.cd0`、`stage2_aero.cd0_breakdown`、`stage2_aero.wave_drag`
+- `output/<project>_*/advanced_design_report.md`：可读的阻力分解表
+
+## 常见诊断
+
+- `cd0` 明显过大：优先检查机身尺度（长度/直径）与 `thickness_ratio`
+- 波阻占比异常：检查巡航 Mach 与后掠/厚度比是否匹配
+- 机翼/尾翼占比异常：检查面积比（尾翼相对翼面积）与外形细化输入是否缺失

@@ -10,12 +10,21 @@ description: "固定翼约束分析方案：失速/巡航/爬升/起降距离等
 - 形成可扩展的约束分析框架，用于选择总体设计点
 - 输出设计点处每条约束的需求与余度
 
-## 输入
+## 与统一入口的字段映射
 
-- 任务：巡航高度/速度、失速速度、爬升梯度与爬升速度
-- 任务（可选）：起飞/着陆距离限制与地面参数
-- 气动：`cd0`, `e`, `AR`, `cl_max`
-- 设计变量：候选 `wing_loading_pa`、可用 `thrust_to_weight`
+- 约束分析在 `fixed_wing_overall_sizing_runbook` 的闭环中用于修正/验证设计点。
+- 字段来源：
+  - 工况与需求：`requirements.*`
+  - 初猜与几何假设：`initial_guess.*`
+
+## 输入（统一 JSON 视角）
+
+- 巡航点：`requirements.cruise_altitude_m`、`requirements.cruise_mach`
+- 起降距离：`requirements.takeoff_distance_m`、`requirements.landing_distance_m`
+- 载荷因子：`requirements.max_load_factor`
+- 气动初猜：`initial_guess.cd0`、`initial_guess.oswald_e`、`initial_guess.aspect_ratio`
+- 设计变量初猜：`initial_guess.wing_loading_pa`、`initial_guess.thrust_to_weight`
+- 高升力（当前版本默认假设，后续可参数化）：`CLmax` 量级
 
 ## 输出
 

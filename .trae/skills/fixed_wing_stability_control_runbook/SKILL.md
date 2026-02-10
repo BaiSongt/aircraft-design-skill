@@ -1,9 +1,14 @@
 ---
 name: "fixed_wing_stability_control_runbook"
-description: "执行固定翼尾翼初算（尾容积系数法）并输出 Sh/Sv。当需要快速得到尾翼面积初值用于总体迭代时调用。"
+description: "执行尾翼初算（尾容积系数法）并输出 Sh/Sv。当总体设计需要尾翼面积初值或静稳定裕度不足需调整尾容积时调用。"
 ---
 
 # 固定翼稳定与操纵初算执行（Runbook）
+
+## 角色定位（统一入口）
+
+- 本技能默认由 `fixed_wing_overall_sizing_runbook` 在扩展阶段驱动。
+- 单独调用用于快速估算“尾翼面积需要多大”，以及为后续静稳定/配平/阻力增量留接口。
 
 ## 输入
 
@@ -31,5 +36,4 @@ results = analyzer.analyze(...)
 
 ## 推荐入口
 
-- 一键总体脚本：`scripts/run_fixed_wing_design.py`
-
+- 统一入口：`fixed_wing_overall_sizing_runbook`

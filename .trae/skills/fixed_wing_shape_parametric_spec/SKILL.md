@@ -7,6 +7,14 @@ description: "定义固定翼全外形参数化（翼/尾/机身/翼型/布局/�
 
 目标：把固定翼飞机外形从“少量总体参数”推进为“可完整重建外形的参数集”，并允许局部通过控制点增强自由度，且保持与总体设计闭环输入兼容。
 
+## 与统一入口的接口关系
+
+- 外形输入与派生规则服务于统一入口 `fixed_wing_overall_sizing_runbook`。
+- 外形可通过三种层级逐步细化（推荐逐级推进）：
+  - `geometry_parametric`（总体级，少字段）
+  - `geometry_detailed`（详细级，翼型/站位）
+  - `geometry_shape`（完整参数化 + 控制点 + 布局）
+
 ## 1. 总体原则
 
 - **分层**：`geometry_parametric`（总体级）→ `geometry_detailed`（详细级）→ `geometry_shape`（全参数化+控制点+布局）。
@@ -58,12 +66,11 @@ description: "定义固定翼全外形参数化（翼/尾/机身/翼型/布局/�
   - planform + section（可复用 wing 的结构）
   - 或采用相对翼面积/容积系数派生
 
-## 3. 派生输出（建议）
+## 3. 派生产物（统一入口）
 
-- `results.geometry_shape_derived`
-  - 归一化后的机身 stations、翼型 coords（根/梢）、网格分辨率快照
-- `results.artifacts`
-  - `geometry_3d_html`、`geometry_obj`、`geometry_mesh_json`（已存在）
+- 由 `fixed_wing_overall_sizing_runbook` 在收敛后落盘到 `output/<project>_*/`：
+  - `geometry_3d.html`、`geometry_mesh.json`、`geometry.obj`
+  - `model.vspscript`（可选）
 
 ## 4. 验收标准
 
@@ -79,4 +86,3 @@ description: "定义固定翼全外形参数化（翼/尾/机身/翼型/布局/�
 - `grid`: `{rows:2, cols:2}`（默认）
 - `enable_axes`: `true|false`
 - `enable_grid`: `true|false`
-

@@ -5,6 +5,14 @@ description: "执行包含高级分析与机身几何的固定翼总体设计流
 
 # 固定翼高级总体设计执行步骤（Runbook）
 
+## 角色定位（统一入口）
+
+- 本技能不是第二套入口；计算入口固定为 `fixed_wing_overall_sizing_runbook`（`python -m aircraft_design.run_sizing`）。
+- 本 Runbook 说明如何在同一份输入 JSON 中补齐几何与约束字段，让总体入口在收敛后输出：
+  - 阶段 2–7 扩展分析结果（advanced_design_results / advanced_design_report）
+  - 几何一致性检查（geometry_constraints）
+  - 外形资产（OpenVSP 脚本、OBJ、交互图表）
+
 ## 目标
 
 首次设计即包含：
@@ -13,67 +21,33 @@ description: "执行包含高级分析与机身几何的固定翼总体设计流
 - 约束/重量/气动/性能/稳定/结构/推进的一体化输出
 - 先完成 Class 1 收敛，再自动进入 Class 2 高级设计
 
-## 入口
-
-- 输入文件：JSON
-- 执行脚本：`python -m aircraft_design.run_sizing`
-
-## 流程约束
-
-- 必须先完成 Class 1 收敛，且参数合理时自动进入 Class 2
-- GUI 可视化为必要条件，仅在显示错误时才可关闭
-
 ## 必要输入补强（在首次方案中加入）
 
 1. `geometry` 与 `geometry_shape`
    - `geometry.fuselage_length_m`、`geometry.fuselage_diameter_m`
    - `geometry_shape.fuselage.axis.length_m`
    - `geometry_shape.fuselage.profile`（控制点或半径）
-2. `geometry_parametric` 或 `geometry_shape.wing.planform`
+2. `geometry_shape.wing.planform`
    - 确保翼展弦比/翼面积可由 `sizing` 或 `geometry_shape` 推导
 3. `geometry_constraints`（可选但推荐）
-   - 用于几何一致性/约束校核输出到 `advanced_shape_results.json`
-4. `openvsp`
-   - `enabled: true` 以生成 OpenVSP 脚本
-5. `uncertainty`
-   - `enabled: true` 以输出不确定性敏感性结果
+   - 用于燃油容积/展弦比等几何一致性校核，结果会写入 `advanced_design_results_*.json`
 
 ## 快速步骤
 
-1. 基于 sizing 输入复制并修改：
+1. 在输入 JSON 的 `requirements`、`initial_guess` 基础上，补齐 `geometry_shape` 与（可选）`geometry_constraints`。
+2. 可选启动可视化（不启动则用 `--no-viz` 纯计算）：
 
 ```bash
-cp ./sizing_input.json ./sizing_input_advanced.json
-```
-
-2. 在新文件中补齐首次高级设计字段：
-   - `geometry` + `geometry_shape`（含机身与机翼/尾翼）
-   - `geometry_constraints`（如允许的最小翼身间距、翼梁厚度等）
-   - `openvsp.enabled=true`
-   - `uncertainty.enabled=true`
-
-3. 启动 GUI（必要，除非显示错误）：
-
-**注意：** 建议先关闭旧的服务器窗口，或指定新端口以确保加载最新代码。
-
-```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-# 方法 A：启动默认服务器
 python -m aircraft_design.gui.server
-
-# 方法 B：指定端口启动
-python -m aircraft_design.gui.server --port 10001
 ```
 
-4. 运行（默认 Class 1 收敛后自动进入 Class 2）：
+3. 运行（Class I 收敛后自动进入阶段 2–7 扩展分析）：
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-# 连接默认端口 9999
 python -m aircraft_design.run_sizing sizing_input_advanced.json --project-name AdvancedRun
 
-# 或连接指定端口
-python -m aircraft_design.run_sizing sizing_input_advanced.json --project-name AdvancedRun --viz-port 10001
+# 纯计算（不启用 GUI）
+python -m aircraft_design.run_sizing sizing_input_advanced.json --project-name AdvancedRun --no-viz
 ```
 
 ## 输出检查

@@ -1,9 +1,14 @@
 ---
 name: "fixed_wing_weights_runbook"
-description: "执行固定翼 Class I 重量闭合并输出重量分解。当需要在总体迭代中快速收敛 MTOW/燃油重量时调用。"
+description: "执行固定翼 Class I 重量闭合（W0/We/Wf）并输出收敛信息。当总体闭环需要重量结果或燃油/空重异常时调用。"
 ---
 
 # 固定翼重量闭合执行（Runbook）
+
+## 角色定位（统一入口）
+
+- 本技能默认由 `fixed_wing_overall_sizing_runbook` 闭环驱动，不建议作为独立入口。
+- 单独调用用于回答“为什么 MTOW 不收敛/燃油分数过高/空重过高”这类重量侧问题。
 
 ## 目标
 
@@ -12,21 +17,20 @@ description: "执行固定翼 Class I 重量闭合并输出重量分解。当需
 
 ## 入口与数据字段
 
-- 推荐通过总体一键脚本执行：`aircraft_design/run_sizing.py`
-- 若单独使用重量模块，核心输入字段：
-  - `weights.empty_a`, `weights.empty_b`
-  - `weights.reserve_fraction`
-  - `propulsion.type` 与对应 `SFC/TSFC/η`
-  - `mission.range_m` 与巡航点 `L/D`（由气动模块给出）
+- 统一入口：`fixed_wing_overall_sizing_runbook`（内部完成重量闭合）
+- 若做“重量侧诊断”，重点关注输入：
+  - 航程/任务：`requirements.range_m`、巡航点（Mach/高度）
+  - 推进：`initial_guess.sfc_cruise_1_s`（以及推进类型假设）
+  - 气动：`initial_guess.cd0`、`initial_guess.oswald_e`、`initial_guess.aspect_ratio`
+  - 空重模型：当前版本在 `run_sizing` 闭环中为内置假设（后续可扩展为显式参数）
 
 ## 步骤
 
-1. 给出空重统计模型参数与燃油储备分数
-2. 使用 Breguet 得到任务燃油分数
-3. 用迭代闭合方程求解 `W0`
-4. 输出 `W0/We/Wf` 与迭代收敛信息
+1. 运行总体入口，获取 `output/<project>_*/design_data.json`。
+2. 读取 `outputs.mtow_kg / empty_weight_kg / fuel_weight_kg` 与迭代历史（若有）。
+3. 如果燃油/空重异常，按优先级排查：推进耗油单位 → `L/D`（`cd0/e/AR`）→ 任务指标是否过激。
 
-## 重心与平衡分析 (New)
+## 重心与平衡分析
 
 完成重量闭合后，调用 `aircraft_design/weight_balance.py` 进行重心包线分析：
 
@@ -39,4 +43,3 @@ from aircraft_design.weight_balance import WeightBalanceAnalyzer
 # ... 实例化 analyzer ...
 envelope = analyzer.analyze()
 ```
-

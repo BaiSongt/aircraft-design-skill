@@ -11,6 +11,14 @@ description: "固定翼气动阻力分解方案：基于几何外形的部件级
 - 提供详细的阻力分解表（摩擦、压差、干扰、波阻）。
 - 支持从 Class I (Sizing) 到 Class II (Detailed) 的平滑过渡。
 
+## 与统一入口的接口关系
+
+- 阻力分解在 `fixed_wing_overall_sizing_runbook` 的“收敛后阶段 2–7 扩展分析”中对应 Stage2 Aero。
+- 统一入口输出中推荐读取：
+  - `advanced_design_results_*.json.stage2_aero.cd0`
+  - `advanced_design_results_*.json.stage2_aero.cd0_breakdown`
+  - `advanced_design_report.md` 的阻力分解表
+
 ## 输入 (Input)
 
 - `geometry_shape` (来自 `fixed_wing_shape_parametric` 或 `detailed`)
@@ -24,12 +32,12 @@ description: "固定翼气动阻力分解方案：基于几何外形的部件级
 
 ## 输出 (Output)
 
-- `aero.cd0`: 总零升阻力系数
-- `aero.drag_breakdown`:
+- `stage2_aero.cd0`: 总零升阻力系数
+- `stage2_aero.cd0_breakdown`:
   - `parasite_drag`: { `fuselage`, `wing`, `htail`, `vtail`, `nacelle` }
   - `wave_drag`: (若 M > M_crit)
   - `misc_drag`: (起落架、冷却阻力等，可选)
-- `aero.l_d_cruise`: 基于新 CD0 的升阻比估算
+- `stage2_aero.cd_total`: 基于新 CD0 的巡航点总阻力（含诱导项）
 
 ## 算法逻辑 (Methodology)
 

@@ -7,6 +7,14 @@ description: "定义固定翼外形详细设计（翼型/机身剖面/三视图�
 
 本阶段目标：在总体设计闭环已经可跑的前提下，把外形从“参数化占位”推进到“可追溯的详细几何输入”，并且提供可视化（优先三视图），为后续 OpenVSP/VSPAero/更高保真分析做接口准备。
 
+## 与统一入口的接口关系
+
+- 外形资产生成与落盘由 `fixed_wing_overall_sizing_runbook` 统一执行（`python -m aircraft_design.run_sizing`）。
+- 统一入口在收敛后会在 `output/<project>_*/` 输出：
+  - `geometry_3d.html`、`geometry_mesh.json`、`geometry.obj`
+  - `model.vspscript`、`model.obj`
+  - `design_report_v2.md`、`design_data.json`
+
 ## 1. 输入接口（建议字段）
 
 ### 1.1 `geometry_parametric`（已有）
@@ -41,13 +49,11 @@ description: "定义固定翼外形详细设计（翼型/机身剖面/三视图�
 
 ## 2. 输出接口（建议字段）
 
-- `results.geometry_detailed`
-  - `wing.airfoil.coords`：翼型坐标（归一化 chord）
-  - `fuselage.stations`：站位剖面输入快照（排序后）
-- `results.artifacts`
-  - `geometry_3d_html`: 三视图 HTML 文件名
-  - `geometry_obj`: OBJ 文件名
-  - `geometry_mesh_json`: 网格 JSON 文件名
+- 输出以文件为主，写入 `output/<project>_*/`：
+  - `geometry_3d.html`：三视图 HTML 预览
+  - `geometry_mesh.json`：网格 JSON
+  - `geometry.obj`：OBJ 资产
+  - `model.vspscript`：OpenVSP 脚本（可选）
 
 ## 3. 可视化验收（必须）
 
@@ -57,7 +63,5 @@ description: "定义固定翼外形详细设计（翼型/机身剖面/三视图�
 ## 4. 验收标准（可执行）
 
 - 输入仅提供 `geometry_parametric` 时：可生成三视图预览与 OBJ/JSON 资产
-- 输入提供 `geometry_detailed.wing.airfoil` 时：`results.geometry_detailed.wing.airfoil.coords` 可用且点数正确
-- 输入提供 `geometry_detailed.fuselage.stations` 时：结果中包含排序后的 stations
+- 输入提供 `geometry_detailed` 时：`geometry_mesh.json` 生成成功且可被 `geometry_3d.html` 正常加载
 - 所有测试可通过：`python -m unittest discover -s tests`
-

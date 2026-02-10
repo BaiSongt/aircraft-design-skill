@@ -1,9 +1,14 @@
 ---
 name: "fixed_wing_shape_parametric_runbook"
-description: "执行固定翼全外形参数化的落地流程（参数→派生→网格→四视图/轴测→回归测试）。用户要逐步细化外形并可视化时调用。"
+description: "落地固定翼外形参数化（geometry_shape/geometry_detailed）并生成可视化资产。当用户要逐步细化外形输入并保证可重建/可复现时调用。"
 ---
 
 # 固定翼全外形参数化（Runbook）
+
+## 角色定位（统一入口）
+
+- 本技能不提供“第二套总体流程”。外形参数化的落盘与报告统一由 `fixed_wing_overall_sizing_runbook` 完成。
+- 本 Runbook 负责把外形输入从“少量参数”推进到“可完整重建外形的参数字典”，并指导如何验证可复现。
 
 ## 0) 目标
 
@@ -19,13 +24,13 @@ description: "执行固定翼全外形参数化的落地流程（参数→派生
 
 运行：
 
-```powershell
-python .\scripts\run_fixed_wing_design.py .\examples\fixed_wing_ga_single.json
+```bash
+python -m aircraft_design.run_sizing ./sizing_input.json --project-name "GeomStep1"
 ```
 
 查看：
 
-- `out/geometry_3d.html`（四视图：Top/Side/Front + Iso 可旋转）
+- `output/GeomStep1_*/` 下的报告与资产（例如 `design_report_v2.md`、`geometry_3d.html`、`geometry_mesh.json`、`geometry.obj`，收敛后还会输出 OpenVSP/交互图表等）
 
 ## 2) 升级：把站位改为控制点（建议）
 
@@ -45,7 +50,7 @@ python .\scripts\run_fixed_wing_design.py .\examples\fixed_wing_ga_single.json
 
 ## 5) 验证
 
-```powershell
+```bash
 python -m unittest discover -s tests
 ```
 

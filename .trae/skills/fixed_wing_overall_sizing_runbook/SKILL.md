@@ -1,18 +1,18 @@
 ---
 name: "fixed_wing_overall_sizing_runbook"
-description: "执行固定翼总体设计闭环计算并输出 results.json/report.md 以及 PySide6 可视化 App 数据。每次都要调用，能从输入需求一键得到可计算方案、详细报告与可视化结果。"
+description: "固定翼总体设计唯一入口：执行 Class I 闭环并在收敛后进入阶段 2–7 扩展分析，落盘输出报告/数据/外形资产，并可选 PySide6 实时可视化。"
 ---
 
 # Fixed Wing Overall Sizing Runbook
 
-此技能用于执行固定翼飞机 Class I 总体设计闭环流程。它将调用 `aircraft_design/run_sizing.py` 脚本，基于输入需求进行迭代计算，直到 MTOW 收敛。Class I 收敛且参数合理时自动进入 Class II 高级设计，并生成标准模板报告与 PySide6 可视化 App 需要的实时数据。
+此技能对应仓库的“固定入口”：`python -m aircraft_design.run_sizing <input.json>`。它会执行固定翼 Class I 总体闭环（约束→设计点→重量/性能迭代），并在收敛且结果合理时自动进入阶段 2–7 扩展分析（气动/推进/任务/操稳/结构/优化），生成报告、数据与外形资产。
 
 ## 适用场景
 *   用户提供了一组设计需求（如航程、载荷、速度），希望快速得到飞机总体参数。
 *   用户希望验证当前设计代码是否能针对特定需求收敛。
-*   需要生成总体设计报告 (`report.md`) 并在 PySide6 可视化 App 中查看实时迭代过程。
+*   需要生成总体设计报告（`design_report_v2.md`）并在 PySide6 可视化 App 中查看实时迭代过程。
 
-## 入口与需求模板（必须先生成提示词）
+## 入口与需求模板
 
 当用户给出需求时，先按模板补齐信息并生成“需求提示词”，再进入后续步骤。
 
@@ -65,7 +65,7 @@ description: "执行固定翼总体设计闭环计算并输出 results.json/repo
    - 输出偏好与风险声明
 3. 提示词末尾追加一句：已生成模板化需求，将进入 sizing_input.json 构建与总体设计闭环流程。
 
-## 执行步骤
+## 执行步骤（固定流程）
 
 ### 0. 环境检查与虚拟环境准备
 
@@ -119,9 +119,7 @@ python -c "import PySide6, numpy, scipy, pyvista, pyvistaqt; import PySide6.QtWe
 }
 ```
 
-*注意：`sfc_cruise_1_s` = 0.8 / 3600 ≈ 0.000222*
-
-使用 `Write` 工具创建 `sizing_input.json` 文件。
+*注意：`sfc_cruise_1_s` = 0.8 / 3600 ≈ 0.000222（单位 1/s）*
 
 ### 2. 启动可视化服务器（可选，推荐）
 
@@ -219,10 +217,10 @@ python -m aircraft_design.run_sizing sizing_input.json --no-viz
     *   `1`: 发生错误（需调试）。
 
 2.  **定位输出目录**：
-    输出位于 `output/` 目录下以 `MyDesign_` 开头的时间戳文件夹中。使用 `LS` 工具找到最新的文件夹。
+    输出位于 `output/<project>_YYYYMMDD_HHMMSS/`。
 
 3.  **读取报告**：
-    使用 `Read` 工具读取生成的 `design_report_v2.md` 文件内容。
+    优先查看 `design_report_v2.md`（Class I 主报告），收敛后再看 `technical_roadmap_report.md` 与 `advanced_design_report.md`（如生成）。
 
 4.  **反馈用户**：
     将 `design_report_v2.md` 的核心内容（MTOW、T/W、W/S、关键重量分解、操稳特性摘要）总结给用户，并提示用户在可视化 App 中查看迭代与约束。

@@ -1,18 +1,19 @@
 ---
 name: "fixed_wing_constraints_runbook"
-description: "执行固定翼约束校核并输出设计点余度。当需要快速判断给定 W/S、T/W 是否满足巡航/爬升/失速/起降距离约束时调用。"
+description: "执行固定翼约束校核并给出设计点调整建议。当用户关心起降/失速/巡航/爬升约束是否满足或要定位卡点时调用。"
 ---
 
 # 固定翼约束分析执行（Runbook）
 
-## 推荐入口
+## 角色定位（统一入口）
 
-- 一键总体脚本：`aircraft_design/run_sizing.py`
+- 本技能默认由 `fixed_wing_overall_sizing_runbook` 驱动：约束用于修正/验证设计点（W/S、T/W）。
+- 单独调用用于解释“哪个约束在驱动设计点”，以及“该改哪个输入字段”。
 
-## 输出位置
+## 输出位置（以统一入口输出为准）
 
-- `out/results.json` 的 `constraints` 字段
-- `out/report.md` 的“约束校核”章节
+- `output/<project>_*/design_report_v2.md`：可读的约束/设计点总结（若对应章节已输出）
+- `output/<project>_*/design_data.json`：设计点与迭代信息（`inputs.initial_guess`、`outputs`）
 
 ## 迭代建议
 
