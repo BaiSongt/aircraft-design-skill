@@ -55,7 +55,7 @@ def build_propulsion_model(
 
     sfc_1_s = propulsion_in.get("sfc_1_s", None)
     eta_prop = propulsion_in.get("prop_efficiency", None)
-    
+
     thrust_map = propulsion_in.get("thrust_map", None)
     sfc_map = propulsion_in.get("sfc_map", None)
 
@@ -122,12 +122,7 @@ def _calculate_mattingly_thrust_factor(
     return max(0.0, alpha)
 
 
-def _calculate_turbo_ramjet_thrust_factor(
-    mach: float,
-    theta: float,
-    delta: float,
-    afterburner: bool = True
-) -> float:
+def _calculate_turbo_ramjet_thrust_factor(mach: float, theta: float, delta: float, afterburner: bool = True) -> float:
     """
     Simulated High-Speed Turbojet / Turbo-Ramjet (J58 class).
     Thrust increases with Mach up to M=3.2 due to ram recovery.
@@ -136,25 +131,25 @@ def _calculate_turbo_ramjet_thrust_factor(
     # Standard jet drops as sigma^0.7 approx.
     # But Ram recovery P2/P1 ~ (1 + 0.2 M^2)^3.5
     # For a J58, Thrust at M=3.0 is approx equal to Thrust SL Static (or higher).
-    
+
     # Empirical fit for "High Mach Turbojet":
     # 0 < M < 1: Standard drop
     # 1 < M < 3: Recovery gain
     # M > 3.5: Drop due to thermal limits
-    
+
     # Let's model it as:
     # Alpha = (delta / theta) * (1 + 0.5 * M^2)  <-- Rough Ram effect
     # But limited by engine structural limits.
-    
+
     # Simplified Curve for Design Skill:
     # 1. Start with SL Thrust (1.0)
     # 2. At Altitude, density drops.
     # 3. But Velocity increases momentum flux.
     # 4. Ram pressure increases mass flow density.
-    
+
     # Let's use a piecewise linear factor on top of the standard lapse?
     # No, standard lapse is too punishing for M=3.
-    
+
     # Use a direct correlation for "High Speed Jet" alpha (T/Tsl):
     # Based on SR-71 performance charts (approx):
     # 30k ft, M=0.9: Thrust ~ 0.4 Tsl
@@ -166,26 +161,26 @@ def _calculate_turbo_ramjet_thrust_factor(
     # So Thrust/Sigma ~ 0.23 / 0.03 = 7.6 !!
     # Normal jet T/Sigma ~ 1.0.
     # So Mach effect provides a 7x multiplier at M=3.2.
-    
+
     # Formula:
     # T_avail = T_sl * sigma * (1 + C * M^2)
     # If C = 0.6, at M=3.2 -> 1 + 0.6*10 = 7.
     # This matches nicely!
-    
+
     # Altitude lapse
     # Sigma (density ratio)
     # For Turbo-Ramjet, it's roughly proportional to ambient pressure (delta) or density (sigma).
     # Let's use Delta (pressure ratio) for Ramjets usually.
     # But let's stick to sigma for consistency with other models unless specialized.
     # Mattingly uses (delta / theta^0.8)^0.7
-    
+
     # Let's use:
     # Alpha = (delta / theta) * mach_factor
     # This mimics constant corrected thrust?
-    
+
     # Let's just use the sigma * mach_factor model which is robust and tunable.
-    return 0.0 # Not used directly, integrated in main func
-    
+    return 0.0  # Not used directly, integrated in main func
+
 
 def _interpolate_map(map_data: dict, mach: float, altitude_m: float) -> float:
     """
@@ -200,18 +195,18 @@ def _interpolate_map(map_data: dict, mach: float, altitude_m: float) -> float:
     m_points = map_data.get("mach_points", [])
     h_points = map_data.get("altitude_points_m", [])
     values = map_data.get("values", [])
-    
+
     if not m_points or not h_points or not values:
         return 0.0
 
     # Clamp inputs
     m = max(m_points[0], min(m_points[-1], mach))
     h = max(h_points[0], min(h_points[-1], altitude_m))
-    
+
     # Find indices
     i = bisect.bisect_right(m_points, m) - 1
     j = bisect.bisect_right(h_points, h) - 1
-    
+
     # Handle edges/clamping logic of bisect
     if i < 0:
         i = 0
@@ -221,35 +216,35 @@ def _interpolate_map(map_data: dict, mach: float, altitude_m: float) -> float:
         i = len(m_points) - 2
     if j >= len(h_points) - 1:
         j = len(h_points) - 2
-    
+
     # Interpolate
-    m0, m1 = m_points[i], m_points[i+1]
-    h0, h1 = h_points[j], h_points[j+1]
-    
+    m0, m1 = m_points[i], m_points[i + 1]
+    h0, h1 = h_points[j], h_points[j + 1]
+
     # Normalize coords (0..1)
     tm = (m - m0) / (m1 - m0) if m1 > m0 else 0.0
     th = (h - h0) / (h1 - h0) if h1 > h0 else 0.0
-    
+
     # Bilinear
     # values[i] is row for m_points[i]
     # values[i][j] is value at m_points[i], h_points[j]
-    
+
     try:
         v00 = values[i][j]
-        v01 = values[i][j+1]
-        v10 = values[i+1][j]
-        v11 = values[i+1][j+1]
+        v01 = values[i][j + 1]
+        v10 = values[i + 1][j]
+        v11 = values[i + 1][j + 1]
     except IndexError:
         # Fallback if map is malformed
         return values[0][0] if values and values[0] else 0.0
-    
+
     # Interpolate in Mach first (along columns)
     v0 = v00 * (1 - tm) + v10 * tm
     v1 = v01 * (1 - tm) + v11 * tm
-    
+
     # Interpolate in Alt
     val = v0 * (1 - th) + v1 * th
-    
+
     return val
 
 
@@ -268,12 +263,12 @@ def thrust_available_n(
         mach = speed_m_s / atm.a_m_s
 
         if model.thrust_map:
-             t_avail = _interpolate_map(model.thrust_map, mach, altitude_m)
-             return t_avail * r_factor
+            t_avail = _interpolate_map(model.thrust_map, mach, altitude_m)
+            return t_avail * r_factor
 
         if model.thrust_sl_n is None:
             raise ValueError("Jet model requires thrust_sl_n.")
-        
+
         if model.jet_model_method == "mattingly_low_bypass":
             # ... (existing mattingly code)
             theta = atm.t_k / 288.15
@@ -285,24 +280,24 @@ def thrust_available_n(
                 alpha = _calculate_mattingly_thrust_factor(mach, theta, delta, afterburner=False)
                 alpha *= r_factor
             return model.thrust_sl_n * alpha
-            
+
         elif model.jet_model_method == "turbo_ramjet":
             # High speed model (T ~ Sigma * (1 + 0.7 M^2))
             # Matches SR-71 behavior roughly.
             # T_avail = T_sl * (P/P0) * (1 + 0.6 M^2)
             # Using Sigma approx P/P0 at isothermal stratosphere
-            
-            mach_factor = 1.0 + 0.6 * (mach ** 2.0)
-            
-            # For Ramjets, Thrust is zero at M=0? 
+
+            mach_factor = 1.0 + 0.6 * (mach**2.0)
+
+            # For Ramjets, Thrust is zero at M=0?
             # No, this is a Turbo-Ramjet (J58), so it has static thrust.
-            
+
             # Cutoff or limit?
             # J58 inlet recovery drops after M=3.2.
             # Let's add a rolloff > M=3.5
             if mach > 3.5:
                 mach_factor *= max(0.0, 1.0 - (mach - 3.5))
-            
+
             thrust = model.thrust_sl_n * sigma * mach_factor * r_factor
             return thrust
 

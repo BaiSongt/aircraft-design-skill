@@ -140,11 +140,15 @@ class Web3DView(QWidget):
         if not self._available:
             return
         if self._last_parts:
-            html = render_three_view_html_from_parts(self._last_parts, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            html = render_three_view_html_from_parts(
+                self._last_parts, resource_config=RESOURCE_CONFIG, web_config=self._config
+            )
             base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
             self._view.setHtml(html, base_url)
         elif self._last_geometry:
-            html = render_three_view_html_from_geometry(self._last_geometry, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            html = render_three_view_html_from_geometry(
+                self._last_geometry, resource_config=RESOURCE_CONFIG, web_config=self._config
+            )
             base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
             self._view.setHtml(html, base_url)
 
@@ -153,11 +157,15 @@ class Web3DView(QWidget):
             return
         self._config.update(config)
         if self._last_parts:
-            html = render_three_view_html_from_parts(self._last_parts, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            html = render_three_view_html_from_parts(
+                self._last_parts, resource_config=RESOURCE_CONFIG, web_config=self._config
+            )
             base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
             self._view.setHtml(html, base_url)
         elif self._last_geometry:
-            html = render_three_view_html_from_geometry(self._last_geometry, resource_config=RESOURCE_CONFIG, web_config=self._config)
+            html = render_three_view_html_from_geometry(
+                self._last_geometry, resource_config=RESOURCE_CONFIG, web_config=self._config
+            )
             base_url = QUrl.fromLocalFile(str(PROJECT_ROOT) + "/")
             self._view.setHtml(html, base_url)
 
@@ -333,7 +341,7 @@ class MainWindow(QMainWindow):
         total = max(900, self.width())
         left = min(350, int(total * 0.25))
         # Collapse right panel by default to give maximum space to 3D view
-        right = 0 
+        right = 0
         center = max(420, total - left - right)
         self.main_splitter.setSizes([left, center, right])
 

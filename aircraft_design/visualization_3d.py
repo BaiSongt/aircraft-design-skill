@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt, tan
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,48 @@ def _append_part(
     for t in tris:
         idx.extend([int(t[0]), int(t[1]), int(t[2])])
     parts.append(MeshPart(name=name, color=color, vertices=flat, indices=idx))
+
+
+def _coerce_airfoil_coords(obj: Any, *, field_name: str) -> list[list[float]]:
+    if obj is None:
+        raise ValueError(f"{field_name} must not be None.")
+
+    if isinstance(obj, list):
+        pts: list[list[float]] = []
+        for p in obj:
+            if isinstance(p, dict) and "x" in p and "y" in p:
+                pts.append([float(p["x"]), float(p["y"])])
+                continue
+            if isinstance(p, (list, tuple)) and len(p) == 2:
+                pts.append([float(p[0]), float(p[1])])
+                continue
+            raise ValueError(f"Each airfoil coordinate in {field_name} must be [x, y] or {{x, y}}.")
+        return pts
+
+    if hasattr(obj, "coordinates"):
+        coords = getattr(obj, "coordinates")
+        if hasattr(coords, "x") and hasattr(coords, "y"):
+            xs = list(getattr(coords, "x"))
+            ys = list(getattr(coords, "y"))
+            if len(xs) != len(ys):
+                raise ValueError(f"{field_name} has mismatched x/y lengths.")
+            return [[float(x), float(y)] for x, y in zip(xs, ys)]
+
+    if hasattr(obj, "x") and hasattr(obj, "y"):
+        xs = list(getattr(obj, "x"))
+        ys = list(getattr(obj, "y"))
+        if len(xs) != len(ys):
+            raise ValueError(f"{field_name} has mismatched x/y lengths.")
+        return [[float(x), float(y)] for x, y in zip(xs, ys)]
+
+    if isinstance(obj, dict) and "x" in obj and "y" in obj:
+        xs = list(obj["x"])
+        ys = list(obj["y"])
+        if len(xs) != len(ys):
+            raise ValueError(f"{field_name} has mismatched x/y lengths.")
+        return [[float(x), float(y)] for x, y in zip(xs, ys)]
+
+    raise ValueError(f"{field_name} must be a list of points or an airfoil geometry object.")
 
 
 def _three_js_loader_script(resource_config: dict | None, *, include_orbit: bool) -> str:
@@ -204,7 +247,7 @@ def build_fuselage_loft(*, stations: list[dict], n_circ: int = 28) -> MeshPart:
 
 def build_wing_airfoil_mesh(
     *,
-    airfoil_coords: list[list[float]],
+    airfoil_coords: Any,
     s_ref_m2: float,
     aspect_ratio: float,
     taper_ratio: float,
@@ -214,7 +257,8 @@ def build_wing_airfoil_mesh(
     name_prefix: str = "wing",
     color: str = "#2c7fb8",
 ) -> list[MeshPart]:
-    if not isinstance(airfoil_coords, list) or len(airfoil_coords) < 10:
+    airfoil_pts = _coerce_airfoil_coords(airfoil_coords, field_name="airfoil_coords")
+    if len(airfoil_pts) < 10:
         raise ValueError("airfoil_coords must be a list with at least 10 points.")
     s = float(s_ref_m2)
     ar = float(aspect_ratio)
@@ -225,9 +269,7 @@ def build_wing_airfoil_mesh(
         raise ValueError("taper_ratio must be in [0.05, 1.0].")
 
     pts2 = []
-    for p in airfoil_coords:
-        if not isinstance(p, (list, tuple)) or len(p) != 2:
-            raise ValueError("Each airfoil coordinate must be [x, y].")
+    for p in airfoil_pts:
         pts2.append((float(p[0]), float(p[1])))
 
     b = sqrt(ar * s)
@@ -289,8 +331,8 @@ def build_wing_airfoil_mesh(
 
 def build_wing_airfoil_loft_mesh(
     *,
-    root_airfoil_coords: list[list[float]],
-    tip_airfoil_coords: list[list[float]] | None,
+    root_airfoil_coords: Any,
+    tip_airfoil_coords: Any | None,
     s_ref_m2: float,
     aspect_ratio: float,
     taper_ratio: float,
@@ -305,11 +347,15 @@ def build_wing_airfoil_loft_mesh(
     name_prefix: str = "wing",
     color: str = "#2c7fb8",
 ) -> list[MeshPart]:
-    if not isinstance(root_airfoil_coords, list) or len(root_airfoil_coords) < 10:
+    root_airfoil_pts = _coerce_airfoil_coords(root_airfoil_coords, field_name="root_airfoil_coords")
+    if len(root_airfoil_pts) < 10:
         raise ValueError("root_airfoil_coords must be a list with at least 10 points.")
     if tip_airfoil_coords is not None:
-        if not isinstance(tip_airfoil_coords, list) or len(tip_airfoil_coords) != len(root_airfoil_coords):
+        tip_airfoil_pts = _coerce_airfoil_coords(tip_airfoil_coords, field_name="tip_airfoil_coords")
+        if len(tip_airfoil_pts) != len(root_airfoil_pts):
             raise ValueError("tip_airfoil_coords must have the same number of points as root_airfoil_coords.")
+    else:
+        tip_airfoil_pts = None
 
     s = float(s_ref_m2)
     ar = float(aspect_ratio)
@@ -319,8 +365,8 @@ def build_wing_airfoil_loft_mesh(
     if not (0.05 <= taper <= 1.0):
         raise ValueError("taper_ratio must be in [0.05, 1.0].")
 
-    root_pts = [(float(p[0]), float(p[1])) for p in root_airfoil_coords]
-    tip_pts = [(float(p[0]), float(p[1])) for p in tip_airfoil_coords] if tip_airfoil_coords is not None else None
+    root_pts = [(float(p[0]), float(p[1])) for p in root_airfoil_pts]
+    tip_pts = [(float(p[0]), float(p[1])) for p in tip_airfoil_pts] if tip_airfoil_pts is not None else None
 
     cps = []
     if spanwise_control_points:
@@ -1554,8 +1600,8 @@ def generate_three_view_html(
 
 def build_vertical_tail_airfoil_loft_mesh(
     *,
-    root_airfoil_coords: list[list[float]],
-    tip_airfoil_coords: list[list[float]] | None,
+    root_airfoil_coords: Any,
+    tip_airfoil_coords: Any | None,
     s_ref_m2: float,
     aspect_ratio: float,
     taper_ratio: float,
@@ -1567,11 +1613,15 @@ def build_vertical_tail_airfoil_loft_mesh(
     name: str = "vtail",
     color: str = "#fd8d3c",
 ) -> MeshPart:
-    if not isinstance(root_airfoil_coords, list) or len(root_airfoil_coords) < 10:
+    root_airfoil_pts = _coerce_airfoil_coords(root_airfoil_coords, field_name="root_airfoil_coords")
+    if len(root_airfoil_pts) < 10:
         raise ValueError("root_airfoil_coords must be a list with at least 10 points.")
     if tip_airfoil_coords is not None:
-        if not isinstance(tip_airfoil_coords, list) or len(tip_airfoil_coords) != len(root_airfoil_coords):
+        tip_airfoil_pts = _coerce_airfoil_coords(tip_airfoil_coords, field_name="tip_airfoil_coords")
+        if len(tip_airfoil_pts) != len(root_airfoil_pts):
             raise ValueError("tip_airfoil_coords must have the same number of points as root_airfoil_coords.")
+    else:
+        tip_airfoil_pts = None
 
     s = float(s_ref_m2)
     ar = float(aspect_ratio)
@@ -1581,8 +1631,8 @@ def build_vertical_tail_airfoil_loft_mesh(
     if not (0.05 <= taper <= 1.0):
         raise ValueError("taper_ratio must be in [0.05, 1.0].")
 
-    root_pts = [(float(p[0]), float(p[1])) for p in root_airfoil_coords]
-    tip_pts = [(float(p[0]), float(p[1])) for p in tip_airfoil_coords] if tip_airfoil_coords is not None else None
+    root_pts = [(float(p[0]), float(p[1])) for p in root_airfoil_pts]
+    tip_pts = [(float(p[0]), float(p[1])) for p in tip_airfoil_pts] if tip_airfoil_pts is not None else None
     n = len(root_pts)
 
     cps = []

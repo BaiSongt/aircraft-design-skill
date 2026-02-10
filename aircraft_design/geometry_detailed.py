@@ -469,6 +469,7 @@ class ParametricGeometry:
 
         return {"vertices": vertices, "faces": faces, "color": color}
 
+
 def estimate_wing_fuel_volume(
     area_m2: float,
     span_m: float,

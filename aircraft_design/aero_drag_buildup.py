@@ -390,5 +390,6 @@ def generate_drag_mach_curve(
 
     return {"mach": mach_range, "cd_total": cd_total}
 
+
 # Alias for compatibility
 estimate_cd0_drag_buildup = calculate_parasite_drag_buildup

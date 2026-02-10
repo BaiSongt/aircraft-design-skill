@@ -210,9 +210,7 @@ def generate_advanced_design_report(result_file: str, output_file: str):
     report.append("")
 
     fuel_fractions = {s["name"]: s["details"].get("fuel_kg", 0) for s in stage4["segment_breakdown"]}
-    max_fuel_segment = (
-        max(fuel_fractions.items(), key=lambda item: float(item[1]))[0] if fuel_fractions else "N/A"
-    )
+    max_fuel_segment = max(fuel_fractions.items(), key=lambda item: float(item[1]))[0] if fuel_fractions else "N/A"
     max_fuel_val = fuel_fractions.get(max_fuel_segment, 0)
 
     report.append(f"- **主要耗油段**: {max_fuel_segment} ({max_fuel_val:.1f} kg)")
