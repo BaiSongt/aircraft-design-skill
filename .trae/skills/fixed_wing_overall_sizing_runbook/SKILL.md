@@ -224,3 +224,20 @@ python -m aircraft_design.run_sizing sizing_input.json --no-viz
 
 4.  **反馈用户**：
     将 `design_report_v2.md` 的核心内容（MTOW、T/W、W/S、关键重量分解、操稳特性摘要）总结给用户，并提示用户在可视化 App 中查看迭代与约束。
+
+### 6. 统一格式报告生成（新增）
+
+在输出目录中补充统一格式报告，确保内容与最终设计参数一致，并包含公式、曲线与改进意见。
+
+1.  **生成文件**：
+    *   `design_report_unified.md`
+    *   `design_report_unified.json`
+2.  **内容要求**：
+    *   输入设计需求、需求分析
+    *   一阶段设计结果与内容分析
+    *   二阶段设计结果与内容分析
+    *   计算分支对应的 LaTeX 公式
+    *   输出目录中的曲线图引用
+    *   改进意见
+3.  **调用方式**：
+    统一格式报告由 `fixed_wing_unified_report_runbook` 负责，已接入总体流程末尾的自动生成步骤。

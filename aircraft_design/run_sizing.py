@@ -17,6 +17,7 @@ from aircraft_design.design_loop_orchestrator import (
 from aircraft_design.visualization_realtime import RealTimeVisualizer
 from aircraft_design.report_generator_v2 import ReportGeneratorV2
 from aircraft_design.report_generator_extended import ReportGeneratorExtended
+from aircraft_design.report_generator_unified import UnifiedReportGenerator
 from aircraft_design.visualization_static import StaticPlotter
 from aircraft_design.chart_data_generator import ChartDataGenerator
 from aircraft_design.visualization_interactive import InteractivePlotter, plot_payload_range, plot_weight_breakdown
@@ -577,6 +578,16 @@ def main():
 
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+        unified_reporter = UnifiedReportGenerator(project_name=args.project_name)
+        unified_report_md, unified_report_json = unified_reporter.generate_report(output_data, run_dir)
+        unified_report_path = run_dir / "design_report_unified.md"
+        with open(unified_report_path, "w", encoding="utf-8") as f:
+            f.write(unified_report_md)
+        unified_json_path = run_dir / "design_report_unified.json"
+        with open(unified_json_path, "w", encoding="utf-8") as f:
+            json.dump(unified_report_json, f, ensure_ascii=False, indent=2)
+        print(f"Unified Report saved to {unified_report_path}")
 
         # Notify GUI
         send_report_path_to_gui(run_dir)
