@@ -94,7 +94,7 @@ class UnifiedReportGenerator:
         sections.append(
             "\n".join(
                 [
-                    "# 统一格式设计报告",
+                    "# 飞机概念设计报告",
                     "",
                     f"**项目名称**: {self.project_name}",
                     f"**生成日期**: {self.timestamp}",
@@ -267,7 +267,7 @@ class UnifiedReportGenerator:
                 "$$V_{stall}=\\sqrt{\\frac{2W_0 g}{\\rho S C_{L\\max}}}$$",
                 "",
                 "### 4.4 曲线图",
-                *figure_lines if figure_lines else ["未生成可用曲线图。"],
+                *(figure_lines if figure_lines else ["未生成可用曲线图。"]),
                 "---",
             ]
         )
@@ -295,12 +295,15 @@ class UnifiedReportGenerator:
         ]:
             data = advanced_data.get(key, None) if isinstance(advanced_data, dict) else None
             if isinstance(data, dict):
-                stage_lines.append(f"### {key}")
-                stage_lines.append("| 参数 | 数值 |")
-                stage_lines.append("|:---|:---:|")
-                for k, v in data.items():
-                    stage_lines.append(f"| {k} | {self._fmt_val(v)} |")
-                stage_lines.append("")
+                if key == "stage7_optimization":
+                    stage_lines.extend(self._format_stage7_optimization(data))
+                else:
+                    stage_lines.append(f"### {key}")
+                    stage_lines.append("| 参数 | 数值 |")
+                    stage_lines.append("|:---|:---:|")
+                    for k, v in data.items():
+                        stage_lines.append(f"| {k} | {self._fmt_val(v)} |")
+                    stage_lines.append("")
 
         return "\n".join(
             [
@@ -383,6 +386,108 @@ class UnifiedReportGenerator:
             ]
         )
 
+    def _format_stage7_optimization(self, data: dict) -> list[str]:
+        lines: list[str] = []
+        lines.append("### stage7_optimization")
+        best = data.get("best_design_point", {}) if isinstance(data.get("best_design_point", {}), dict) else {}
+        lines.append("#### 7.1 最优设计点")
+        if best:
+            lines.append("| 设计变量 | 最优值 |")
+            lines.append("|:---|:---:|")
+            for k, v in best.items():
+                lines.append(f"| {self._format_stage7_key(k)} | {self._fmt_val(v)} |")
+        else:
+            lines.append("未给出最优设计点。")
+        lines.append("")
+
+        sensitivity = data.get("sensitivity_analysis", {})
+        lines.append("#### 7.2 敏感性统计")
+        if isinstance(sensitivity, dict) and sensitivity:
+            lines.append("| 设计变量 | 均值 | 标准差 | 最小值 | 最大值 |")
+            lines.append("|:---|:---:|:---:|:---:|:---:|")
+            for var_name, stats in sensitivity.items():
+                if isinstance(stats, dict):
+                    lines.append(
+                        f"| {self._format_stage7_key(var_name)} | {self._fmt_val(stats.get('mean'))} | {self._fmt_val(stats.get('std'))} | {self._fmt_val(stats.get('min'))} | {self._fmt_val(stats.get('max'))} |"
+                    )
+        else:
+            lines.append("未生成敏感性统计。")
+        lines.append("")
+
+        feasible = data.get("feasible_designs", [])
+        lines.append("#### 7.3 可行设计统计")
+        if isinstance(feasible, list):
+            lines.append(f"- 可行设计数量: {len(feasible)}")
+            summary = self._summarize_feasible_designs(feasible)
+            if summary:
+                lines.append("")
+                lines.append("| 设计变量 | 最小值 | 最大值 | 均值 |")
+                lines.append("|:---|:---:|:---:|:---:|")
+                for var_name, stats in summary.items():
+                    lines.append(
+                        f"| {self._format_stage7_key(var_name)} | {self._fmt_val(stats.get('min'))} | {self._fmt_val(stats.get('max'))} | {self._fmt_val(stats.get('mean'))} |"
+                    )
+        else:
+            lines.append("- 可行设计数量: -")
+        lines.append("")
+
+        lines.append("#### 7.4 示例可行方案（前 5 条）")
+        sample = feasible[:5] if isinstance(feasible, list) else []
+        if sample:
+            keys = self._collect_stage7_keys(sample)
+            lines.append("| 序号 | " + " | ".join(self._format_stage7_key(k) for k in keys) + " |")
+            lines.append("|:---|" + "|".join([":---:"] * len(keys)) + "|")
+            for idx, item in enumerate(sample, start=1):
+                row = [self._fmt_val(item.get(k)) for k in keys]
+                lines.append("| " + " | ".join([str(idx), *row]) + " |")
+        else:
+            lines.append("无可行方案。")
+        lines.append("")
+
+        recommendations = data.get("recommendations", [])
+        lines.append("#### 7.5 优化建议")
+        if isinstance(recommendations, list) and recommendations:
+            for rec in recommendations:
+                lines.append(f"- {rec}")
+        else:
+            lines.append("- 未提供优化建议。")
+        lines.append("")
+        return lines
+
+    def _collect_stage7_keys(self, designs: list[dict]) -> list[str]:
+        if not designs:
+            return []
+        keys: list[str] = []
+        for design in designs:
+            if isinstance(design, dict):
+                for k in design.keys():
+                    if k not in keys:
+                        keys.append(k)
+        return keys
+
+    def _summarize_feasible_designs(self, designs: list[dict]) -> dict:
+        summary: dict[str, dict[str, float]] = {}
+        if not designs:
+            return summary
+        keys = self._collect_stage7_keys(designs)
+        for k in keys:
+            values = [d.get(k) for d in designs if isinstance(d, dict) and isinstance(d.get(k), (int, float))]
+            if values:
+                summary[k] = {
+                    "min": min(values),
+                    "max": max(values),
+                    "mean": sum(values) / len(values),
+                }
+        return summary
+
+    def _format_stage7_key(self, key: str) -> str:
+        mapping = {
+            "aspect_ratio": "展弦比",
+            "sweep_quarter_chord_deg": "后掠角 (°)",
+            "wing_t_c": "厚弦比",
+        }
+        return mapping.get(key, key)
+
     def _collect_figures(self, output_dir: Path) -> list[dict]:
         candidates = [
             ("aero_cl_alpha.png", "升力曲线"),
@@ -390,8 +495,8 @@ class UnifiedReportGenerator:
             ("perf_thrust_curves.png", "推力需求/可用推力曲线"),
             ("perf_flight_envelope.png", "飞行包线"),
             ("struct_vn_diagram.png", "V-n 图"),
-            ("view_top_static.png", "三视图-俯视"),
-            ("view_side_static.png", "三视图-侧视"),
+            # ("view_top_static.png", "三视图-俯视"),
+            # ("view_side_static.png", "三视图-侧视"),
         ]
         figures: list[dict] = []
         for filename, title in candidates:
