@@ -295,7 +295,11 @@ class UnifiedReportGenerator:
         ]:
             data = advanced_data.get(key, None) if isinstance(advanced_data, dict) else None
             if isinstance(data, dict):
-                if key == "stage7_optimization":
+                if key == "stage2_aero":
+                    stage_lines.extend(self._format_stage2_aero(data))
+                elif key == "stage4_mission":
+                    stage_lines.extend(self._format_stage4_mission(data))
+                elif key == "stage7_optimization":
                     stage_lines.extend(self._format_stage7_optimization(data))
                 else:
                     stage_lines.append(f"### {key}")
@@ -385,6 +389,98 @@ class UnifiedReportGenerator:
                 "---",
             ]
         )
+
+    def _format_stage2_aero(self, data: dict) -> list[str]:
+        lines: list[str] = []
+        lines.append("### stage2_aero")
+        core_items = [
+            ("cd0", data.get("cd0")),
+            ("cd_total", data.get("cd_total")),
+            ("induced_drag", data.get("induced_drag")),
+            ("wave_drag", data.get("wave_drag")),
+            ("compressibility_drag", data.get("compressibility_drag")),
+            ("mach", data.get("mach")),
+        ]
+        lines.append("#### 2.1 气动核心指标")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|:---|:---:|")
+        for k, v in core_items:
+            lines.append(f"| {self._format_stage2_aero_key(k)} | {self._fmt_val(v)} |")
+        lines.append("")
+
+        cd0_breakdown = data.get("cd0_breakdown", {})
+        lines.append("#### 2.2 阻力分解")
+        if isinstance(cd0_breakdown, dict) and cd0_breakdown:
+            lines.append("| 部件 | CD0 |")
+            lines.append("|:---|:---:|")
+            for k, v in cd0_breakdown.items():
+                lines.append(f"| {k} | {self._fmt_val(v)} |")
+        else:
+            lines.append("未提供阻力分解。")
+        lines.append("")
+
+        reynolds = data.get("reynolds_numbers", {})
+        lines.append("#### 2.3 雷诺数")
+        if isinstance(reynolds, dict) and reynolds:
+            lines.append("| 部件 | Reynolds |")
+            lines.append("|:---|:---:|")
+            for k, v in reynolds.items():
+                lines.append(f"| {k} | {self._fmt_val(v)} |")
+        else:
+            lines.append("未提供雷诺数信息。")
+        lines.append("")
+        return lines
+
+    def _format_stage4_mission(self, data: dict) -> list[str]:
+        lines: list[str] = []
+        lines.append("### stage4_mission")
+        lines.append("#### 4.1 任务汇总")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|:---|:---:|")
+        lines.append(f"| 总燃油分数 | {self._fmt_val(data.get('total_fuel_fraction'))} |")
+        lines.append(f"| 总燃油质量 (kg) | {self._fmt_val(data.get('total_fuel_kg'))} |")
+        lines.append(f"| 任务时间 (s) | {self._fmt_val(data.get('mission_time_s'))} |")
+        lines.append(f"| 任务距离 (m) | {self._fmt_val(data.get('mission_distance_m'))} |")
+        lines.append("")
+
+        segments = data.get("segment_breakdown", [])
+        lines.append("#### 4.2 分段燃油与任务数据")
+        if isinstance(segments, list) and segments:
+            lines.append("| 段 | 燃油分数 | 距离 (m) | 时间 (s) | 速度 (m/s) | 高度 (m) |")
+            lines.append("|:---|:---:|:---:|:---:|:---:|:---:|")
+            for idx, seg in enumerate(segments, start=1):
+                if not isinstance(seg, dict):
+                    continue
+                details = seg.get("details", {}) if isinstance(seg.get("details", {}), dict) else {}
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            seg.get("type", str(idx)),
+                            self._fmt_val(seg.get("fuel_fraction")),
+                            self._fmt_val(details.get("distance_m")),
+                            self._fmt_val(details.get("time_s")),
+                            self._fmt_val(details.get("speed_m_s")),
+                            self._fmt_val(details.get("altitude_m")),
+                        ]
+                    )
+                    + " |"
+                )
+        else:
+            lines.append("未提供分段任务数据。")
+        lines.append("")
+        return lines
+
+    def _format_stage2_aero_key(self, key: str) -> str:
+        mapping = {
+            "cd0": "零升阻力系数 CD0",
+            "cd_total": "总阻力系数 CD",
+            "induced_drag": "诱导阻力系数",
+            "wave_drag": "波阻系数",
+            "compressibility_drag": "可压缩性阻力系数",
+            "mach": "马赫数",
+        }
+        return mapping.get(key, key)
 
     def _format_stage7_optimization(self, data: dict) -> list[str]:
         lines: list[str] = []
