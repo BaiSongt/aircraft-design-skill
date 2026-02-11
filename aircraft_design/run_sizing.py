@@ -211,8 +211,8 @@ def main():
         }
 
         json_path = run_dir / "design_data.json"
-        with open(json_path, "w") as f:
-            json.dump(output_data, f, indent=2)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"Data saved to {json_path}")
 
         # Generate Professional Report (V2)
@@ -220,11 +220,11 @@ def main():
         report_content_v2 = reporter_v2.generate_report(result, req)
 
         report_path_v2 = run_dir / "design_report_v2.md"
-        with open(report_path_v2, "w") as f:
+        with open(report_path_v2, "w", encoding="utf-8") as f:
             f.write(report_content_v2)
         print(f"Standard Report saved to {report_path_v2}")
         report_path = run_dir / "design_report.md"
-        with open(report_path, "w") as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(report_content_v2)
 
         # --- Extended Workflow (Staged) ---
@@ -385,7 +385,7 @@ def main():
             report_content_ext = reporter_ext.generate_report(result, req, plot_filenames)
 
             report_path_ext = run_dir / "technical_roadmap_report.md"
-            with open(report_path_ext, "w") as f:
+            with open(report_path_ext, "w", encoding="utf-8") as f:
                 f.write(report_content_ext)
             print(f"Technical Roadmap Report saved to {report_path_ext}")
 
@@ -575,8 +575,8 @@ def main():
         else:
             print("\nSkipping Extended Workflow (Analysis not converged or invalid).")
 
-        with open(json_path, "w") as f:
-            json.dump(output_data, f, indent=2)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
 
         # Notify GUI
         send_report_path_to_gui(run_dir)
