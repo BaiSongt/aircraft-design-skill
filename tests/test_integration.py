@@ -1,5 +1,5 @@
 import json
-from aircraft_design.run_sizing import main as run_sizing_main
+from aircraft_design.class2_preliminary.run_sizing import main as run_sizing_main
 from unittest.mock import patch
 
 
@@ -19,7 +19,7 @@ def test_full_integration_flow(tmp_path):
     output_dir = tmp_path / "output"
 
     # Mock sys.argv
-    test_args = ["run_sizing.py", str(input_file), "--output-dir", str(output_dir), "--project-name", "TestProject"]
+    test_args = ["run_sizing.py", str(input_file), "--output-dir", str(output_dir), "--project-name", "TestProject", "--no-viz"]
 
     with patch("sys.argv", test_args):
         try:
@@ -42,16 +42,16 @@ def test_full_integration_flow(tmp_path):
         data = json.load(f)
         assert data["outputs"]["converged"] is True
 
-    with open(run_dir / "design_report.md") as f:
+    with open(run_dir / "design_report.md", encoding="utf-8") as f:
         report = f.read()
         assert "# 飞机总体设计报告" in report
-        assert "## 5. 重量与重心分析" in report  # Check for new section
+        assert "## 5. 重量与重心分析" in report
 
 
 def test_performance_sla():
     """TC07: Performance test - Sizing loop should be fast."""
     import time
-    from aircraft_design.design_loop_orchestrator import sizing_loop, DesignRequirements, InitialGuess
+    from aircraft_design.class2_preliminary.design_loop_orchestrator import sizing_loop, DesignRequirements, InitialGuess
 
     req = DesignRequirements(
         range_m=2000e3,

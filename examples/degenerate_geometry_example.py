@@ -1,11 +1,11 @@
-from aircraft_design.degenerate_geometry import (
+from aircraft_design.class2_preliminary.degenerate_geometry import (
     degenerate_wing_to_plate,
     degenerate_wing_to_stick,
     degenerate_fuselage_to_cylinder,
     degenerate_propeller_to_disk,
     calculate_mass_properties,
 )
-from aircraft_design.geometry_modeling import (
+from aircraft_design.class2_preliminary.geometry_modeling import (
     create_wing,
     create_fuselage,
 )

@@ -1,10 +1,10 @@
 import pytest
-from aircraft_design.design_loop_orchestrator import (
+from aircraft_design.class2_preliminary.design_loop_orchestrator import (
     DesignRequirements,
     InitialGuess,
     sizing_loop,
 )
-from aircraft_design.units import CONST
+from aircraft_design.common.units import CONST
 
 
 def test_sizing_loop_convergence():

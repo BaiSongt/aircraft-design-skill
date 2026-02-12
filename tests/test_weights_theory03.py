@@ -1,6 +1,6 @@
 import pytest
-from aircraft_design.weights_structural import calculate_landing_gear_weight
-from aircraft_design.weights_system import (
+from aircraft_design.class2_preliminary.weights_structural import calculate_landing_gear_weight
+from aircraft_design.class2_preliminary.weights_system import (
     calculate_fuel_system_weight,
     calculate_propulsion_system_weight,
     calculate_flight_control_system_weight,

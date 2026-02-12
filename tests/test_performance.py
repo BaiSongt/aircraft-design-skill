@@ -1,5 +1,5 @@
 import pytest
-from aircraft_design.performance import calculate_sustained_turn_load, AeroPolar
+from aircraft_design.class2_preliminary.performance import calculate_sustained_turn_load, AeroPolar
 
 
 def test_calculate_sustained_turn_load():

@@ -1,5 +1,5 @@
-from aircraft_design.propulsion import build_propulsion_model, fuel_flow_n_s, thrust_available_n
-from aircraft_design.units import CONST
+from aircraft_design.class2_preliminary.propulsion import build_propulsion_model, fuel_flow_n_s, thrust_available_n
+from aircraft_design.common.units import CONST
 
 
 def test_propulsion_ab_logic():

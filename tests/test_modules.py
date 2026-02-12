@@ -1,7 +1,7 @@
-from aircraft_design.stability_dynamic import DynamicStabilityAnalyzer
-from aircraft_design.weight_balance import WeightBalanceAnalyzer
-from aircraft_design.geometry_constraints import GeometryConstraintChecker
-from aircraft_design.geometry_detailed import DetailedWing, DetailedFuselage
+from aircraft_design.class2_preliminary.stability_dynamic import DynamicStabilityAnalyzer
+from aircraft_design.class2_preliminary.weight_balance import WeightBalanceAnalyzer
+from aircraft_design.class2_preliminary.geometry_constraints import GeometryConstraintChecker
+from aircraft_design.class3_detailed.geometry_detailed import DetailedWing, DetailedFuselage
 
 
 def test_dynamic_stability_logic(mock_sized_aircraft):

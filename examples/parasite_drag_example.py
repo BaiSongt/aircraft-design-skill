@@ -1,9 +1,9 @@
-from aircraft_design.parasite_drag_enhanced import (
+from aircraft_design.class2_preliminary.parasite_drag_enhanced import (
     calculate_parasite_drag_enhanced,
     calculate_parasite_drag_sweep,
     generate_parasite_drag_envelope,
 )
-from aircraft_design.geometry_modeling import create_wing
+from aircraft_design.class2_preliminary.geometry_modeling import create_wing
 
 
 def main():

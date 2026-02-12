@@ -12,7 +12,7 @@ def _ensure_project_root() -> None:
 class TestGeometryDerived(unittest.TestCase):
     def test_mac_calculation_simple(self):
         _ensure_project_root()
-        from aircraft_design.geometry_shape import calculate_mac_properties
+        from aircraft_design.class3_detailed.geometry_shape import calculate_mac_properties
 
         # Rectangular wing (taper=1.0, sweep=0)
         # S = 10, AR = 10 => b = 10, c = 1
@@ -25,7 +25,7 @@ class TestGeometryDerived(unittest.TestCase):
 
     def test_mac_calculation_tapered(self):
         _ensure_project_root()
-        from aircraft_design.geometry_shape import calculate_mac_properties
+        from aircraft_design.class3_detailed.geometry_shape import calculate_mac_properties
 
         # Tapered wing (taper=0.0, sweep=0) -> Triangle
         # S=10, AR=10 => b=10, c_root=2
@@ -41,7 +41,7 @@ class TestGeometryDerived(unittest.TestCase):
 
     def test_mac_calculation_swept(self):
         _ensure_project_root()
-        from aircraft_design.geometry_shape import calculate_mac_properties
+        from aircraft_design.class3_detailed.geometry_shape import calculate_mac_properties
 
         # Swept wing
         # AR=8, taper=0.45, sweep=25 deg

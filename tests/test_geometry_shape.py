@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from aircraft_design.geometry_shape import (
+from aircraft_design.class3_detailed.geometry_shape import (
     derive_tail_layout,
     fuselage_stations_from_control_points,
     geometry_shape_from_inputs,

@@ -1,11 +1,11 @@
 import pytest
-from aircraft_design.weights_structural import (
+from aircraft_design.class2_preliminary.weights_structural import (
     calculate_wing_structural_weight,
     calculate_fuselage_structural_weight,
     calculate_landing_gear_weight,
 )
-from aircraft_design.propulsion import build_propulsion_model, thrust_available_n, fuel_flow_n_s
-from aircraft_design.advanced_design import (
+from aircraft_design.class2_preliminary.propulsion import build_propulsion_model, thrust_available_n, fuel_flow_n_s
+from aircraft_design.class2_preliminary.advanced_design import (
     execute_stage2_aero,
     execute_stage3_propulsion,
     execute_stage4_mission,
@@ -13,8 +13,8 @@ from aircraft_design.advanced_design import (
     execute_stage6_structures,
     execute_stage7_optimization,
 )
-from aircraft_design.units import CONST
-from aircraft_design.constraints import AeroPolar
+from aircraft_design.common.units import CONST
+from aircraft_design.class2_preliminary.constraints import AeroPolar
 
 
 def test_structural_weights_composite_correction():
@@ -202,7 +202,7 @@ def test_stage2_stage3_pipeline_basics():
 
     assert stage2.cd0 > 0.0
     assert stage2.cd_total >= stage2.cd0
-    assert "cd0_fuselage" in stage2.cd0_breakdown
+    assert "Fuselage" in stage2.cd0_breakdown
 
     prop_in = {
         "type": "jet",

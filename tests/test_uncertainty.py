@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from aircraft_design.fixed_wing_overall import run_fixed_wing_overall_design
+from aircraft_design.class2_preliminary.fixed_wing_overall import run_fixed_wing_overall_design
 
 
 class TestUncertainty(unittest.TestCase):

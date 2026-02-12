@@ -1,6 +1,6 @@
 import unittest
 
-from aircraft_design.atmosphere import isa_tropopause
+from aircraft_design.common.atmosphere import isa_tropopause
 
 
 class TestAtmosphere(unittest.TestCase):

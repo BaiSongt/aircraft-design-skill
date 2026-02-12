@@ -1,7 +1,7 @@
 import unittest
 
-from aircraft_design.geometry_detailed import naca4_coordinates
-from aircraft_design.visualization_3d import (
+from aircraft_design.class3_detailed.geometry_detailed import naca4_coordinates
+from aircraft_design.utils.visualization_3d import (
     build_fuselage_loft,
     build_vertical_tail_airfoil_loft_mesh,
     build_wing_airfoil_loft_mesh,

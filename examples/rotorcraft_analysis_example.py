@@ -1,4 +1,4 @@
-from aircraft_design.rotorcraft_analysis import (
+from aircraft_design.class2_preliminary.rotorcraft_analysis import (
     calculate_rotor_aerodynamics,
     calculate_rotor_performance,
     calculate_rotor_performance_envelope,

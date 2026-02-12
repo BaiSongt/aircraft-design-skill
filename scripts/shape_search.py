@@ -18,7 +18,7 @@ def _ensure_project_root() -> None:
 
 def _build_geom_fallback(inputs: dict) -> ParametricGeometry | None:
     _ensure_project_root()
-    from aircraft_design.geometry_parametric import (
+    from aircraft_design.class3_detailed.geometry_parametric import (
         Fuselage,
         ParametricGeometry,
         Tail,
@@ -63,7 +63,7 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 
 def _candidate_geom(base: ParametricGeometry, cfg: dict, rng: random.Random) -> ParametricGeometry:
     _ensure_project_root()
-    from aircraft_design.geometry_parametric import Fuselage, ParametricGeometry, Tail, WingPlanform
+    from aircraft_design.class3_detailed.geometry_parametric import Fuselage, ParametricGeometry, Tail, WingPlanform
 
     ar_min, ar_max = _get_range(cfg, "aspect_ratio", base.wing.aspect_ratio * 0.8, base.wing.aspect_ratio * 1.2)
     taper_min, taper_max = _get_range(cfg, "taper_ratio", 0.25, 0.65)
@@ -104,7 +104,7 @@ def _mesh_html_for_candidate(
     fus_stations: list | None,
 ) -> None:
     _ensure_project_root()
-    from aircraft_design.visualization_3d import (
+    from aircraft_design.utils.visualization_3d import (
         MeshPart,
         build_fuselage_cylinder,
         build_fuselage_loft,
@@ -184,10 +184,10 @@ def _mesh_html_for_candidate(
 
 def main() -> int:
     _ensure_project_root()
-    from aircraft_design.fixed_wing_overall import run_fixed_wing_overall_design
-    from aircraft_design.geometry_detailed import geometry_detailed_from_inputs
-    from aircraft_design.geometry_shape import geometry_shape_from_inputs
-    from aircraft_design.input_schema import normalize_inputs, validate_run_inputs
+    from aircraft_design.class2_preliminary.fixed_wing_overall import run_fixed_wing_overall_design
+    from aircraft_design.class3_detailed.geometry_detailed import geometry_detailed_from_inputs
+    from aircraft_design.class3_detailed.geometry_shape import geometry_shape_from_inputs
+    from aircraft_design.class2_preliminary.input_schema import normalize_inputs, validate_run_inputs
 
     if len(sys.argv) < 2:
         print("Usage: python scripts/shape_search.py <input.json> [--n N] [--seed S]")

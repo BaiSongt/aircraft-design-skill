@@ -1,6 +1,6 @@
 import unittest
 
-from aircraft_design.visualization_3d import (
+from aircraft_design.utils.visualization_3d import (
     build_fuselage_cylinder,
     build_tail_mesh,
     build_wing_mesh,

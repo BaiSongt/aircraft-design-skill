@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from aircraft_design.run_sizing import main as run_sizing_main
+from aircraft_design.class2_preliminary.run_sizing import main as run_sizing_main
 
 
 def _run_sizing_with_input(input_path: Path, output_dir: Path, project_name: str) -> Path:

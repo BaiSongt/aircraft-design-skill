@@ -1,4 +1,4 @@
-from aircraft_design.geometry_modeling import (
+from aircraft_design.class2_preliminary.geometry_modeling import (
     create_wing,
     create_fuselage,
     create_horizontal_tail,

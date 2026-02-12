@@ -6,7 +6,7 @@ import math
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from aircraft_design.geometry_shape import calculate_cross_sectional_area_distribution
+from aircraft_design.class3_detailed.geometry_shape import calculate_cross_sectional_area_distribution
 
 
 class TestGeometryAreaRule(unittest.TestCase):

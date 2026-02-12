@@ -1,0 +1,29 @@
+# AICFD Agent Core Dependencies
+
+# Data manipulation
+numpy
+pandas
+
+# Plotting
+matplotlib
+
+# Templating engine
+jinja2
+
+# Gmsh Python API (for meshing)
+gmsh
+
+# pyFoam (for advanced OpenFOAM interaction, if needed later)
+# Although not strictly used in current implementation,
+# it's a common tool for OpenFOAM automation.
+pyfoam
+
+# --- AI Integration Dependencies (for future use) ---
+# For deep learning models
+# torch
+# scikit-learn
+
+# --- API Server Dependencies (for future UI/API layer) ---
+# fastapi
+# uvicorn
+# python-multipart

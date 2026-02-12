@@ -1,11 +1,11 @@
-from aircraft_design.loads_analysis import (
+from aircraft_design.class3_detailed.loads_analysis import (
     calculate_aerodynamic_loads,
     calculate_inertial_loads,
     calculate_structural_loads,
     calculate_load_envelope,
     calculate_flutter_analysis,
 )
-from aircraft_design.geometry_modeling import (
+from aircraft_design.class2_preliminary.geometry_modeling import (
     create_wing,
     create_fuselage,
     assemble_aircraft,

@@ -1,4 +1,4 @@
-from aircraft_design.vspaero_interface import (
+from aircraft_design.class3_detailed.vspaero_interface import (
     generate_vspaero_input,
     parse_vspaero_output,
     calculate_lift_distribution,
@@ -6,7 +6,7 @@ from aircraft_design.vspaero_interface import (
     calculate_moment_coefficients,
     generate_vspaero_sweep,
 )
-from aircraft_design.geometry_modeling import (
+from aircraft_design.class3_detailed.geometry_modeling import (
     create_wing,
     create_fuselage,
     create_horizontal_tail,
@@ -73,7 +73,7 @@ def main():
     print(f"   文件名: {input_file}")
 
     print("\n3. 模拟VSPAERO输出")
-    from aircraft_design.vspaero_interface import VSPAEROResult
+    from aircraft_design.class3_detailed.vspaero_interface import VSPAEROResult
 
     mock_result = VSPAEROResult(
         cl=0.5,

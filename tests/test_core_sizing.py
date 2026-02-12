@@ -1,6 +1,6 @@
 import pytest
-from aircraft_design.design_loop_orchestrator import sizing_loop
-from aircraft_design.fixed_wing_overall import run_fixed_wing_overall_design
+from aircraft_design.class2_preliminary.design_loop_orchestrator import sizing_loop
+from aircraft_design.class2_preliminary.fixed_wing_overall import run_fixed_wing_overall_design
 
 
 def test_sizing_loop_convergence(standard_requirements, standard_guess):

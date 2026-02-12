@@ -1,6 +1,6 @@
 import unittest
 
-from aircraft_design.weights_class1 import EmptyWeightModel, solve_mtow_class1_kg
+from aircraft_design.class1_conceptual.weights_class1 import EmptyWeightModel, solve_mtow_class1_kg
 
 
 class TestWeightsClass1(unittest.TestCase):

@@ -5,7 +5,7 @@ import os
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from aircraft_design.visualization_3d import build_wing_airfoil_loft_mesh
+from aircraft_design.utils.visualization_3d import build_wing_airfoil_loft_mesh
 
 
 class TestVisualizationControlSurfaces(unittest.TestCase):

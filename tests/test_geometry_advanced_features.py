@@ -4,7 +4,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from aircraft_design.geometry_shape import geometry_shape_from_inputs, verify_geometric_constraints
+from aircraft_design.class3_detailed.geometry_shape import geometry_shape_from_inputs, verify_geometric_constraints
 
 
 class TestGeometryAdvancedFeatures(unittest.TestCase):

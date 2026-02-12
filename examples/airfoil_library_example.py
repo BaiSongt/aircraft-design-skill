@@ -1,4 +1,4 @@
-from aircraft_design.airfoil_library import (
+from aircraft_design.config.airfoil_library import (
     generate_naca4_airfoil,
     generate_naca5_airfoil,
     generate_naca6_airfoil,

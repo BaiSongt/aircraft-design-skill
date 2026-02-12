@@ -5,13 +5,13 @@ import json
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from aircraft_design.geometry_shape import (
+from aircraft_design.class3_detailed.geometry_shape import (
     geometry_shape_from_inputs,
     calculate_cross_sectional_area_distribution,
     verify_geometric_constraints,
 )
-from aircraft_design.visualization_3d import generate_three_view_html
-from aircraft_design.openvsp_bridge import write_openvsp_script as generate_openvsp_script
+from aircraft_design.utils.visualization_3d import generate_three_view_html
+from aircraft_design.class3_detailed.openvsp_bridge import write_openvsp_script as generate_openvsp_script
 
 
 def run_demo():

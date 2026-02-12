@@ -1,4 +1,4 @@
-from aircraft_design.surface_analysis import (
+from aircraft_design.class2_preliminary.surface_analysis import (
     generate_surface_mesh,
     calculate_normals,
     calculate_curvature,
@@ -6,8 +6,8 @@ from aircraft_design.surface_analysis import (
     calculate_surface_centroid,
     calculate_surface_volume,
 )
-from aircraft_design.degenerate_geometry import degenerate_wing_to_plate
-from aircraft_design.geometry_modeling import create_wing
+from aircraft_design.class2_preliminary.degenerate_geometry import degenerate_wing_to_plate
+from aircraft_design.class2_preliminary.geometry_modeling import create_wing
 import numpy as np
 
 
