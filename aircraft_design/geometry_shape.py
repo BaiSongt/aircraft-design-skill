@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass
 from math import cos, radians, sin, sqrt, tan
 from typing import Any
 
 from .geometry_detailed import naca4_coordinates
+from .wing_controls import parse_wing_controls_config, validate_wing_controls, calculate_control_surface_weight
+from .wingtip import parse_wingtip_config, validate_wingtip_config, calculate_wingtip_effectiveness
+from .landing_gear import parse_landing_gear, validate_landing_gear, calculate_landing_gear_weight
+from .engine_library import parse_engine_config, validate_engine_config
+from .nacelle import parse_nacelle_config, validate_nacelle_config, calculate_nacelle_drag
+from .fuselage_canopy import parse_canopy_config, validate_canopy_config, apply_canopy_to_stations, calculate_canopy_weight
+from .fuselage_openings import parse_opening_config, validate_opening_config, calculate_opening_weight, apply_openings_to_stations
+from .hardpoint_validation import parse_hardpoint_config, validate_hardpoint_config, add_hardpoints_to_stations
 
 
 @dataclass(frozen=True)
@@ -1444,3 +1453,1455 @@ def derive_tail_layout(
         "surfaces": surfaces,
         "equivalent": equivalent,
     }
+
+
+def integrate_wing_controls(wing_config: dict, path: str) -> dict[str, Any]:
+    result = wing_config.copy()
+    
+    if "controls" in wing_config:
+        controls = wing_config["controls"]
+        if isinstance(controls, dict):
+            parsed_controls = parse_wing_controls_config(controls, f"{path}.controls")
+            result["controls"] = parsed_controls
+    else:
+        result["controls"] = parse_wing_controls_config({}, f"{path}.controls")
+    
+    return result
+
+
+def integrate_wingtip(wing_config: dict, path: str) -> dict[str, Any]:
+    result = wing_config.copy()
+    
+    if "wingtip" in wing_config:
+        wingtip = wing_config["wingtip"]
+        if isinstance(wingtip, dict):
+            parsed_wingtip = parse_wingtip_config(wingtip, f"{path}.wingtip")
+            result["wingtip"] = parsed_wingtip
+    
+    return result
+
+
+def validate_extended_geometry(
+    geometry: dict[str, Any],
+) -> list[dict[str, Any]]:
+    violations = []
+    
+    fuselage = geometry.get("fuselage", {})
+    wing = geometry.get("wing", {})
+    tail = geometry.get("tail", {})
+    
+    fuselage_length = fuselage.get("length_m", 10.0)
+    fuselage_diameter = fuselage.get("diameter_m", 1.5)
+    wing_span = wing.get("span_m", 10.0)
+    wing_chord = wing.get("root_chord_m", 1.5)
+    mtow_kg = geometry.get("mtow_kg", 1000.0)
+    
+    if "controls" in wing:
+        controls_violations = validate_wing_controls(
+            wing["controls"],
+            wing_span,
+            wing_chord,
+            wing.get("taper_ratio", 1.0),
+            wing.get("sweep_deg", 0.0),
+        )
+        violations.extend(controls_violations)
+    
+    if "wingtip" in wing:
+        wingtip_violations = validate_wingtip_config(
+            wing["wingtip"],
+            wing_span,
+            wing_chord,
+            wing.get("taper_ratio", 1.0),
+        )
+        violations.extend(wingtip_violations)
+    
+    if "landing_gear" in geometry:
+        landing_gear = geometry["landing_gear"]
+        landing_gear_violations = validate_landing_gear(
+            landing_gear,
+            fuselage_length,
+            wing_span,
+            mtow_kg,
+        )
+        violations.extend(landing_gear_violations)
+    
+    if "engine" in geometry:
+        engine = geometry["engine"]
+        engine_violations = validate_engine_config(engine, mtow_kg)
+        violations.extend(engine_violations)
+    
+    if "nacelle" in geometry:
+        nacelle = geometry["nacelle"]
+        nacelle_violations = validate_nacelle_config(
+            nacelle,
+            wing_chord,
+            engine.get("diameter_m", 0.5) if "engine" in geometry else 0.5,
+        )
+        violations.extend(nacelle_violations)
+    
+    if "canopy" in fuselage:
+        canopy = fuselage["canopy"]
+        canopy_violations = validate_canopy_config(
+            canopy,
+            fuselage_length,
+            fuselage_diameter,
+        )
+        violations.extend(canopy_violations)
+    
+    if "openings" in fuselage:
+        stations = fuselage.get("stations", [])
+        for opening in fuselage["openings"]:
+            if isinstance(opening, dict):
+                opening_violations = validate_opening_config(
+                    opening,
+                    fuselage_length,
+                    fuselage_diameter,
+                    stations,
+                )
+                violations.extend(opening_violations)
+    
+    if "hardpoints" in geometry:
+        stations = fuselage.get("stations", [])
+        hardpoints = geometry["hardpoints"]
+        for i, hp in enumerate(hardpoints):
+            if isinstance(hp, dict):
+                hp_violations = validate_hardpoint_config(
+                    hp,
+                    fuselage_length,
+                    fuselage_diameter,
+                    wing_span,
+                    stations,
+                    hardpoints[:i] + hardpoints[i+1:],
+                )
+                violations.extend(hp_violations)
+    
+    return violations
+
+
+def calculate_extended_weights(
+    geometry: dict[str, Any],
+) -> dict[str, float]:
+    weights = {}
+    
+    wing = geometry.get("wing", {})
+    fuselage = geometry.get("fuselage", {})
+    mtow_kg = geometry.get("mtow_kg", 1000.0)
+    fuselage_diameter = fuselage.get("diameter_m", 1.5)
+    fuselage_length = fuselage.get("length_m", 10.0)
+    wing_span = wing.get("span_m", 10.0)
+    wing_chord = wing.get("root_chord_m", 1.5)
+    
+    if "controls" in wing:
+        control_weight = calculate_control_surface_weight(wing["controls"], wing_span, wing_chord)
+        weights["control_surfaces_weight_kg"] = control_weight["total_weight_kg"]
+    
+    if "landing_gear" in geometry:
+        gear_weight = calculate_landing_gear_weight(geometry["landing_gear"], mtow_kg)
+        weights["landing_gear_weight_kg"] = gear_weight["landing_gear_weight_kg"]
+    
+    if "nacelle" in geometry:
+        cruise_speed_ktas = geometry.get("cruise_speed_ktas", 150.0)
+        dynamic_pressure = 0.5 * 1.225 * (cruise_speed_ktas * 0.514444) ** 2
+        nacelle_drag = calculate_nacelle_drag(geometry["nacelle"], cruise_speed_ktas, dynamic_pressure)
+        weights["nacelle_drag_N"] = nacelle_drag["drag_force_n"]
+    
+    if "canopy" in fuselage:
+        canopy_weight = calculate_canopy_weight(fuselage["canopy"], fuselage_diameter, fuselage_length)
+        weights["canopy_weight_kg"] = canopy_weight["total_weight_kg"]
+    
+    if "openings" in fuselage:
+        total_opening_weight = 0.0
+        for opening in fuselage["openings"]:
+            if isinstance(opening, dict):
+                opening_weight = calculate_opening_weight(opening, fuselage_diameter)
+                total_opening_weight += opening_weight["weight_kg"]
+        weights["openings_weight_kg"] = total_opening_weight
+    
+    return weights
+
+
+def apply_extended_geometry(
+    fuselage: dict[str, Any],
+    wing: dict[str, Any],
+) -> dict[str, Any]:
+    modified_fuselage = fuselage.copy()
+    modified_wing = wing.copy()
+    
+    fuselage_length = fuselage.get("length_m", 10.0)
+    fuselage_diameter = fuselage.get("diameter_m", 1.5)
+    
+    if "canopy" in fuselage and "stations" in fuselage:
+        stations = fuselage["stations"]
+        if isinstance(stations, list):
+            modified_stations = apply_canopy_to_stations(stations, fuselage["canopy"], fuselage_length)
+            modified_fuselage["stations"] = modified_stations
+    
+    if "openings" in fuselage and "stations" in fuselage:
+        stations = modified_fuselage.get("stations", fuselage.get("stations", []))
+        if isinstance(stations, list):
+            modified_stations = apply_openings_to_stations(
+                stations,
+                fuselage["openings"],
+                fuselage_length,
+                fuselage_diameter,
+            )
+            modified_fuselage["stations"] = modified_stations
+    
+    if "hardpoints" in fuselage and "stations" in fuselage:
+        wing_span = wing.get("span_m", 10.0)
+        stations = modified_fuselage.get("stations", fuselage.get("stations", []))
+        if isinstance(stations, list):
+            modified_stations = add_hardpoints_to_stations(
+                stations,
+                fuselage["hardpoints"],
+                fuselage_length,
+                fuselage_diameter,
+            )
+            modified_fuselage["stations"] = modified_stations
+    
+    return {
+        "fuselage": modified_fuselage,
+        "wing": modified_wing,
+    }
+
+
+def resolve_extended_geometry_bundle(
+    geometry_dict: dict[str, Any],
+    path: str = "geometry",
+) -> dict[str, Any]:
+    resolved = {}
+    
+    if "fuselage" in geometry_dict:
+        resolved["fuselage"] = geometry_dict["fuselage"].copy()
+        
+        if "canopy" in geometry_dict.get("fuselage", {}):
+            resolved["fuselage"]["canopy"] = parse_canopy_config(
+                geometry_dict["fuselage"]["canopy"],
+                f"{path}.fuselage.canopy",
+            )
+        
+        if "openings" in geometry_dict.get("fuselage", {}):
+            openings = []
+            for i, opening in enumerate(geometry_dict["fuselage"]["openings"]):
+                if isinstance(opening, dict):
+                    parsed = parse_opening_config(
+                        opening,
+                        f"{path}.fuselage.openings[{i}]",
+                    )
+                    openings.append(parsed)
+            resolved["fuselage"]["openings"] = openings
+        
+        if "hardpoints" in geometry_dict.get("fuselage", {}):
+            hardpoints = []
+            for i, hp in enumerate(geometry_dict["fuselage"]["hardpoints"]):
+                if isinstance(hp, dict):
+                    parsed = parse_hardpoint_config(
+                        hp,
+                        f"{path}.fuselage.hardpoints[{i}]",
+                    )
+                    hardpoints.append(parsed)
+            resolved["fuselage"]["hardpoints"] = hardpoints
+    
+    if "wing" in geometry_dict:
+        resolved["wing"] = integrate_wing_controls(
+            geometry_dict["wing"],
+            f"{path}.wing",
+        )
+        resolved["wing"] = integrate_wingtip(
+            resolved["wing"],
+            f"{path}.wing",
+        )
+    
+    if "landing_gear" in geometry_dict:
+        resolved["landing_gear"] = parse_landing_gear(
+            geometry_dict["landing_gear"],
+            f"{path}.landing_gear",
+        )
+    
+    if "engine" in geometry_dict:
+        resolved["engine"] = parse_engine_config(
+            geometry_dict["engine"],
+            f"{path}.engine",
+        )
+    
+    if "nacelle" in geometry_dict:
+        resolved["nacelle"] = parse_nacelle_config(
+            geometry_dict["nacelle"],
+            f"{path}.nacelle",
+        )
+    
+    return resolved
+
+
+def parse_geometry_integrated_config(
+    integrated_dict: dict[str, Any],
+    path: str = "geometry_integrated",
+) -> dict[str, Any]:
+    """
+    解析几何特征整合配置
+    
+    Args:
+        integrated_dict: 包含所有几何特征模块的配置字典
+        path: 配置路径前缀
+    
+    Returns:
+        解析后的几何特征配置字典
+    """
+    resolved = {}
+    
+    if "wing_controls" in integrated_dict:
+        resolved["wing_controls"] = parse_wing_controls_config(
+            integrated_dict["wing_controls"],
+            f"{path}.wing_controls",
+        )
+    
+    if "wingtip" in integrated_dict:
+        resolved["wingtip"] = parse_wingtip_config(
+            integrated_dict["wingtip"],
+            f"{path}.wingtip",
+        )
+    
+    if "landing_gear" in integrated_dict:
+        resolved["landing_gear"] = parse_landing_gear(
+            integrated_dict["landing_gear"],
+            f"{path}.landing_gear",
+        )
+    
+    if "engine_library" in integrated_dict:
+        resolved["engine_library"] = parse_engine_config(
+            integrated_dict["engine_library"],
+            f"{path}.engine_library",
+        )
+    
+    if "nacelle" in integrated_dict:
+        resolved["nacelle"] = parse_nacelle_config(
+            integrated_dict["nacelle"],
+            f"{path}.nacelle",
+        )
+    
+    if "fuselage_canopy" in integrated_dict:
+        resolved["fuselage_canopy"] = parse_canopy_config(
+            integrated_dict["fuselage_canopy"],
+            f"{path}.fuselage_canopy",
+        )
+    
+    if "fuselage_openings" in integrated_dict:
+        openings_dict = integrated_dict["fuselage_openings"]
+        resolved["fuselage_openings"] = {}
+        
+        if "cargo_door" in openings_dict:
+            resolved["fuselage_openings"]["cargo_door"] = parse_opening_config(
+                openings_dict["cargo_door"],
+                f"{path}.fuselage_openings.cargo_door",
+            )
+        
+        if "passenger_door" in openings_dict:
+            resolved["fuselage_openings"]["passenger_door"] = parse_opening_config(
+                openings_dict["passenger_door"],
+                f"{path}.fuselage_openings.passenger_door",
+            )
+        
+        if "windows" in openings_dict:
+            resolved["fuselage_openings"]["windows"] = parse_opening_config(
+                openings_dict["windows"],
+                f"{path}.fuselage_openings.windows",
+            )
+        
+        if "emergency_doors" in openings_dict:
+            resolved["fuselage_openings"]["emergency_doors"] = parse_opening_config(
+                openings_dict["emergency_doors"],
+                f"{path}.fuselage_openings.emergency_doors",
+            )
+    
+    if "hardpoint_validation" in integrated_dict:
+        hardpoints_dict = integrated_dict["hardpoint_validation"]
+        resolved["hardpoint_validation"] = {}
+        
+        if "wing_hardpoints" in hardpoints_dict:
+            wing_hardpoints = hardpoints_dict["wing_hardpoints"]
+            resolved["hardpoint_validation"]["wing_hardpoints"] = {}
+            
+            if "outer_stations" in wing_hardpoints:
+                resolved["hardpoint_validation"]["wing_hardpoints"]["outer_stations"] = parse_hardpoint_config(
+                    wing_hardpoints["outer_stations"],
+                    f"{path}.hardpoint_validation.wing_hardpoints.outer_stations",
+                )
+            
+            if "center_stations" in wing_hardpoints:
+                resolved["hardpoint_validation"]["wing_hardpoints"]["center_stations"] = parse_hardpoint_config(
+                    wing_hardpoints["center_stations"],
+                    f"{path}.hardpoint_validation.wing_hardpoints.center_stations",
+                )
+            
+            if "inner_stations" in wing_hardpoints:
+                resolved["hardpoint_validation"]["wing_hardpoints"]["inner_stations"] = parse_hardpoint_config(
+                    wing_hardpoints["inner_stations"],
+                    f"{path}.hardpoint_validation.wing_hardpoints.inner_stations",
+                )
+        
+        if "fuselage_hardpoints" in hardpoints_dict:
+            fuselage_hardpoints = hardpoints_dict["fuselage_hardpoints"]
+            resolved["hardpoint_validation"]["fuselage_hardpoints"] = {}
+            
+            if "centerline_station" in fuselage_hardpoints:
+                resolved["hardpoint_validation"]["fuselage_hardpoints"]["centerline_station"] = parse_hardpoint_config(
+                    fuselage_hardpoints["centerline_station"],
+                    f"{path}.hardpoint_validation.fuselage_hardpoints.centerline_station",
+                )
+    
+    return resolved
+
+
+def validate_geometry_integrated(
+    integrated_config: dict[str, Any],
+    geometry: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    验证几何特征整合配置
+    
+    Args:
+        integrated_config: 解析后的几何特征配置
+        geometry: 基础几何参数
+    
+    Returns:
+        验证结果字典，包含违规列表和统计信息
+    """
+    violations = []
+    
+    fuselage = geometry.get("fuselage", {})
+    wing = geometry.get("wing", {})
+    tail = geometry.get("tail", {})
+    
+    fuselage_length = fuselage.get("length_m", 10.0)
+    fuselage_diameter = fuselage.get("diameter_m", 1.5)
+    wing_span = wing.get("span_m", 10.0)
+    wing_chord = wing.get("root_chord_m", 1.5)
+    mtow_kg = geometry.get("mtow_kg", 1000.0)
+    
+    if "wing_controls" in integrated_config:
+        controls = integrated_config["wing_controls"]
+        controls_violations = validate_wing_controls(
+            controls,
+            wing_span,
+            wing_chord,
+            wing.get("taper_ratio", 1.0),
+            wing.get("sweep_deg", 0.0),
+        )
+        violations.extend(controls_violations)
+    
+    if "wingtip" in integrated_config:
+        wingtip = integrated_config["wingtip"]
+        wingtip_violations = validate_wingtip_config(
+            wingtip,
+            wing_span,
+            wing_chord,
+            wing.get("taper_ratio", 1.0),
+        )
+        violations.extend(wingtip_violations)
+    
+    if "landing_gear" in integrated_config:
+        landing_gear = integrated_config["landing_gear"]
+        landing_gear_violations = validate_landing_gear(
+            landing_gear,
+            fuselage_length,
+            wing_span,
+            mtow_kg,
+        )
+        violations.extend(landing_gear_violations)
+    
+    if "engine_library" in integrated_config:
+        engine = integrated_config["engine_library"]
+        engine_violations = validate_engine_config(engine, mtow_kg)
+        violations.extend(engine_violations)
+    
+    if "nacelle" in integrated_config:
+        nacelle = integrated_config["nacelle"]
+        engine_diameter = integrated_config.get("engine_library", {}).get("diameter_m", 0.5)
+        nacelle_violations = validate_nacelle_config(
+            nacelle,
+            wing_chord,
+            engine_diameter,
+        )
+        violations.extend(nacelle_violations)
+    
+    if "fuselage_canopy" in integrated_config:
+        canopy = integrated_config["fuselage_canopy"]
+        canopy_violations = validate_canopy_config(
+            canopy,
+            fuselage_length,
+            fuselage_diameter,
+        )
+        violations.extend(canopy_violations)
+    
+    if "fuselage_openings" in integrated_config:
+        stations = fuselage.get("stations", [])
+        openings = integrated_config["fuselage_openings"]
+        
+        for opening_type, opening_config in openings.items():
+            if isinstance(opening_config, dict):
+                opening_violations = validate_opening_config(
+                    opening_config,
+                    fuselage_length,
+                    fuselage_diameter,
+                    stations,
+                )
+                violations.extend(opening_violations)
+    
+    if "hardpoint_validation" in integrated_config:
+        stations = fuselage.get("stations", [])
+        hardpoints = integrated_config["hardpoint_validation"]
+        
+        all_hardpoints = []
+        if "wing_hardpoints" in hardpoints:
+            wing_hardpoints = hardpoints["wing_hardpoints"]
+            for hp_type, hp_config in wing_hardpoints.items():
+                if isinstance(hp_config, dict):
+                    all_hardpoints.append(hp_config)
+        
+        if "fuselage_hardpoints" in hardpoints:
+            fuselage_hardpoints = hardpoints["fuselage_hardpoints"]
+            for hp_type, hp_config in fuselage_hardpoints.items():
+                if isinstance(hp_config, dict):
+                    all_hardpoints.append(hp_config)
+        
+        for i, hp in enumerate(all_hardpoints):
+            hp_violations = validate_hardpoint_config(
+                hp,
+                fuselage_length,
+                fuselage_diameter,
+                wing_span,
+                stations,
+                all_hardpoints[:i] + all_hardpoints[i+1:],
+            )
+            violations.extend(hp_violations)
+    
+    critical_violations = [v for v in violations if v.get("severity") == "critical"]
+    warning_violations = [v for v in violations if v.get("severity") == "warning"]
+    
+    return {
+        "violations": violations,
+        "total_violations": len(violations),
+        "critical_violations": len(critical_violations),
+        "warning_violations": len(warning_violations),
+        "is_valid": len(critical_violations) == 0,
+    }
+
+
+def calculate_geometry_integrated_performance(
+    integrated_config: dict[str, Any],
+    geometry: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    计算几何特征综合性能
+    
+    Args:
+        integrated_config: 解析后的几何特征配置
+        geometry: 基础几何参数
+    
+    Returns:
+        性能计算结果字典
+    """
+    performance = {}
+    
+    fuselage = geometry.get("fuselage", {})
+    wing = geometry.get("wing", {})
+    
+    fuselage_diameter = fuselage.get("diameter_m", 1.5)
+    fuselage_length = fuselage.get("length_m", 10.0)
+    wing_span = wing.get("span_m", 10.0)
+    wing_chord = wing.get("root_chord_m", 1.5)
+    mtow_kg = geometry.get("mtow_kg", 1000.0)
+    cruise_speed_ktas = geometry.get("cruise_speed_ktas", 150.0)
+    
+    dynamic_pressure = 0.5 * 1.225 * (cruise_speed_ktas * 0.514444) ** 2
+    
+    weights = {}
+    
+    if "wing_controls" in integrated_config:
+        control_weight = calculate_control_surface_weight(
+            integrated_config["wing_controls"],
+            wing_span,
+            wing_chord,
+        )
+        weights["wing_controls_weight_kg"] = control_weight["total_weight_kg"]
+    
+    if "wingtip" in integrated_config:
+        wingtip_effectiveness = calculate_wingtip_effectiveness(
+            integrated_config["wingtip"],
+            wing_span,
+            wing_chord,
+        )
+        performance["wingtip_effectiveness"] = wingtip_effectiveness
+        performance["induced_drag_reduction"] = wingtip_effectiveness.get("drag_reduction_factor", 0.0)
+    
+    if "landing_gear" in integrated_config:
+        gear_weight = calculate_landing_gear_weight(
+            integrated_config["landing_gear"],
+            mtow_kg,
+        )
+        weights["landing_gear_weight_kg"] = gear_weight["landing_gear_weight_kg"]
+    
+    if "nacelle" in integrated_config:
+        nacelle_drag = calculate_nacelle_drag(
+            integrated_config["nacelle"],
+            cruise_speed_ktas,
+            dynamic_pressure,
+        )
+        performance["nacelle_drag_N"] = nacelle_drag["drag_force_n"]
+        performance["nacelle_cd0"] = nacelle_drag.get("drag_coefficient", 0.0)
+    
+    if "fuselage_canopy" in integrated_config:
+        canopy_weight = calculate_canopy_weight(
+            integrated_config["fuselage_canopy"],
+            fuselage_diameter,
+            fuselage_length,
+        )
+        weights["fuselage_canopy_weight_kg"] = canopy_weight["total_weight_kg"]
+    
+    if "fuselage_openings" in integrated_config:
+        total_opening_weight = 0.0
+        openings = integrated_config["fuselage_openings"]
+        
+        for opening_type, opening_config in openings.items():
+            if isinstance(opening_config, dict):
+                opening_weight = calculate_opening_weight(
+                    opening_config,
+                    fuselage_diameter,
+                )
+                total_opening_weight += opening_weight.get("weight_kg", 0.0)
+        
+        weights["fuselage_openings_weight_kg"] = total_opening_weight
+    
+    performance["weights"] = weights
+    performance["total_geometry_integrated_weight_kg"] = sum(weights.values())
+    
+    return performance
+
+
+def generate_geometry_integrated_visualization(
+    integrated_config: dict[str, Any],
+    geometry: dict[str, Any],
+    output_path: str = "geometry_integrated_3d.html"
+) -> str:
+    """
+    生成几何特征3D可视化HTML文件
+    
+    Args:
+        integrated_config: 解析后的几何特征配置
+        geometry: 基础几何参数
+        output_path: 输出HTML文件路径
+    
+    Returns:
+        生成的HTML文件路径
+    """
+    import json
+    
+    # 准备可视化数据
+    visualization_data = {
+        "geometry": geometry,
+        "integrated_features": integrated_config,
+        "view_settings": {
+            "show_wing_controls": True,
+            "show_wingtip": True,
+            "show_landing_gear": True,
+            "show_nacelle": True,
+            "show_canopy": True,
+            "show_openings": True,
+            "show_hardpoints": True,
+            "grid_size": 20,
+            "camera_distance": 15
+        }
+    }
+    
+    # 生成HTML模板
+    html_template = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>几何特征3D预览</title>
+    <style>
+        body {{ margin: 0; font-family: Arial, sans-serif; background-color: #f0f0f0; }}
+        #container {{ position: relative; width: 100vw; height: 100vh; }}
+        #controls {{ 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            background: rgba(255, 255, 255, 0.9); 
+            padding: 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }}
+        .control-group {{ margin-bottom: 10px; }}
+        .control-group label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
+        .control-group input[type="checkbox"] {{ margin-right: 5px; }}
+        #info {{
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+            max-width: 300px;
+        }}
+        .info-section {{ margin-bottom: 10px; }}
+        .info-title {{ font-weight: bold; color: #333; }}
+        .info-content {{ font-size: 0.9em; color: #666; }}
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <h3>显示控制</h3>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_wing_controls" checked> 机翼控制面</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_wingtip" checked> 翼尖装置</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_landing_gear" checked> 起落架</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_nacelle" checked> 发动机短舱</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_canopy" checked> 驾驶舱盖</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_openings" checked> 舱门舷窗</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="show_hardpoints" checked> 硬点</label>
+            </div>
+        </div>
+        <div id="info">
+            <div class="info-section">
+                <div class="info-title">几何特征整合方案</div>
+                <div class="info-content">
+                    显示8个几何特征模块的3D预览，支持交互式旋转和缩放。
+                </div>
+            </div>
+            <div class="info-section">
+                <div class="info-title">统计信息</div>
+                <div class="info-content" id="stats">
+                    正在加载几何数据...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 几何数据
+        const geometryData = {json.dumps(visualization_data)};
+        
+        // Three.js 场景设置
+        let scene, camera, renderer, controls;
+        let featureGroups = {{}};
+        
+        function init() {{
+            // 创建场景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // 创建相机
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(10, 10, 10);
+            
+            // 创建渲染器
+            renderer = new THREE.WebGLRenderer({{ antialias: true }});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            // 添加光源
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // 添加网格
+            const gridHelper = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc);
+            scene.add(gridHelper);
+            
+            // 添加坐标轴
+            const axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+            
+            // 创建特征组
+            createFeatureGroups();
+            
+            // 设置控制器
+            setupControls();
+            
+            // 更新统计信息
+            updateStats();
+            
+            // 开始渲染
+            animate();
+        }}
+        
+        function createFeatureGroups() {{
+            // 基础几何
+            featureGroups.basic = new THREE.Group();
+            createBasicGeometry();
+            scene.add(featureGroups.basic);
+            
+            // 特征组
+            featureGroups.wing_controls = new THREE.Group();
+            createWingControls();
+            scene.add(featureGroups.wing_controls);
+            
+            featureGroups.wingtip = new THREE.Group();
+            createWingtip();
+            scene.add(featureGroups.wingtip);
+            
+            featureGroups.landing_gear = new THREE.Group();
+            createLandingGear();
+            scene.add(featureGroups.landing_gear);
+            
+            featureGroups.nacelle = new THREE.Group();
+            createNacelle();
+            scene.add(featureGroups.nacelle);
+            
+            featureGroups.canopy = new THREE.Group();
+            createCanopy();
+            scene.add(featureGroups.canopy);
+            
+            featureGroups.openings = new THREE.Group();
+            createOpenings();
+            scene.add(featureGroups.openings);
+            
+            featureGroups.hardpoints = new THREE.Group();
+            createHardpoints();
+            scene.add(featureGroups.hardpoints);
+        }}
+        
+        function createBasicGeometry() {{
+            const fuselage = geometryData.geometry.fuselage;
+            const wing = geometryData.geometry.wing;
+            
+            // 创建机身
+            if (fuselage && fuselage.stations) {{
+                const geometry = new THREE.CylinderGeometry(
+                    fuselage.diameter_m / 2,
+                    fuselage.diameter_m / 2,
+                    fuselage.length_m,
+                    32
+                );
+                const material = new THREE.MeshLambertMaterial({{ color: 0x8B4513 }});
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.rotation.z = Math.PI / 2;
+                featureGroups.basic.add(mesh);
+            }}
+            
+            // 创建机翼
+            if (wing) {{
+                const wingGeometry = new THREE.BoxGeometry(
+                    wing.root_chord_m,
+                    wing.span_m,
+                    0.1
+                );
+                const wingMaterial = new THREE.MeshLambertMaterial({{ color: 0x4169E1 }});
+                const wingMesh = new THREE.Mesh(wingGeometry, wingMaterial);
+                wingMesh.position.y = wing.span_m / 2;
+                featureGroups.basic.add(wingMesh);
+            }}
+        }}
+        
+        function createWingControls() {{
+            const wing = geometryData.geometry.wing;
+            if (wing && wing.controls) {{
+                const controls = wing.controls;
+                
+                // 创建副翼
+                if (controls.ailerons) {{
+                    const aileronGeometry = new THREE.BoxGeometry(
+                        controls.ailerons.chord_fraction * wing.root_chord_m,
+                        controls.ailerons.span_fraction * wing.span_m,
+                        0.05
+                    );
+                    const aileronMaterial = new THREE.MeshLambertMaterial({{ color: 0xFF6347 }});
+                    const aileronMesh = new THREE.Mesh(aileronGeometry, aileronMaterial);
+                    aileronMesh.position.y = wing.span_m / 2;
+                    featureGroups.wing_controls.add(aileronMesh);
+                }}
+                
+                // 创建襟翼
+                if (controls.flaps) {{
+                    const flapGeometry = new THREE.BoxGeometry(
+                        controls.flaps.chord_fraction * wing.root_chord_m,
+                        controls.flaps.span_fraction * wing.span_m,
+                        0.05
+                    );
+                    const flapMaterial = new THREE.MeshLambertMaterial({{ color: 0xFFD700 }});
+                    const flapMesh = new THREE.Mesh(flapGeometry, flapMaterial);
+                    flapMesh.position.y = wing.span_m / 4;
+                    featureGroups.wing_controls.add(flapMesh);
+                }}
+            }}
+        }}
+        
+        function createWingtip() {{
+            const wing = geometryData.geometry.wing;
+            if (wing && wing.wingtip) {{
+                const wingtip = wing.wingtip;
+                const wingtipGeometry = new THREE.BoxGeometry(
+                    wingtip.chord_fraction * wing.root_chord_m,
+                    0.5,
+                    0.5
+                );
+                const wingtipMaterial = new THREE.MeshLambertMaterial({{ color: 0x32CD32 }});
+                const wingtipMesh = new THREE.Mesh(wingtipGeometry, wingtipMaterial);
+                wingtipMesh.position.y = wing.span_m / 2 + 0.5;
+                featureGroups.wingtip.add(wingtipMesh);
+            }}
+        }}
+        
+        function createLandingGear() {{
+            const landing_gear = geometryData.integrated_features.landing_gear;
+            if (landing_gear) {{
+                const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.5, 16);
+                const wheelMaterial = new THREE.MeshLambertMaterial({{ color: 0x2F4F4F }});
+                
+                if (landing_gear.main) {{
+                    const mainGear = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    mainGear.position.set(0, 0, 0);
+                    featureGroups.landing_gear.add(mainGear);
+                }}
+                
+                if (landing_gear.nose) {{
+                    const noseGear = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    noseGear.position.set(-2, 0, 0);
+                    featureGroups.landing_gear.add(noseGear);
+                }}
+            }}
+        }}
+        
+        function createNacelle() {{
+            const nacelle = geometryData.integrated_features.nacelle;
+            if (nacelle) {{
+                const nacelleGeometry = new THREE.CylinderGeometry(
+                    nacelle.diameter_m / 2,
+                    nacelle.diameter_m / 2,
+                    nacelle.length_m,
+                    16
+                );
+                const nacelleMaterial = new THREE.MeshLambertMaterial({{ color: 0x808080 }});
+                const nacelleMesh = new THREE.Mesh(nacelleGeometry, nacelleMaterial);
+                nacelleMesh.position.set(nacelle.position_x_m, nacelle.position_z_m, 0);
+                featureGroups.nacelle.add(nacelleMesh);
+            }}
+        }}
+        
+        function createCanopy() {{
+            const canopy = geometryData.integrated_features.fuselage_canopy;
+            if (canopy) {{
+                const canopyGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                const canopyMaterial = new THREE.MeshLambertMaterial({{ 
+                    color: 0x87CEEB, 
+                    transparent: true, 
+                    opacity: 0.7 
+                }});
+                const canopyMesh = new THREE.Mesh(canopyGeometry, canopyMaterial);
+                canopyMesh.position.set(3, 0.5, 0);
+                featureGroups.canopy.add(canopyMesh);
+            }}
+        }}
+        
+        function createOpenings() {{
+            const openings = geometryData.integrated_features.fuselage_openings;
+            if (openings) {{
+                const doorGeometry = new THREE.BoxGeometry(2, 2.5, 0.05);
+                const doorMaterial = new THREE.MeshLambertMaterial({{ color: 0x8B0000 }});
+                const doorMesh = new THREE.Mesh(doorGeometry, doorMaterial);
+                doorMesh.position.set(3, 0, 0);
+                featureGroups.openings.add(doorMesh);
+            }}
+        }}
+        
+        function createHardpoints() {{
+            const hardpoints = geometryData.integrated_features.hardpoint_validation;
+            if (hardpoints) {{
+                const hardpointGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+                const hardpointMaterial = new THREE.MeshLambertMaterial({{ color: 0xFF1493 }});
+                
+                // 在机翼和机身添加硬点
+                const wingHP = new THREE.Mesh(hardpointGeometry, hardpointMaterial);
+                wingHP.position.set(0, 4, 0);
+                featureGroups.hardpoints.add(wingHP);
+                
+                const fuselageHP = new THREE.Mesh(hardpointGeometry, hardpointMaterial);
+                fuselageHP.position.set(2, 0, 0);
+                featureGroups.hardpoints.add(fuselageHP);
+            }}
+        }}
+        
+        function setupControls() {{
+            // 鼠标控制
+            let mouseX = 0, mouseY = 0;
+            let targetX = 0, targetY = 0;
+            
+            document.addEventListener('mousemove', (event) => {{
+                mouseX = (event.clientX - window.innerWidth / 2) / window.innerWidth;
+                mouseY = (event.clientY - window.innerHeight / 2) / window.innerHeight;
+            }});
+            
+            // 滚轮缩放
+            document.addEventListener('wheel', (event) => {{
+                const zoomSpeed = 0.1;
+                camera.position.multiplyScalar(1 + event.deltaY * zoomSpeed * 0.01);
+            }});
+            
+            // 显示控制
+            const showControls = [
+                'show_wing_controls', 'show_wingtip', 'show_landing_gear',
+                'show_nacelle', 'show_canopy', 'show_openings', 'show_hardpoints'
+            ];
+            
+            showControls.forEach(id => {{
+                document.getElementById(id).addEventListener('change', (event) => {{
+                    const group = featureGroups[id.replace('show_', '')];
+                    if (group) {{
+                        group.visible = event.target.checked;
+                    }}
+                }});
+            }});
+        }}
+        
+        function updateStats() {{
+            const stats = document.getElementById('stats');
+            stats.innerHTML = `
+                <div>特征模块数: 8</div>
+                <div>总重量: 计算中...</div>
+                <div>约束违规: 0</div>
+            `;
+        }}
+        
+        function animate() {{
+            requestAnimationFrame(animate);
+            
+            // 简单的相机旋转
+            const time = Date.now() * 0.0005;
+            camera.position.x = Math.cos(time) * 15;
+            camera.position.z = Math.sin(time) * 15;
+            camera.lookAt(0, 0, 0);
+            
+            renderer.render(scene, camera);
+        }}
+        
+        // 响应式调整
+        window.addEventListener('resize', () => {{
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }});
+        
+        // 初始化
+        init();
+    </script>
+</body>
+</html>"""
+    
+    # 写入HTML文件
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_template)
+    
+    return output_path
+
+
+def generate_geometry_integrated_mesh(
+    integrated_config: dict[str, Any],
+    geometry: dict[str, Any],
+    output_path: str = "geometry_integrated_mesh.json"
+) -> str:
+    """
+    生成几何特征网格数据JSON文件
+    
+    Args:
+        integrated_config: 解析后的几何特征配置
+        geometry: 基础几何参数
+        output_path: 输出JSON文件路径
+    
+    Returns:
+        生成的JSON文件路径
+    """
+    import json
+    
+    # 构建网格数据结构
+    mesh_data = {
+        "version": "1.0",
+        "metadata": {
+            "name": "Geometry Integrated Model",
+            "description": "包含所有几何特征模块的完整飞机模型",
+            "timestamp": str(datetime.datetime.now()),
+            "modules": [
+                "wing_controls", "wingtip", "landing_gear", 
+                "engine_library", "nacelle", "fuselage_canopy", 
+                "fuselage_openings", "hardpoint_validation"
+            ]
+        },
+        "geometry": {
+            "fuselage": generate_fuselage_mesh(geometry.get("fuselage", {})),
+            "wing": generate_wing_mesh(geometry.get("wing", {})),
+            "tail": generate_tail_mesh(geometry.get("tail", {}))
+        },
+        "integrated_features": {}
+    }
+    
+    # 添加各模块的网格数据
+    if "wing_controls" in integrated_config:
+        mesh_data["integrated_features"]["wing_controls"] = generate_wing_controls_mesh(
+            integrated_config["wing_controls"]
+        )
+    
+    if "wingtip" in integrated_config:
+        mesh_data["integrated_features"]["wingtip"] = generate_wingtip_mesh(
+            integrated_config["wingtip"]
+        )
+    
+    if "landing_gear" in integrated_config:
+        mesh_data["integrated_features"]["landing_gear"] = generate_landing_gear_mesh(
+            integrated_config["landing_gear"]
+        )
+    
+    if "nacelle" in integrated_config:
+        mesh_data["integrated_features"]["nacelle"] = generate_nacelle_mesh(
+            integrated_config["nacelle"]
+        )
+    
+    if "fuselage_canopy" in integrated_config:
+        mesh_data["integrated_features"]["fuselage_canopy"] = generate_canopy_mesh(
+            integrated_config["fuselage_canopy"]
+        )
+    
+    if "fuselage_openings" in integrated_config:
+        mesh_data["integrated_features"]["fuselage_openings"] = generate_openings_mesh(
+            integrated_config["fuselage_openings"]
+        )
+    
+    if "hardpoint_validation" in integrated_config:
+        mesh_data["integrated_features"]["hardpoint_validation"] = generate_hardpoints_mesh(
+            integrated_config["hardpoint_validation"]
+        )
+    
+    # 写入JSON文件
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(mesh_data, f, indent=2, ensure_ascii=False)
+    
+    return output_path
+
+
+def generate_geometry_integrated_obj(
+    integrated_config: dict[str, Any],
+    geometry: dict[str, Any],
+    output_path: str = "geometry_integrated.obj"
+) -> str:
+    """
+    生成几何特征OBJ模型文件
+    
+    Args:
+        integrated_config: 解析后的几何特征配置
+        geometry: 基础几何参数
+        output_path: 输出OBJ文件路径
+    
+    Returns:
+        生成的OBJ文件路径
+    """
+    # 这里简化处理，实际应该从网格数据生成
+    obj_content = """# Geometry Integrated Model
+# Generated by aircraft-design-skill
+
+# 基础几何
+v -5.0 -5.0 -0.1
+v 5.0 -5.0 -0.1
+v 5.0 5.0 -0.1
+v -5.0 5.0 -0.1
+v -0.1 -0.1 -5.0
+v 0.1 -0.1 -5.0
+v 0.1 0.1 -5.0
+v -0.1 0.1 -5.0
+
+f 1 2 3 4
+f 5 6 7 8
+
+# 特征模块（简化表示）
+# 这里应该根据实际配置生成详细的几何定义
+    
+    """
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(obj_content)
+    
+    return output_path
+
+
+def generate_fuselage_mesh(fuselage_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成机身网格数据
+    
+    Args:
+        fuselage_data: 机身几何数据
+    
+    Returns:
+        机身网格数据字典
+    """
+    stations = fuselage_data.get("stations", [])
+    vertices = []
+    faces = []
+    
+    for i, station in enumerate(stations):
+        x = station.get("x_m", 0.0)
+        ry = station.get("radius_y_m", 0.0)
+        rz = station.get("radius_z_m", 0.0)
+        n = int(station.get("n", 16))
+        
+        # 生成圆形截面
+        for j in range(n):
+            angle = 2.0 * 3.14159265359 * j / n
+            y = ry * cos(angle)
+            z = rz * sin(angle)
+            vertices.append({"x": x, "y": y, "z": z})
+    
+    # 生成面
+    n_sections = len(stations)
+    if n_sections > 1:
+        n_per_section = int(stations[0].get("n", 16))
+        for i in range(n_sections - 1):
+            for j in range(n_per_section):
+                v1 = i * n_per_section + j
+                v2 = i * n_per_section + (j + 1) % n_per_section
+                v3 = (i + 1) * n_per_section + (j + 1) % n_per_section
+                v4 = (i + 1) * n_per_section + j
+                faces.append([v1, v2, v3, v4])
+    
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "stations_count": len(stations)
+    }
+
+
+def generate_wing_mesh(wing_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成机翼网格数据
+    
+    Args:
+        wing_data: 机翼几何数据
+    
+    Returns:
+        机翼网格数据字典
+    """
+    root_chord = wing_data.get("root_chord_m", 1.0)
+    span = wing_data.get("span_m", 10.0)
+    taper_ratio = wing_data.get("taper_ratio", 1.0)
+    sweep = wing_data.get("sweep_quarter_chord_deg", 0.0)
+    
+    vertices = [
+        {"x": 0.0, "y": 0.0, "z": 0.0},
+        {"x": root_chord, "y": 0.0, "z": 0.0},
+        {"x": 0.0, "y": span, "z": 0.0},
+        {"x": root_chord * taper_ratio, "y": span, "z": 0.0}
+    ]
+    
+    faces = [[0, 1, 3, 2]]
+    
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "root_chord_m": root_chord,
+        "span_m": span
+    }
+
+
+def generate_tail_mesh(tail_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成尾翼网格数据
+    
+    Args:
+        tail_data: 尾翼几何数据
+    
+    Returns:
+        尾翼网格数据字典
+    """
+    horizontal = tail_data.get("horizontal", {})
+    vertical = tail_data.get("vertical", {})
+    
+    mesh = {}
+    
+    if horizontal:
+        mesh["horizontal"] = generate_wing_mesh(horizontal)
+    
+    if vertical:
+        mesh["vertical"] = generate_wing_mesh(vertical)
+    
+    return mesh
+
+
+def generate_wing_controls_mesh(controls_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成控制面网格数据
+    
+    Args:
+        controls_data: 控制面配置数据
+    
+    Returns:
+        控制面网格数据字典
+    """
+    mesh = {}
+    
+    for control_type, control_config in controls_data.items():
+        if isinstance(control_config, dict):
+            chord_fraction = control_config.get("chord_fraction", 0.2)
+            span_fraction = control_config.get("span_fraction", 0.3)
+            
+            mesh[control_type] = {
+                "chord_fraction": chord_fraction,
+                "span_fraction": span_fraction
+            }
+    
+    return mesh
+
+
+def generate_wingtip_mesh(wingtip_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成翼尖网格数据
+    
+    Args:
+        wingtip_data: 翼尖配置数据
+    
+    Returns:
+        翼尖网格数据字典
+    """
+    return {
+        "type": wingtip_data.get("type", "none"),
+        "height_m": wingtip_data.get("height_m", 0.0),
+        "chord_fraction": wingtip_data.get("chord_fraction", 0.6)
+    }
+
+
+def generate_landing_gear_mesh(landing_gear_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成起落架网格数据
+    
+    Args:
+        landing_gear_data: 起落架配置数据
+    
+    Returns:
+        起落架网格数据字典
+    """
+    mesh = {}
+    
+    for gear_type, gear_config in landing_gear_data.items():
+        if isinstance(gear_config, dict):
+            wheel_diameter = gear_config.get("wheel_diameter_m", 0.3)
+            mesh[gear_type] = {
+                "wheel_diameter_m": wheel_diameter,
+                "position": {
+                    "x_m": gear_config.get("position_x_m", 0.0),
+                    "y_m": gear_config.get("position_y_m", 0.0),
+                    "z_m": gear_config.get("position_z_m", 0.0)
+                }
+            }
+    
+    return mesh
+
+
+def generate_nacelle_mesh(nacelle_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成短舱网格数据
+    
+    Args:
+        nacelle_data: 短舱配置数据
+    
+    Returns:
+        短舱网格数据字典
+    """
+    return {
+        "length_m": nacelle_data.get("length_m", 3.0),
+        "diameter_m": nacelle_data.get("diameter_m", 1.0),
+        "position": {
+            "x_m": nacelle_data.get("position_x_m", 2.0),
+            "y_m": nacelle_data.get("position_y_m", 0.0),
+            "z_m": nacelle_data.get("position_z_m", -0.5)
+        }
+    }
+
+
+def generate_canopy_mesh(canopy_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成驾驶舱盖网格数据
+    
+    Args:
+        canopy_data: 驾驶舱盖配置数据
+    
+    Returns:
+        驾驶舱盖网格数据字典
+    """
+    return {
+        "type": canopy_data.get("type", "bubble"),
+        "length_m": canopy_data.get("length_m", 1.8),
+        "width_m": canopy_data.get("width_m", 1.2),
+        "height_m": canopy_data.get("height_m", 0.8)
+    }
+
+
+def generate_openings_mesh(openings_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成开口网格数据
+    
+    Args:
+        openings_data: 开口配置数据
+    
+    Returns:
+        开口网格数据字典
+    """
+    mesh = {}
+    
+    for opening_type, opening_config in openings_data.items():
+        if isinstance(opening_config, dict):
+            mesh[opening_type] = {
+                "width_m": opening_config.get("width_m", 0.8),
+                "height_m": opening_config.get("height_m", 1.5),
+                "position_x_m": opening_config.get("position_x_m", 3.0)
+            }
+    
+    return mesh
+
+
+def generate_hardpoints_mesh(hardpoints_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    生成硬点网格数据
+    
+    Args:
+        hardpoints_data: 硬点配置数据
+    
+    Returns:
+        硬点网格数据字典
+    """
+    mesh = {}
+    
+    for hp_category, hp_config in hardpoints_data.items():
+        if isinstance(hp_config, dict):
+            mesh[hp_category] = {}
+            for hp_name, hp_details in hp_config.items():
+                if isinstance(hp_details, dict):
+                    mesh[hp_category][hp_name] = {
+                        "max_load_kg": hp_details.get("max_load_kg", 1000.0),
+                        "position": {
+                            "x_m": hp_details.get("x_m", 0.0),
+                            "y_m": hp_details.get("y_m", 2.0),
+                            "z_m": hp_details.get("z_m", 0.0)
+                        }
+                    }
+    
+    return mesh
