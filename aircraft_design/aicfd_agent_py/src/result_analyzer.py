@@ -47,7 +47,7 @@ class ResultAnalyzer:
                 self.forces_path,
                 comment='#',
                 header=None,
-                delim_whitespace=True,
+                sep='\s+',
                 names=["time", "Cm", "Cd", "Cl", "Cl(f)", "Cl(r)"]
             )
             return df

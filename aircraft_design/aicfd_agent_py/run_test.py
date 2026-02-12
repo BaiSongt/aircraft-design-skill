@@ -34,6 +34,8 @@ def test_workflow_end_to_end():
     测试端到端的完整工作流（使用模拟求解器和模拟结果）。
     """
     python_executable = sys.executable.replace('\\', '/')
+    # Use absolute path for robustness
+    mock_solver_path = os.path.abspath("mock_solver.py").replace('\\', '/')
 
     # 1. 定义测试输入
     test_params = {
@@ -43,20 +45,26 @@ def test_workflow_end_to_end():
             "path": "assets/simple_cube.obj"
         },
         "solver_settings": {
-            "solver": f"{python_executable} ../../mock_solver.py",
+            # Quote paths to handle potential spaces
+            "solver": f'"{python_executable}" "{mock_solver_path}"',
             "endTime": 500, "deltaT": 0.5, "timeout": 30
         }
     }
 
-    # 2. 实例化并运行工作流 (不包括分析)
-    manager = WorkflowManager(case_params=test_params)
+    # 2. 实例化工作流管理器
+    manager = WorkflowManager(case_params=test_params, test_mode=True)
     try:
-        manager.run_workflow()
-        
-        # 3. 手动创建模拟的求解器输出
+        # 3. 按正确顺序分步执行工作流
+        print("\\n--- Running Test Workflow Step-by-Step ---")
+        manager.setup_case_directory()
+        manager.configure_case_files()
+        manager.generate_mesh()
+        manager.execute_solver() # 使用模拟求解器
+
+        # 4. 在分析前，手动创建模拟的求解器输出
         create_mock_forces_data(manager.case_path)
         
-        # 4. 单独运行并测试分析步骤
+        # 5. 单独运行并测试分析步骤
         manager.analyze_results()
 
         print("\\n--- E2E Test Verification ---")

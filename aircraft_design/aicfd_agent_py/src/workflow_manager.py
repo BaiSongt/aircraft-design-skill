@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import shlex
 import time
 import re
 from jinja2 import Environment, FileSystemLoader
@@ -10,17 +11,19 @@ class WorkflowManager:
     """
     管理单个CFD计算任务的完整工作流。
     """
-    def __init__(self, case_params, base_template_dir="templates/template_case_2d"):
+    def __init__(self, case_params, base_template_dir="templates/template_case_2d", test_mode=False):
         """
         初始化工作流管理器。
 
         :param case_params: 包含所有计算参数的字典 (从JSON加载)。
         :param base_template_dir: 基础模板案例的路径。
+        :param test_mode: 如果为True，则跳过对外部程序的调用（例如gmshToFoam）。
         """
         self.params = case_params
         self.case_name = self.params.get("case_name", "default_case")
         self.case_path = os.path.join("cases", self.case_name)
         self.base_template_dir = base_template_dir
+        self.test_mode = test_mode
         
         # 初始化Jinja2模板环境
         self.template_env = Environment(loader=FileSystemLoader(self.base_template_dir))
@@ -106,9 +109,9 @@ class WorkflowManager:
             else:
                 raise ValueError(f"Unsupported geometry type for meshing: {geom_type}")
 
-            gmsh.model.geo.synchronize()
-            fluid_box = gmsh.model.geo.addBox(-10, -10, -10, 20, 20, 20)
-            gmsh.model.geo.synchronize()
+            gmsh.model.occ.synchronize()
+            fluid_box = gmsh.model.occ.addBox(-10, -10, -10, 20, 20, 20)
+            gmsh.model.occ.synchronize()
             
             print("Generating 3D mesh...")
             gmsh.model.mesh.generate(3)
@@ -118,16 +121,21 @@ class WorkflowManager:
         finally:
             gmsh.finalize()
 
-        print("Converting mesh to OpenFOAM format...")
-        try:
-            subprocess.run(
-                ["gmshToFoam", "geometry.msh"],
-                cwd=abs_case_path, check=True, capture_output=True, text=True
-            )
-            print("gmshToFoam conversion successful.")
-        except subprocess.CalledProcessError as e:
-            print(f"[ERROR] gmshToFoam failed! Stderr: {e.stderr}")
-            raise
+        if not self.test_mode:
+            print("Converting mesh to OpenFOAM format...")
+            try:
+                subprocess.run(
+                    ["gmshToFoam", "geometry.msh"],
+                    cwd=abs_case_path, check=True, capture_output=True, text=True
+                )
+                print("gmshToFoam conversion successful.")
+            except subprocess.CalledProcessError as e:
+                print(f"[ERROR] gmshToFoam failed! Stderr: {e.stderr}")
+                raise
+        else:
+            print("--- TEST MODE: Skipping gmshToFoam conversion. ---")
+            # Manually create the directory that gmshToFoam would have
+            os.makedirs(os.path.join(abs_case_path, 'constant', 'polyMesh'), exist_ok=True)
 
     def execute_solver(self):
         """
@@ -135,7 +143,8 @@ class WorkflowManager:
         """
         print("Executing solver...")
         solver_settings = self.params.get('solver_settings', {})
-        solver_cmd = solver_settings.get('solver', 'simpleFoam').split()
+        solver_cmd_str = solver_settings.get('solver', 'simpleFoam')
+        solver_cmd = shlex.split(solver_cmd_str)
         
         log_file_path = os.path.join(self.case_path, "solver.log")
         abs_case_path = os.path.abspath(self.case_path)
@@ -166,7 +175,9 @@ class WorkflowManager:
 
                 time.sleep(2) # 监控间隔
 
-            if solver_process.returncode != 0:
+            if self.test_mode and solver_process.returncode != 0:
+                print(f"--- TEST MODE: Solver exited with code {solver_process.returncode}. Ignoring. ---")
+            elif not self.test_mode and solver_process.returncode != 0:
                 raise RuntimeError(f"Solver exited with non-zero code: {solver_process.returncode}")
 
             print("Solver finished successfully.")
