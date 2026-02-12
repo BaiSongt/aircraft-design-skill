@@ -1,0 +1,93 @@
+{
+  "aircraft_role": "fixed_wing_uav",
+  "mission": {
+    "range_m": 100000.0,
+    "cruise_altitude_m": 1000000.0,
+    "cruise_speed_m_s": 22.0,
+    "v_stall_m_s": 12.0,
+    "climb_gradient": 0.05,
+    "takeoff_climb_gradient": 0.08,
+    "takeoff_distance_m": 80.0,
+    "landing_distance_m": 80.0,
+    "obstacle_height_m": 10.0,
+    "landing_approach_angle_deg": 4.0,
+    "runway_slope": 0.0,
+    "headwind_m_s": 2.0,
+    "high_lift_takeoff": "none",
+    "high_lift_landing": "none",
+    "loiter_time_s": 600.0,
+    "alternate_range_m": 10000.0
+  },
+  "payload": {
+    "payload_kg": 5.0
+  },
+  "crew": {
+    "crew_kg": 0.0
+  },
+  "aero": {
+    "cd0": 0.032,
+    "e": 0.82,
+    "cl_max": 1.6
+  },
+  "sizing": {
+    "wing_loading_pa": 350.0,
+    "aspect_ratio": 9.0,
+    "thrust_to_weight": 0.35
+  },
+  "weights": {
+    "empty_a": 0.78,
+    "empty_b": 0.98,
+    "reserve_fraction": 0.07,
+    "w0_guess_kg": 25.0
+  },
+  "propulsion": {
+    "type": "prop",
+    "sfc_1_s": 0.00000023,
+    "prop_efficiency": 0.75
+  },
+  "geometry": {
+    "fuselage_length_m": 1.8,
+    "fuselage_diameter_m": 0.22,
+    "wetted_area_factor": 3.0,
+    "wing_t_c": 0.12,
+    "tail_area_ratio": 0.25
+  },
+  "openvsp": {
+    "enabled": true,
+    "run": false
+  },
+  "tail": {
+    "vh": 0.65,
+    "vv": 0.04,
+    "lh_m": 0.9,
+    "lv_m": 0.85
+  },
+  "stability": {
+    "x_ac_w_cbar": 0.25,
+    "x_cg_cbar": 0.3,
+    "x_cg_fwd_cbar": 0.2,
+    "x_cg_aft_cbar": 0.35,
+    "cm0_w": -0.02,
+    "downwash_deda": 0.35,
+    "a_ratio": 0.9
+  },
+  "structures": {
+    "n_limit": 3.5,
+    "wing_t_c": 0.12,
+    "enable_weight_feedback": true,
+    "baseline_struct_frac": 0.35,
+    "feedback_gain": 0.1
+  },
+  "design_loop": {
+    "wing_loading_pa_grid": [280.0, 350.0, 420.0],
+    "aspect_ratio_grid": [7.5, 9.0, 10.5],
+    "thrust_to_weight_grid": [0.3, 0.35, 0.4],
+    "objective": "min_w0_kg",
+    "top_n": 6,
+    "sensitivity_steps": {
+      "wing_loading_pa": 40.0,
+      "aspect_ratio": 0.5,
+      "thrust_to_weight": 0.03
+    }
+  }
+}

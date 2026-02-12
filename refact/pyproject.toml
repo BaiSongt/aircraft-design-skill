@@ -1,0 +1,28 @@
+# Project Rules for Aircraft Design Tool
+#
+# ## Lint Commands
+# - Check: ruff check .
+# - Fix auto-fixable issues: ruff check --fix .
+# - Format: ruff format .
+#
+# ## Type Check Commands
+# - Type check: mypy src/
+# - Strict mode (optional): mypy --strict src/
+#
+# ## Combined Quality Check
+# ruff check . && ruff format --check . && mypy src/
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = ["out", ".pytest_cache", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = ["--ignore=OpenVSP-3.47.0-MacOS"]

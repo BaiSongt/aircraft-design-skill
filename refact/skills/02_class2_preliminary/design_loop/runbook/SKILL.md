@@ -1,0 +1,39 @@
+---
+name: "fixed_wing_design_loop_runbook"
+description: "指导固定翼总体设计如何迭代收敛与做敏感性检查。当总体入口已跑完但结果不满足/不收敛，需要系统化调整变量时调用。"
+stage: "class2_preliminary"
+code_module: "aircraft_design/class2_preliminary/design_loop_orchestrator.py"
+dependencies:
+  - "fixed_wing_overall_sizing_runbook"
+---
+
+# 固定翼迭代收敛（Runbook）
+
+## 角色定位（统一入口）
+
+- 计算执行入口固定为 `fixed_wing_overall_sizing_runbook`。
+- 本技能不替代入口，只提供“改哪些输入、按什么顺序改、如何判断收敛/可行”的操作主线。
+
+## 目标
+
+- 将总体设计闭环固化为可重复执行的迭代步骤
+
+## 当前版本范围
+
+- 已实现（以 `aircraft_design.run_sizing` 为准）：设计点约束修正、Class I 重量闭合、巡航/爬升一级校核、尾翼体积系数初算、收敛后阶段 2–7 扩展
+- 仍可进一步细化：更完整的起降/任务剖面、可用推力随高度速度变化、结构重量回馈闭环、静稳定/配平细化
+
+## 建议迭代顺序
+
+1. 固定构型与推进类型，给出初猜：`wing_loading_pa`, `aspect_ratio`, `thrust_to_weight`, `cd0`, `e`, `cl_max`
+2. 跑一次闭环计算，记录不满足项：
+   - 失速约束是否满足
+   - 航程燃油分数是否合理
+   - 巡航所需推力与爬升率是否满足
+3. 只调整一个变量做敏感性：
+   - 航程不足：优先提高 `L/D`（降低 `cd0`、提高 `e`、提高 `AR`）或改善推进耗油模型
+   - 爬升不足：提高 `thrust_to_weight` 或降低重量/阻力
+   - 失速不足：降低 `wing_loading_pa` 或提高 `cl_max`
+4. 收敛判据（建议）：
+   - `w0_kg` 相对变化 < 1e-3
+   - 关键性能余度均为正且留有裕度（按项目要求设阈值）

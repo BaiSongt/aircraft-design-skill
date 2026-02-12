@@ -1,0 +1,62 @@
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 依赖
+node_modules/
+vendor/
+
+# 构建产物
+dist/
+build/
+*.log
+*.tmp
+
+# 环境配置
+.env
+.env.local
+venv
+
+# 日志
+logs/
+*.log
+
+# 缓存
+.cache/
+*.cache
+
+# 临时文件
+*.tmp
+*.temp
+
+# 密钥与证书
+*.pem
+*.key
+*.crt
+
+# 备份
+*.bak
+*.backup
+
+# 其他
+*.pid
+*.seed
+*.pid.lock
+
+# python
+__pycache__/
+
+# 输出
+out/run_*
+output/*
+/output_*
+#  openvsp
+OpenVSP-3.47.0-MacOS/
+.trae/documents/
