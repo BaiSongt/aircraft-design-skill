@@ -4,6 +4,7 @@ from math import pi, sqrt
 from typing import Any
 from .atmosphere import isa_tropopause
 from .aero_drag_buildup import GeometryAssumptions, estimate_cd0_drag_buildup
+from .advanced_design import execute_advanced_design
 from .constraints import (
     AeroPolar,
     ConstraintCheck,
@@ -945,6 +946,133 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             except Exception:
                 pass  # Ignore if immutable
 
+    # Stage 2-7 Advanced Design (Class 3)
+    # Execute if weight method is class2 or class3
+    weights_method = str(_get_optional(weights_in, "method", "class1")).lower()
+    advanced_design_out: dict = {}
+    if weights_method in ("class2", "class3", "advanced"):
+        try:
+            # Prepare inputs for Stage 2-7
+            design_input = {
+                "cruise_altitude_m": cruise_altitude_m,
+                "cruise_speed_m_s": cruise_speed_m_s,
+                "mtow_kg": w0_kg,
+                "cl_cruise": None,  # Will be calculated inside execute_advanced_design
+            }
+
+            geometry_input = {
+                "s_ref_m2": geom.s_m2,
+                "b_m": geom.b_m,
+                "cbar_m": geom.cbar_m,
+                "wing_t_c": float(_get_optional(aero_in, "airfoil_thickness", 0.12)),
+                "fuselage_length_m": float(_get_optional(inputs.get("geometry", {}), "fuselage_length_m", 7.5)),
+                "fuselage_diameter_m": float(_get_optional(inputs.get("geometry", {}), "fuselage_diameter_m", 1.2)),
+                "sweep_quarter_chord_deg": float(_get_optional(sizing_in, "sweep_deg", 20.0)),
+                "aspect_ratio": aspect_ratio,
+                "taper_ratio": float(_get_optional(sizing_in, "taper_ratio", 0.6)),
+            }
+
+            # Prepare mission input
+            mission_input = mission.copy()
+            mission_input["climb_altitude_m"] = float(_get_optional(mission, "climb_altitude_m", cruise_altitude_m * 0.6))
+            mission_input["climb_speed_m_s"] = float(_get_optional(mission, "climb_speed_m_s", cruise_speed_m_s * 0.8))
+            mission_input["climb_rate_m_s"] = float(_get_optional(mission, "assumed_climb_rate_m_s", 3.0))
+
+            # Prepare stability input
+            stability_input = {}
+            if "stability" in inputs:
+                stability_input = inputs["stability"].copy()
+            stability_input["x_ac_w_cbar"] = float(_get_optional(stability_input, "x_ac_w_cbar", 0.25))
+            stability_input["x_cg_cbar"] = float(_get_optional(stability_input, "x_cg_cbar", 0.22))
+            stability_input["vh_coeff"] = float(_get_optional(stability_input, "vh_coeff", 0.45))
+            stability_input["vv_coeff"] = float(_get_optional(stability_input, "vv_coeff", 0.04))
+
+            # Prepare structures input
+            structures_input = {}
+            if "structures" in inputs:
+                structures_input = inputs["structures"].copy()
+            structures_input["n_limit"] = float(_get_optional(structures_input, "n_limit", 4.0))
+            structures_input["ultimate_factor"] = float(_get_optional(structures_input, "ultimate_factor", 1.5))
+            structures_input["sigma_allow_pa"] = float(_get_optional(structures_input, "sigma_allow_pa", 250e6))
+            structures_input["density_kg_m3"] = float(_get_optional(structures_input, "density_kg_m3", 2700.0))
+            structures_input["relief_factor"] = float(_get_optional(structures_input, "relief_factor", 0.8))
+
+            # Prepare optimization input (optional)
+            optimization_input = inputs.get("optimization", None)
+
+            # Execute Stage 2-7
+            advanced_result = execute_advanced_design(
+                design_input=design_input,
+                mission_input=mission_input,
+                propulsion_input=propulsion_in,
+                geometry_input=geometry_input,
+                stability_input=stability_input,
+                structures_input=structures_input,
+                optimization_input=optimization_input,
+                isa_delta_c=isa_delta_c,
+            )
+
+            # Convert AdvancedDesignResult to dict
+            advanced_design_out = {
+                "stage2_aero": {
+                    "cd0": advanced_result.stage2_aero.cd0,
+                    "cd0_breakdown": advanced_result.stage2_aero.cd0_breakdown,
+                    "wave_drag": advanced_result.stage2_aero.wave_drag,
+                    "compressibility_drag": advanced_result.stage2_aero.compressibility_drag,
+                    "induced_drag": advanced_result.stage2_aero.induced_drag,
+                    "cd_total": advanced_result.stage2_aero.cd_total,
+                    "mach": advanced_result.stage2_aero.mach,
+                    "reynolds_numbers": advanced_result.stage2_aero.reynolds_numbers,
+                },
+                "stage3_propulsion": {
+                    "thrust_available_cruise": advanced_result.stage3_propulsion.thrust_available_cruise,
+                    "thrust_available_climb": advanced_result.stage3_propulsion.thrust_available_climb,
+                    "thrust_margin_cruise": advanced_result.stage3_propulsion.thrust_margin_cruise,
+                    "thrust_margin_climb": advanced_result.stage3_propulsion.thrust_margin_climb,
+                    "sfc_cruise": advanced_result.stage3_propulsion.sfc_cruise,
+                    "sfc_climb": advanced_result.stage3_propulsion.sfc_climb,
+                    "fuel_flow_cruise": advanced_result.stage3_propulsion.fuel_flow_cruise,
+                    "fuel_flow_climb": advanced_result.stage3_propulsion.fuel_flow_climb,
+                },
+                "stage4_mission": {
+                    "total_fuel_fraction": advanced_result.stage4_mission.total_fuel_fraction,
+                    "total_fuel_kg": advanced_result.stage4_mission.total_fuel_kg,
+                    "segment_breakdown": advanced_result.stage4_mission.segment_breakdown,
+                    "mission_time_s": advanced_result.stage4_mission.mission_time_s,
+                    "mission_distance_m": advanced_result.stage4_mission.mission_distance_m,
+                },
+                "stage5_stability": {
+                    "static_margin": advanced_result.stage5_stability.static_margin,
+                    "trim_tail_cl": advanced_result.stage5_stability.trim_tail_cl,
+                    "x_np_cbar": advanced_result.stage5_stability.x_np_cbar,
+                    "x_cg_cbar": advanced_result.stage5_stability.x_cg_cbar,
+                    "downwash_deda": advanced_result.stage5_stability.downwash_deda,
+                    "tail_volume_coefficient": advanced_result.stage5_stability.tail_volume_coefficient,
+                    "tail_area_ht_m2": advanced_result.stage5_stability.tail_area_ht_m2,
+                    "tail_area_vt_m2": advanced_result.stage5_stability.tail_area_vt_m2,
+                },
+                "stage6_structures": {
+                    "wing_root_moment": advanced_result.stage6_structures.wing_root_moment,
+                    "wing_root_shear": advanced_result.stage6_structures.wing_root_shear,
+                    "structural_weight_kg": advanced_result.stage6_structures.structural_weight_kg,
+                    "spar_cap_area_root_m2": advanced_result.stage6_structures.spar_cap_area_root_m2,
+                    "wingbox_height_m": advanced_result.stage6_structures.wingbox_height_m,
+                    "relief_factor": advanced_result.stage6_structures.relief_factor,
+                },
+            }
+
+            if advanced_result.stage7_optimization is not None:
+                advanced_design_out["stage7_optimization"] = {
+                    "best_design_point": advanced_result.stage7_optimization.best_design_point,
+                    "feasible_designs": advanced_result.stage7_optimization.feasible_designs,
+                    "sensitivity_analysis": advanced_result.stage7_optimization.sensitivity_analysis,
+                    "recommendations": advanced_result.stage7_optimization.recommendations,
+                }
+
+        except Exception as e:
+            # Log error but don't fail the whole process
+            advanced_design_out = {"error": str(e), "enabled": False}
+
     return {
         "summary": {"aircraft_role": aircraft_role, "propulsion_type": propulsion_type},
         "systems": systems_out,
@@ -978,4 +1106,5 @@ def run_fixed_wing_overall_design(inputs: dict) -> dict:
             "cbar_m": geom.cbar_m,
             "ar": geom.ar,
         },
+        "advanced_design": advanced_design_out,
     }

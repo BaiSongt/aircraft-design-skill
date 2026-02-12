@@ -7,7 +7,7 @@ from typing import Any
 
 from .geometry_detailed import naca4_coordinates
 from .wing_controls import parse_wing_controls_config, validate_wing_controls, calculate_control_surface_weight
-from .wingtip import parse_wingtip_config, validate_wingtip_config, calculate_wingtip_effectiveness
+from .wingtip import parse_wingtip, validate_wingtip_geometry, calculate_wingtip_effectiveness
 from .landing_gear import parse_landing_gear, validate_landing_gear, calculate_landing_gear_weight
 from .engine_library import parse_engine_config, validate_engine_config
 from .nacelle import parse_nacelle_config, validate_nacelle_config, calculate_nacelle_drag
@@ -1475,7 +1475,7 @@ def integrate_wingtip(wing_config: dict, path: str) -> dict[str, Any]:
     if "wingtip" in wing_config:
         wingtip = wing_config["wingtip"]
         if isinstance(wingtip, dict):
-            parsed_wingtip = parse_wingtip_config(wingtip, f"{path}.wingtip")
+            parsed_wingtip = parse_wingtip(wingtip, f"{path}.wingtip")
             result["wingtip"] = parsed_wingtip
     
     return result
@@ -1507,7 +1507,7 @@ def validate_extended_geometry(
         violations.extend(controls_violations)
     
     if "wingtip" in wing:
-        wingtip_violations = validate_wingtip_config(
+        wingtip_violations = validate_wingtip_geometry(
             wing["wingtip"],
             wing_span,
             wing_chord,
@@ -1756,7 +1756,7 @@ def parse_geometry_integrated_config(
         )
     
     if "wingtip" in integrated_dict:
-        resolved["wingtip"] = parse_wingtip_config(
+        resolved["wingtip"] = parse_wingtip(
             integrated_dict["wingtip"],
             f"{path}.wingtip",
         )
@@ -1891,7 +1891,7 @@ def validate_geometry_integrated(
     
     if "wingtip" in integrated_config:
         wingtip = integrated_config["wingtip"]
-        wingtip_violations = validate_wingtip_config(
+        wingtip_violations = validate_wingtip_geometry(
             wingtip,
             wing_span,
             wing_chord,
