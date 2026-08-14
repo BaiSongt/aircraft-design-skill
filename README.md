@@ -1,3 +1,5 @@
+
+
 # Aircraft Design Skill System
 
 一个基于 Python 的现代固定翼飞机总体设计与分析系统，集成了参数化几何建模、实时可视化和 AI 辅助设计功能。
@@ -57,16 +59,21 @@
 
 ### 运行总体设计流程
 
-使用 `run_sizing.py` 启动设计迭代与可视化界面：
+使用 `run_sizing` 模块启动设计迭代。如需实时可视化，请**先在另一个独立的终端**启动可视化服务器：
 
 ```bash
-python aircraft_design/run_sizing.py sizing_input.json
+# 终端 1：启动可视化服务器 (可选)
+python -m aircraft_design.gui.server
+
+# 终端 2：运行总体设计流程
+python -m aircraft_design.run_sizing sizing_input.json --project-name "ProjectName"
 ```
 
 **参数说明**:
 - `input_file`: 输入配置文件路径 (如 `sizing_input.json`)
 - `--project-name` / `-n`: 项目名称 (默认: aircraft_sizing)
 - `--output-dir` / `-o`: 输出目录 (默认: output)
+- `--viz-port`: 可视化服务器端口 (默认: 9999)
 - `--no-viz`: 禁用实时可视化界面
 
 ### 示例输入文件 (sizing_input.json)
